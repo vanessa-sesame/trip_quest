@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,15 +13,49 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "TripQuest Booklet",
-  description:
-    "Generate printable kid-friendly travel games and activity booklets by age, destination, and trip length.",
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
-  },
-};
+const title = "TripQuest Booklet";
+const description =
+  "Generate printable, destination-specific travel games and activity booklets tailored to a child's age and trip length.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const requestHeaders = await headers();
+  const host =
+    requestHeaders.get("x-forwarded-host") ??
+    requestHeaders.get("host") ??
+    "tripquest-booklet.allophones.chatgpt.site";
+  const protocol =
+    requestHeaders.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") ? "http" : "https");
+  const socialImage = `${protocol}://${host}/og.png`;
+
+  return {
+    title,
+    description,
+    icons: {
+      icon: "/favicon.svg",
+      shortcut: "/favicon.svg",
+    },
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: [
+        {
+          url: socialImage,
+          width: 1730,
+          height: 909,
+          alt: "TripQuest Booklet with illustrated destination activities",
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [socialImage],
+    },
+  };
+}
 
 export default function RootLayout({
   children,

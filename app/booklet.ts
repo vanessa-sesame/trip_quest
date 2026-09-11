@@ -420,107 +420,570 @@ function makeMission(
   return `Day ${day} in ${destination}: discover ${primary}. Keep watch for ${secondary} and collect proof for your booklet.`;
 }
 
+type ChallengeMode =
+  | "hunt"
+  | "draw"
+  | "story"
+  | "score"
+  | "map"
+  | "move"
+  | "taste"
+  | "sound"
+  | "nature"
+  | "kindness"
+  | "interview"
+  | "design"
+  | "memory"
+  | "report";
+
+type ActivityContext = {
+  destination: string;
+  profile: DestinationProfile;
+  primary: string;
+  secondary: string;
+};
+
+type ActivityConcept = {
+  title: string;
+  kind: string;
+  mode: ChallengeMode;
+  task: (context: ActivityContext) => string;
+  prompt: string;
+};
+
+const creativeActivityDecks: ActivityConcept[][] = [
+  [
+    {
+      title: "Arrival Bingo",
+      kind: "Bingo",
+      mode: "hunt",
+      task: ({ primary, secondary }) =>
+        `Turn ${primary}, ${secondary}, and one completely unexpected detail into your first bingo row.`,
+      prompt: "My surprise square was...",
+    },
+    {
+      title: "Tiny Detail Detective",
+      kind: "Mystery",
+      mode: "hunt",
+      task: ({ destination, primary }) =>
+        `Pick the tiniest interesting detail near ${primary}. Hide it in a clue for someone else visiting ${destination}.`,
+      prompt: "Clue one / clue two / answer",
+    },
+    {
+      title: "Passport Stamp Studio",
+      kind: "Art",
+      mode: "draw",
+      task: ({ destination, primary }) =>
+        `Invent a passport stamp for ${destination} using a shape or pattern borrowed from ${primary}.`,
+      prompt: "Stamp name / symbol / date",
+    },
+  ],
+  [
+    {
+      title: "Silhouette Snap",
+      kind: "Memory",
+      mode: "draw",
+      task: ({ primary }) =>
+        `Study the outline of ${primary} for ten seconds, turn away, and rebuild the silhouette from memory.`,
+      prompt: "What shape was hardest to remember?",
+    },
+    {
+      title: "Time-Travel Plaque",
+      kind: "Story",
+      mode: "story",
+      task: ({ primary }) =>
+        `Pretend ${primary} can talk. Give it one memory from long ago and one prediction about its future.`,
+      prompt: "I remember... / One day...",
+    },
+    {
+      title: "Build It Better",
+      kind: "Invent",
+      mode: "design",
+      task: ({ destination, primary, secondary }) =>
+        `Redesign ${primary} for ${destination}, borrowing one clever feature from ${secondary}.`,
+      prompt: "Keep / change / add",
+    },
+  ],
+  [
+    {
+      title: "Flavor Detective",
+      kind: "Taste",
+      mode: "taste",
+      task: ({ primary }) =>
+        `With grown-up permission, investigate ${primary} using color, smell, texture, temperature, and taste as clues.`,
+      prompt: "The clue that surprised me was...",
+    },
+    {
+      title: "Menu Mash-Up",
+      kind: "Imagine",
+      mode: "design",
+      task: ({ destination, primary }) =>
+        `Pair ${primary} with a food from home and invent a new dish that could only exist on this ${destination} trip.`,
+      prompt: "Dish name / ingredients / menu description",
+    },
+    {
+      title: "Snack Awards",
+      kind: "Judge",
+      mode: "score",
+      task: ({ primary, secondary }) =>
+        `Put ${primary} and ${secondary} head-to-head for color, smell, texture, bravery, and would-eat-again power.`,
+      prompt: "The winner is... because...",
+    },
+  ],
+  [
+    {
+      title: "Transit Codebreaker",
+      kind: "Decode",
+      mode: "hunt",
+      task: ({ destination, primary }) =>
+        `Decode the colors, numbers, arrows, and symbols around ${primary}. Work out what a first-time visitor to ${destination} must notice.`,
+      prompt: "Symbol / meaning / how I checked",
+    },
+    {
+      title: "Human Route Map",
+      kind: "Move",
+      mode: "move",
+      task: ({ primary, secondary }) =>
+        `Re-enact a journey from ${primary} to ${secondary} using fingers, objects, or your travel crew as the moving map.`,
+      prompt: "Start / tricky turn / finish",
+    },
+    {
+      title: "Dream Ride Lab",
+      kind: "Invent",
+      mode: "design",
+      task: ({ destination, primary }) =>
+        `Transform ${primary} into a fantastical ride for ${destination}. Give it one useful power and one ridiculous feature.`,
+      prompt: "Ride name / useful power / ridiculous feature",
+    },
+  ],
+  [
+    {
+      title: "Sound Safari",
+      kind: "Listen",
+      mode: "sound",
+      task: ({ primary, secondary }) =>
+        `Pause safely and hunt for the sound of ${primary}, then find a sound that is the complete opposite of ${secondary}.`,
+      prompt: "Near sound / far sound / surprise sound",
+    },
+    {
+      title: "Beat Builder",
+      kind: "Music",
+      mode: "sound",
+      task: ({ destination, primary }) =>
+        `Turn the rhythm of ${primary} into a short beat that your family can copy as the unofficial ${destination} theme tune.`,
+      prompt: "Write the beat: ta / clap / tap / pause",
+    },
+    {
+      title: "Quiet-Loud Map",
+      kind: "Map",
+      mode: "map",
+      task: ({ primary }) =>
+        `Map one quiet pocket and one noisy pocket near ${primary}. Use marks that look the way each place sounds.`,
+      prompt: "Quiet symbol / loud symbol / best listening spot",
+    },
+  ],
+  [
+    {
+      title: "Pocket Bioblitz",
+      kind: "Nature",
+      mode: "nature",
+      task: ({ primary, secondary }) =>
+        `Search without touching for ${primary}, ${secondary}, and one living thing that is easy to overlook.`,
+      prompt: "Seen / where / what it was doing",
+    },
+    {
+      title: "Creature Superpower",
+      kind: "Imagine",
+      mode: "story",
+      task: ({ destination, primary }) =>
+        `Imagine a tiny creature that uses ${primary} as its superpower for surviving in ${destination}.`,
+      prompt: "Creature name / power / secret weakness",
+    },
+    {
+      title: "Ranger Rescue",
+      kind: "Mission",
+      mode: "design",
+      task: ({ destination, secondary }) =>
+        `Design one small family action that helps protect ${secondary} in ${destination} without disturbing it.`,
+      prompt: "Problem / rescue rule / ranger badge",
+    },
+  ],
+  [
+    {
+      title: "Kindness Undercover",
+      kind: "Observe",
+      mode: "kindness",
+      task: ({ primary }) =>
+        `Secretly notice one considerate thing people do around ${primary}. Try the same habit without announcing the mission.`,
+      prompt: "Kind action spotted / kind action tried",
+    },
+    {
+      title: "Etiquette Comic",
+      kind: "Comic",
+      mode: "draw",
+      task: ({ profile }) =>
+        `Turn this local care clue into a before-and-after comic: ${profile.etiquette}`,
+      prompt: "Oops panel / clue panel / nailed-it panel",
+    },
+    {
+      title: "Thank-You Relay",
+      kind: "Language",
+      mode: "interview",
+      task: ({ profile }) =>
+        `Learn ${profile.word}, teach it to your travel crew, and notice a respectful moment when it may be appropriate to use.`,
+      prompt: "Word / who taught me / when we used it",
+    },
+  ],
+  [
+    {
+      title: "Memory Museum",
+      kind: "Curate",
+      mode: "memory",
+      task: ({ destination, primary }) =>
+        `Turn a sketch of ${primary} into the star object in an imaginary Museum of ${destination} Today.`,
+      prompt: "Object title / why it belongs / display idea",
+    },
+    {
+      title: "Favorite Face-Off",
+      kind: "Tournament",
+      mode: "score",
+      task: ({ primary, secondary }) =>
+        `Put ${primary} and ${secondary} into a playful tournament against two other moments from the trip.`,
+      prompt: "Semifinal / final / champion memory",
+    },
+    {
+      title: "Postcard From Today",
+      kind: "Postcard",
+      mode: "story",
+      task: ({ destination }) =>
+        `Send an imaginary postcard from ${destination} using one sight, one sound, one feeling, and one odd little detail.`,
+      prompt: "Dear... / You would not believe... / From...",
+    },
+  ],
+  [
+    {
+      title: "Pattern Patrol",
+      kind: "Puzzle",
+      mode: "hunt",
+      task: ({ primary }) =>
+        `Find a repeating pattern around ${primary}, copy the first three parts, and predict what should come next.`,
+      prompt: "Pattern / next piece / where it appears",
+    },
+    {
+      title: "Symmetry Remix",
+      kind: "Art",
+      mode: "draw",
+      task: ({ destination, secondary }) =>
+        `Borrow one shape from ${secondary}, flip or repeat it, and create a brand-new ${destination} pattern.`,
+      prompt: "Original clue / my remix / pattern name",
+    },
+    {
+      title: "Detail Zoom-In",
+      kind: "Guess",
+      mode: "draw",
+      task: ({ primary }) =>
+        `Draw an extreme close-up of ${primary} so your travel crew must guess what the whole thing is.`,
+      prompt: "Guesses / reveal / detail most people missed",
+    },
+  ],
+  [
+    {
+      title: "Market Math",
+      kind: "Numbers",
+      mode: "score",
+      task: ({ primary, secondary }) =>
+        `Compare the real or displayed prices, portions, colors, or ingredient counts for ${primary} and ${secondary}.`,
+      prompt: "Number clue / comparison / best value or choice",
+    },
+    {
+      title: "Mystery Ingredient",
+      kind: "Mystery",
+      mode: "taste",
+      task: ({ destination, primary }) =>
+        `Choose one ingredient in ${primary} and trace how it might travel from a farm, sea, or maker to a plate in ${destination}.`,
+      prompt: "Ingredient / journey / evidence",
+    },
+    {
+      title: "Pop-Up Cafe",
+      kind: "Role-play",
+      mode: "design",
+      task: ({ destination, secondary }) =>
+        `Open a pretend one-table cafe inspired by ${destination}. Give ${secondary} a dramatic menu name and sell it to your family.`,
+      prompt: "Cafe name / special dish / one-line sales pitch",
+    },
+  ],
+  [
+    {
+      title: "Map Legend Decoder",
+      kind: "Map",
+      mode: "map",
+      task: ({ primary }) =>
+        `Collect three signs or symbols near ${primary} and turn them into a secret map legend.`,
+      prompt: "Symbol / secret meaning / map location",
+    },
+    {
+      title: "Wrong-Turn Adventure",
+      kind: "Story",
+      mode: "story",
+      task: ({ primary, secondary }) =>
+        `Invent a ridiculous detour between ${primary} and ${secondary} involving one impossible obstacle and one clever escape.`,
+      prompt: "Wrong turn / obstacle / escape",
+    },
+    {
+      title: "Shortcut Designer",
+      kind: "Solve",
+      mode: "design",
+      task: ({ destination, primary, secondary }) =>
+        `Design a kinder route between ${primary} and ${secondary} for someone tired, carrying bags, or new to ${destination}.`,
+      prompt: "Traveler / route change / why it helps",
+    },
+  ],
+  [
+    {
+      title: "Destination Radio",
+      kind: "Perform",
+      mode: "report",
+      task: ({ destination, primary }) =>
+        `Host a tiny radio show from ${destination} with ${primary} as the opening sound and today's best discovery as the headline.`,
+      prompt: "Station name / opening sound / top story",
+    },
+    {
+      title: "Sound-Bubble Comic",
+      kind: "Comic",
+      mode: "draw",
+      task: ({ primary, secondary }) =>
+        `Draw ${primary} and ${secondary} meeting inside a comic made only from sound-effect bubbles.`,
+      prompt: "Boom / whoosh / tiny sound / surprise sound",
+    },
+    {
+      title: "Sonic Souvenir",
+      kind: "Invent",
+      mode: "sound",
+      task: ({ destination, primary }) =>
+        `Turn the sound of ${primary} into an imaginary souvenir you could pack and replay whenever you miss ${destination}.`,
+      prompt: "Souvenir name / shape / sound it stores",
+    },
+  ],
+  [
+    {
+      title: "Pocket Weather Station",
+      kind: "Forecast",
+      mode: "nature",
+      task: ({ destination, primary }) =>
+        `Use ${primary}, shadows, moving leaves, clouds, or clothing as evidence for today's ${destination} weather report.`,
+      prompt: "Evidence / forecast / what actually happened",
+    },
+    {
+      title: "Tiny Habitat News",
+      kind: "News",
+      mode: "report",
+      task: ({ secondary }) =>
+        `Report live from the tiny world around ${secondary}. Explain who might live there and what is changing.`,
+      prompt: "Breaking news / witness clue / next development",
+    },
+    {
+      title: "Nature: 2050",
+      kind: "Future",
+      mode: "design",
+      task: ({ destination, primary }) =>
+        `Imagine ${primary} in ${destination} in the year 2050 and design one hopeful change that helps it thrive.`,
+      prompt: "Future headline / change / who makes it happen",
+    },
+  ],
+  [
+    {
+      title: "Trip Awards Ceremony",
+      kind: "Awards",
+      mode: "score",
+      task: ({ primary, secondary }) =>
+        `Nominate ${primary}, ${secondary}, and one wild-card memory for funniest, most beautiful, most surprising, and worth-returning-for.`,
+      prompt: "Category / winner / acceptance speech",
+    },
+    {
+      title: "Destination Quizmaster",
+      kind: "Quiz",
+      mode: "story",
+      task: ({ destination }) =>
+        `Create a family quiz about ${destination} with one easy question, one tricky question, and one believable trick answer.`,
+      prompt: "Question / choices / answer reveal",
+    },
+    {
+      title: "Next Explorer Guide",
+      kind: "Guide",
+      mode: "report",
+      task: ({ destination, profile }) =>
+        `Make the one page you wish you had before arriving in ${destination}, including this care clue: ${profile.etiquette}`,
+      prompt: "Do not miss / be ready for / show respect by",
+    },
+  ],
+];
+
+function tailorChallenge(mode: ChallengeMode, age: number, variant: number) {
+  const choose = (options: string[]) => options[variant % options.length];
+
+  if (age <= 5) {
+    const count = Math.max(2, age - 1);
+    if (mode === "hunt" || mode === "nature") {
+      return choose([
+        `A grown-up reads the clues; point, circle, or count ${count} finds.`,
+        "Give warm-or-cold hints until your grown-up spots the same thing.",
+        "Turn each find into a tiny movement, then pick the funniest one.",
+      ]);
+    }
+    if (mode === "draw" || mode === "design") {
+      return choose([
+        `Use ${count} bold colors and tell a grown-up what each part means.`,
+        "Draw one part with your eyes on the object, then one part from memory.",
+        "Add a hidden heart, star, or silly face for your family to find.",
+      ]);
+    }
+    if (mode === "sound" || mode === "move" || mode === "map") {
+      return choose([
+        "Use your voice, fingers, or whole body; a grown-up can draw the route or rhythm.",
+        "Perform it once slowly and once in the silliest safe way you can.",
+        "Teach the pattern to a grown-up and see whether they can copy it.",
+      ]);
+    }
+    if (mode === "score" || mode === "taste") {
+      return choose([
+        "Choose with happy, unsure, and no-thank-you faces; only taste with grown-up permission.",
+        "Give it a color score and a smell score before deciding whether to taste.",
+        "Let every family member point to a favorite, then count the votes.",
+      ]);
+    }
+    if (mode === "kindness" || mode === "interview") {
+      return choose([
+        "Practice together first, then let a grown-up help with the real moment.",
+        "Use a puppet voice for practice and your calm voice for the real moment.",
+        "Draw a happy face after you try it and tell what happened.",
+      ]);
+    }
+    return choose([
+      "Tell it aloud; a grown-up writes your exact words.",
+      "Act out the middle and let your family guess the ending.",
+      "Draw the answer first, then add one sentence together.",
+    ]);
+  }
+
+  if (age <= 8) {
+    if (mode === "hunt" || mode === "nature") {
+      return choose([
+        `Make it an ${age}-point challenge and add a bonus point for a clue nobody else notices.`,
+        "Write three clues from hardest to easiest and test them on your travel crew.",
+        "Add a secret category, such as zigzags or things smaller than your hand.",
+      ]);
+    }
+    if (mode === "draw" || mode === "design") {
+      return choose([
+        "Label four clever details and hide one tiny joke in the finished design.",
+        "Make a before-and-after version and circle the smartest change.",
+        "Swap drawings with a teammate and let them add one surprising feature.",
+      ]);
+    }
+    if (mode === "sound" || mode === "move" || mode === "map") {
+      return choose([
+        "Create a four-symbol key, then challenge someone else to follow or copy it.",
+        "Make a pattern with exactly eight beats, steps, or map marks.",
+        "Perform or trace it backwards and decide which version works better.",
+      ]);
+    }
+    if (mode === "score" || mode === "taste") {
+      return choose([
+        "Build a five-star scorecard with one category invented by you.",
+        "Make your prediction first, then reveal whether the real result matched.",
+        "Collect family votes and design a winner's badge for the top choice.",
+      ]);
+    }
+    if (mode === "kindness" || mode === "interview") {
+      return choose([
+        "Ask one clear question, listen closely, and write the most interesting exact word you hear.",
+        "Role-play both sides with family before trying the respectful version for real.",
+        "Turn what you learned into one helpful tip for the next child.",
+      ]);
+    }
+    return choose([
+      "Give it a beginning, a surprise in the middle, and a strong final line.",
+      "Turn it into four comic panels with no more than six words in each.",
+      "Tell two true details and slip in one hilarious invention for your family to guess.",
+    ]);
+  }
+
+  if (age <= 11) {
+    const evidenceCount = age - 6;
+    if (mode === "draw" || mode === "design" || mode === "map") {
+      return choose([
+        `Make an annotated version with ${evidenceCount} labels and one practical improvement.`,
+        "Sketch a first draft, test it on someone, and revise the most confusing part.",
+        "Show the current version beside your redesign and explain the key trade-off.",
+      ]);
+    }
+    if (mode === "score" || mode === "taste") {
+      return choose([
+        "Create three judging criteria, weight the most important one double, and defend the result.",
+        "Predict the winner, gather evidence, then explain whether your prediction survived.",
+        "Compare your score with a family member's and investigate the biggest disagreement.",
+      ]);
+    }
+    if (mode === "kindness" || mode === "interview") {
+      return choose([
+        "Record the answer or behavior accurately, then separate evidence from your interpretation.",
+        "Prepare a follow-up question that begins with how or why, and note what changed your view.",
+        "Turn the result into a respectful do-and-do-not guide with reasons.",
+      ]);
+    }
+    return choose([
+      `Collect ${evidenceCount} precise pieces of evidence and include one alternative explanation.`,
+      "Make an observation-prediction-check table and record where your guess went wrong.",
+      "Rank the three strongest details, then defend why number one matters most.",
+    ]);
+  }
+
+  const wordTarget = Math.min(120, age * 8);
+  if (mode === "draw" || mode === "design" || mode === "map") {
+    return choose([
+      "Produce a labeled concept with a clear user, constraint, rationale, and trade-off.",
+      "Make a rough prototype, get one piece of family feedback, and document the revision.",
+      "Compare the original and your intervention through access, beauty, usefulness, and unintended effects.",
+    ]);
+  }
+  if (mode === "score" || mode === "taste") {
+    return choose([
+      "Define a fair rubric, question one assumption behind it, and justify the final call.",
+      "Collect two different viewpoints and explain why a single ranking cannot tell the whole story.",
+      "Make a prediction before gathering evidence, then write a short verdict on what changed your mind.",
+    ]);
+  }
+  if (mode === "kindness" || mode === "interview") {
+    return choose([
+      "Ask permission where needed, preserve context, and distinguish a quote from your own conclusion.",
+      "Identify one assumption you brought with you and test it through careful observation or a respectful question.",
+      "Write a cultural-humility note: what you noticed, what you cannot conclude, and what you want to learn next.",
+    ]);
+  }
+  return choose([
+    `Turn it into a ${wordTarget}-word field note that clearly separates fact, inference, and opinion.`,
+    "Build a three-frame visual essay with evidence captions and one counterpoint.",
+    "Write a sharp claim, support it with two observed details, and name the limitation of your evidence.",
+  ]);
+}
+
 function makeActivities(
   day: number,
   age: number,
   destination: string,
   profile: DestinationProfile,
-  blueprint: DayBlueprint,
   primary: string,
   secondary: string,
 ): Activity[] {
-  if (age <= 5) {
-    const count = Math.max(2, age - 1);
-    return [
-      {
-        title: `${blueprint.focusLabel} I Spy`,
-        kind: "Spot",
-        body: `With a grown-up, find ${primary}. Point to ${count} colors or shapes nearby, then look for ${secondary}.`,
-        prompt: `I found it in ${destination}! Color ${count} stars.`,
-      },
-      {
-        title: "Big Travel Drawing",
-        kind: "Draw",
-        body: `Draw ${primary} as big as you can. Add yourself visiting it in ${destination}.`,
-        prompt: "My picture needs one more...",
-      },
-      {
-        title: "Say, Move, Choose",
-        kind: "Play",
-        body: `Say ${profile.word} with help. Make a movement inspired by ${secondary}, then choose: funny, beautiful, loud, quiet, or yummy.`,
-        prompt: "Circle a word or ask a grown-up to write yours.",
-      },
-    ];
-  }
+  const context = { destination, profile, primary, secondary };
+  const deck = creativeActivityDecks[day - 1];
 
-  if (age <= 8) {
-    return [
-      {
-        title: `${blueprint.focusLabel} Point Hunt`,
-        kind: "Game",
-        body: `Earn ${age} points: 3 for finding ${primary}, 2 for ${secondary}, and 1 for every new detail you can name in ${destination}.`,
-        prompt: `My score: ____ / ${age}   Best clue: __________`,
-      },
-      {
-        title: "Map the Moment",
-        kind: "Create",
-        body: `Make a mini map showing where you found ${primary}. Add an arrow, a landmark, and the route your family took.`,
-        prompt: "Draw the route and invent a map symbol.",
-      },
-      {
-        title: "Local Detail Story",
-        kind: "Story",
-        body: `Use ${profile.word}, ${secondary}, and one real detail from ${destination} in a three-sentence travel tale.`,
-        prompt: "Beginning / surprise / ending",
-      },
-    ];
-  }
-
-  if (age <= 11) {
-    const evidenceCount = age - 6;
-    return [
-      {
-        title: `${blueprint.focusLabel} Evidence Log`,
-        kind: "Investigate",
-        body: `Collect ${evidenceCount} precise observations about ${primary}: material, color, purpose, location, sound, or story. Compare it with ${secondary}.`,
-        prompt: "Observation / evidence / what I think it means",
-      },
-      {
-        title: "Local Systems Challenge",
-        kind: "Decode",
-        body: `Find how ${primary} fits into daily life in ${destination}. Sketch a diagram or route and label three useful parts.`,
-        prompt: "This works well because... / I would improve...",
-      },
-      {
-        title: "Ask, Check, Explain",
-        kind: "Report",
-        body: `Ask a grown-up, guide, or sign one respectful question about ${secondary}. Record the answer and one thing you still need to check.`,
-        prompt: `Use today's local language clue: ${profile.word}.`,
-      },
-    ];
-  }
-
-  const wordTarget = Math.min(120, age * 8);
-  return [
-    {
-      title: `${blueprint.focusLabel} Field Brief`,
-      kind: "Report",
-      body: `Document ${primary} in ${destination} using a sketch or permitted photo plus ${wordTarget} words. Separate what you observed from what you inferred.`,
-      prompt: "Headline / evidence / unanswered question",
-    },
-    {
-      title: "Design & Culture Lens",
-      kind: "Analyze",
-      body: `Compare ${primary} and ${secondary}. What do they reveal about climate, history, values, technology, or who gets to use the space?`,
-      prompt: "Strongest evidence / another possible interpretation",
-    },
-    {
-      title: "Publish the Mini Guide",
-      kind: "Create",
-      body: `Write a useful recommendation for another young traveler. Include ${profile.word}, one etiquette tip, and one honest trade-off from today.`,
-      prompt: "Go for... / know before you go... / skip if...",
-    },
-  ];
+  return deck.map((concept, index) => ({
+    title: concept.title,
+    kind: concept.kind,
+    body: `${concept.task(context)} ${tailorChallenge(concept.mode, age, day * 3 + index)}`,
+    prompt: concept.prompt,
+  }));
 }
 
 export function buildBooklet(age: number, destination: string, days: number): DayPlan[] {
@@ -541,7 +1004,7 @@ export function buildBooklet(age: number, destination: string, days: number): Da
       theme: blueprint.theme,
       focusLabel: blueprint.focusLabel,
       mission: makeMission(day, name, profile, blueprint, primary, secondary),
-      activities: makeActivities(day, safeAge, name, profile, blueprint, primary, secondary),
+      activities: makeActivities(day, safeAge, name, profile, primary, secondary),
     };
   });
 }

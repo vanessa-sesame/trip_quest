@@ -28,10 +28,11 @@ test("server-renders the TripQuest generator", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>TripQuest Booklet<\/title>/i);
-  assert.match(html, /Make a kid-ready travel booklet/i);
-  assert.match(html, /Show my booklet/i);
-  assert.match(html, /Tokyo/i);
-  assert.match(html, /Curious Navigator/i);
+  assert.match(html, /<title>TripQuest \| Travel Booklets for Kids<\/title>/i);
+  assert.match(html, /Build a trip they can hold onto/i);
+  assert.match(html, /Create free preview/i);
+  assert.match(html, /Singapore/i);
+  assert.match(html, /Merlion Face Finder/i);
+  assert.match(html, /US\$5\.99/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });

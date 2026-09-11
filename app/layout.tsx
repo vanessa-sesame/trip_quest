@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "TripQuest Booklet";
+const title = "TripQuest | Travel Booklets for Kids";
 const description =
-  "Generate printable, destination-specific travel games and activity booklets tailored to a child's age and trip length.";
+  "Create thoughtful, printable travel activity booklets tailored to a child's age, destination, and trip length.";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -26,7 +26,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const protocol =
     requestHeaders.get("x-forwarded-proto") ??
     (host.startsWith("localhost") ? "http" : "https");
-  const socialImage = `${protocol}://${host}/og.jpg`;
+  const socialImage = `${protocol}://${host}/og.png`;
 
   return {
     title,

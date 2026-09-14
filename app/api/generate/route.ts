@@ -6,6 +6,19 @@ import {
   normalizeItinerary,
   validateBookletDraft,
 } from "../../booklet-ai";
+import {
+  type BookletCacheIdentity,
+  type BookletDatabase,
+  type BookletObjectStorage,
+  acquireGenerationLock,
+  createBookletCacheKey,
+  createResearchCacheKey,
+  readStoredBooklet,
+  readStoredResearch,
+  releaseGenerationLock,
+  writeStoredBooklet,
+  writeStoredResearch,
+} from "../../booklet-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +26,8 @@ type RuntimeEnvironment = {
   MOONSHOT_API_KEY?: string;
   KIMI_RESEARCH_MODEL?: string;
   KIMI_COMPOSER_MODEL?: string;
+  DB?: BookletDatabase;
+  BOOKLET_FILES?: BookletObjectStorage;
 };
 
 type ResearchResult = {
@@ -30,8 +45,12 @@ const bookletCache = new Map<string, CachedValue<GeneratedBookletData>>();
 const bookletJobs = new Map<string, Promise<GeneratedBookletData>>();
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
 const KIMI_API_BASE = "https://api.moonshot.ai/v1";
-const CACHE_TTL = 6 * 60 * 60 * 1000;
-const RESEARCH_TTL = 24 * 60 * 60 * 1000;
+const MEMORY_BOOKLET_TTL = 6 * 60 * 60 * 1000;
+const MEMORY_RESEARCH_TTL = 24 * 60 * 60 * 1000;
+const DURABLE_BOOKLET_TTL = 180 * 24 * 60 * 60 * 1000;
+const DURABLE_RESEARCH_TTL = 30 * 24 * 60 * 60 * 1000;
+const GENERATION_LOCK_TTL = 6 * 60 * 1000;
+const GENERATION_WAIT_TTL = 3 * 60 * 1000;
 
 const exactAgeGuidance: Record<number, string> = {
   3: "A grown-up reads everything. Use pointing, finding, naming, movement, and either-or choices. Never require reading or writing.",
@@ -110,6 +129,44 @@ function getCached<T>(cache: Map<string, CachedValue<T>>, key: string) {
     return null;
   }
   return cached.value;
+}
+
+function logStorageFailure(operation: string, error: unknown) {
+  const message = error instanceof Error ? error.message : "Unexpected storage error";
+  console.warn(`[TripQuest storage: ${operation}]`, message);
+}
+
+async function readDurableBooklet(
+  runtime: RuntimeEnvironment,
+  cacheKey: string,
+  identity: BookletCacheIdentity,
+) {
+  if (!runtime.DB || !runtime.BOOKLET_FILES) return null;
+  try {
+    return await readStoredBooklet(
+      runtime.DB,
+      runtime.BOOKLET_FILES,
+      cacheKey,
+      identity,
+    );
+  } catch (error) {
+    logStorageFailure("read booklet", error);
+    return null;
+  }
+}
+
+async function waitForDurableBooklet(
+  runtime: RuntimeEnvironment,
+  cacheKey: string,
+  identity: BookletCacheIdentity,
+) {
+  const deadline = Date.now() + GENERATION_WAIT_TTL;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    const stored = await readDurableBooklet(runtime, cacheKey, identity);
+    if (stored) return stored;
+  }
+  return null;
 }
 
 async function kimiRequest(
@@ -215,11 +272,28 @@ async function researchDestination(
   itinerary: string[],
   apiKey: string,
   model: string,
+  database?: BookletDatabase,
 ) {
-  const plannedStops = itinerary.filter(Boolean);
-  const cacheKey = `${destination.toLocaleLowerCase()}|${plannedStops.join("|").toLocaleLowerCase()}`;
+  const cacheKey = await createResearchCacheKey(destination, itinerary, model);
   const cached = getCached(researchCache, cacheKey);
   if (cached) return cached;
+
+  if (database) {
+    try {
+      const stored = await readStoredResearch(database, cacheKey);
+      if (stored) {
+        researchCache.set(cacheKey, {
+          expiresAt: Date.now() + MEMORY_RESEARCH_TTL,
+          value: stored,
+        });
+        return stored;
+      }
+    } catch (error) {
+      logStorageFailure("read research", error);
+    }
+  }
+
+  const plannedStops = itinerary.filter(Boolean);
 
   const researchInput = `Research this destination for a children's travel activity booklet: ${JSON.stringify(destination)}.
 
@@ -282,9 +356,24 @@ Distinguish the destination from similarly named places. Do not invent legends, 
 
   const result = { notes, sources: firstPass.sources };
   researchCache.set(cacheKey, {
-    expiresAt: Date.now() + RESEARCH_TTL,
+    expiresAt: Date.now() + MEMORY_RESEARCH_TTL,
     value: result,
   });
+  if (database) {
+    try {
+      const generatedAt = new Date().toISOString();
+      await writeStoredResearch(database, {
+        cacheKey,
+        destination,
+        research: result,
+        researchModel: model,
+        generatedAt,
+        expiresAt: Date.now() + DURABLE_RESEARCH_TTL,
+      });
+    } catch (error) {
+      logStorageFailure("write research", error);
+    }
+  }
   return result;
 }
 
@@ -509,6 +598,7 @@ function streamGeneration(job: Promise<GeneratedBookletData>) {
       headers: {
         "Cache-Control": "private, no-store",
         "Content-Type": "application/json; charset=utf-8",
+        "X-TripQuest-Cache": "miss-or-inflight",
         "X-Content-Type-Options": "nosniff",
       },
     },
@@ -529,15 +619,42 @@ export async function POST(request: Request) {
     const age = sanitizeAge(Number(body.age));
     const days = sanitizeDays(Number(body.days));
     const itinerary = normalizeItinerary(body.itinerary, days);
-    const cacheKey = `${destination.toLocaleLowerCase()}|${age}|${days}|${itinerary.join("|").toLocaleLowerCase()}`;
+    const runtime = await getRuntimeEnvironment();
+    const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
+    const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
+    const identity: BookletCacheIdentity = {
+      destination,
+      age,
+      days,
+      itinerary,
+      researchModel,
+      composerModel,
+    };
+    const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
     if (cached) {
       return Response.json(cached, {
-        headers: { "Cache-Control": "private, no-store" },
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-TripQuest-Cache": "memory",
+        },
       });
     }
 
-    const runtime = await getRuntimeEnvironment();
+    const stored = await readDurableBooklet(runtime, cacheKey, identity);
+    if (stored) {
+      bookletCache.set(cacheKey, {
+        expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
+        value: stored,
+      });
+      return Response.json(stored, {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "X-TripQuest-Cache": "durable",
+        },
+      });
+    }
+
     const apiKey = runtime.MOONSHOT_API_KEY?.trim();
     if (!apiKey) {
       return Response.json(
@@ -546,40 +663,127 @@ export async function POST(request: Request) {
       );
     }
 
-    const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
-    const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
     let job = bookletJobs.get(cacheKey);
     if (!job) {
       job = (async () => {
-        const research = await researchDestination(
-          destination,
-          itinerary,
-          apiKey,
-          researchModel,
-        );
-        const draft = await composeBooklet(
-          destination,
-          age,
-          days,
-          itinerary,
-          research,
-          apiKey,
-          composerModel,
-        );
-        const result: GeneratedBookletData = {
-          destination,
-          age,
-          days,
-          itinerary,
-          ...draft,
-          sources: research.sources,
-          generatedAt: new Date().toISOString(),
-        };
-        bookletCache.set(cacheKey, {
-          expiresAt: Date.now() + CACHE_TTL,
-          value: result,
-        });
-        return result;
+        const lockOwner = crypto.randomUUID();
+        let ownsLock = false;
+        let lockAvailable = false;
+
+        if (runtime.DB) {
+          try {
+            const now = Date.now();
+            ownsLock = await acquireGenerationLock(
+              runtime.DB,
+              cacheKey,
+              lockOwner,
+              now,
+              now + GENERATION_LOCK_TTL,
+            );
+            lockAvailable = true;
+          } catch (error) {
+            logStorageFailure("acquire generation lock", error);
+          }
+        }
+
+        if (runtime.DB && runtime.BOOKLET_FILES && lockAvailable && !ownsLock) {
+          const sharedResult = await waitForDurableBooklet(runtime, cacheKey, identity);
+          if (sharedResult) {
+            bookletCache.set(cacheKey, {
+              expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
+              value: sharedResult,
+            });
+            return sharedResult;
+          }
+
+          try {
+            const now = Date.now();
+            ownsLock = await acquireGenerationLock(
+              runtime.DB,
+              cacheKey,
+              lockOwner,
+              now,
+              now + GENERATION_LOCK_TTL,
+            );
+          } catch (error) {
+            logStorageFailure("reacquire generation lock", error);
+          }
+        }
+
+        try {
+          const rechecked = await readDurableBooklet(runtime, cacheKey, identity);
+          if (rechecked) return rechecked;
+
+          const research = await researchDestination(
+            destination,
+            itinerary,
+            apiKey,
+            researchModel,
+            runtime.DB,
+          );
+
+          if (ownsLock && runtime.DB) {
+            try {
+              const now = Date.now();
+              await acquireGenerationLock(
+                runtime.DB,
+                cacheKey,
+                lockOwner,
+                now,
+                now + GENERATION_LOCK_TTL,
+              );
+            } catch (error) {
+              logStorageFailure("renew generation lock", error);
+            }
+          }
+
+          const draft = await composeBooklet(
+            destination,
+            age,
+            days,
+            itinerary,
+            research,
+            apiKey,
+            composerModel,
+          );
+          const result: GeneratedBookletData = {
+            destination,
+            age,
+            days,
+            itinerary,
+            ...draft,
+            sources: research.sources,
+            generatedAt: new Date().toISOString(),
+          };
+          bookletCache.set(cacheKey, {
+            expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
+            value: result,
+          });
+
+          if (runtime.DB && runtime.BOOKLET_FILES) {
+            try {
+              await writeStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, {
+                cacheKey,
+                booklet: result,
+                researchModel,
+                composerModel,
+                expiresAt: Date.now() + DURABLE_BOOKLET_TTL,
+              });
+            } catch (error) {
+              logStorageFailure("write booklet", error);
+            }
+          }
+
+          return result;
+        } finally {
+          if (ownsLock && runtime.DB) {
+            try {
+              await releaseGenerationLock(runtime.DB, cacheKey, lockOwner);
+            } catch (error) {
+              logStorageFailure("release generation lock", error);
+            }
+          }
+        }
       })();
       bookletJobs.set(cacheKey, job);
       void job.finally(() => bookletJobs.delete(cacheKey)).catch(() => undefined);

@@ -5,7 +5,7 @@ import {
   validateBookletDraft,
 } from "./booklet-ai.ts";
 
-export const RESEARCH_CACHE_VERSION = "research-2026-09-15-1";
+export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-15-1";
 
 type D1Value = string | number | null;

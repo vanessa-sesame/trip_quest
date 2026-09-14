@@ -34,6 +34,10 @@ import {
   isGeneratedBookletData,
 } from "./booklet-ai";
 import { ActivityGame } from "./activity-game";
+import {
+  GenerationStreamError,
+  readGenerationResponse,
+} from "./generation-stream";
 
 type SampleAge = 5 | 7;
 
@@ -52,6 +56,7 @@ const destinationSuggestions = [
   "Seoul",
   "Sydney",
   "Bangkok",
+  "Chongqing",
 ];
 
 const samplePageTitles: Record<SampleAge, string[]> = {
@@ -123,6 +128,9 @@ export default function Home() {
     "idle" | "generating" | "error"
   >("idle");
   const [generationError, setGenerationError] = useState("");
+  const [generationMessage, setGenerationMessage] = useState(
+    "Preparing the travel studio…",
+  );
   const [announcement, setAnnouncement] = useState(
     "Singapore preview ready for age 5.",
   );
@@ -179,19 +187,45 @@ export default function Home() {
 
     setGenerationState("generating");
     setGenerationError("");
+    setGenerationMessage("Looking for a saved edition…");
     setDays(nextTrip.days);
 
     try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nextTrip),
-      });
-      const payload: unknown = await response.json();
-      const errorPayload = payload as { error?: string };
+      let payload: unknown;
+      const requestBody = JSON.stringify(nextTrip);
 
-      if (!response.ok || typeof errorPayload?.error === "string") {
-        throw new Error(errorPayload.error || "The booklet could not be generated.");
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: {
+              Accept: "text/event-stream, application/json",
+              "Content-Type": "application/json",
+            },
+            body: requestBody,
+          });
+          payload = await readGenerationResponse(response, setGenerationMessage);
+          const errorPayload = payload as { error?: string };
+
+          if (!response.ok || typeof errorPayload?.error === "string") {
+            throw new GenerationStreamError(
+              errorPayload.error || "The booklet could not be generated.",
+              false,
+            );
+          }
+          break;
+        } catch (error) {
+          const canReconnect =
+            error instanceof TypeError ||
+            error instanceof SyntaxError ||
+            (error instanceof GenerationStreamError && error.retryable);
+          if (!canReconnect || attempt === 2) throw error;
+
+          setGenerationMessage("Connection paused. Rejoining your saved work…");
+          await new Promise((resolve) =>
+            setTimeout(resolve, attempt === 0 ? 1_500 : 4_000),
+          );
+        }
       }
 
       if (!isGeneratedBookletData(payload)) {
@@ -219,9 +253,11 @@ export default function Home() {
       setGenerationState("error");
       setGenerationError(
         error instanceof Error &&
-          !/load failed|failed to fetch|networkerror/i.test(error.message)
+          !/load failed|failed to fetch|networkerror|live connection/i.test(
+            error.message,
+          )
           ? error.message
-          : "The connection closed before the booklet arrived. Please tap Create again; an in-progress copy will be reused when available.",
+          : "The connection could not stay open after reconnecting. Please wait a moment and tap Create again; your saved work will resume.",
       );
     }
   }
@@ -420,13 +456,12 @@ export default function Home() {
                 <Sparkles size={19} />
               )}
               {generationState === "generating"
-                ? "Researching destination…"
+                ? "Building custom booklet…"
                 : "Create custom booklet"}
             </button>
             {generationState === "generating" ? (
               <p className="generation-note" role="status">
-                Checking real places and shaping activities for age {age}. A new
-                place can take up to two minutes.
+                {generationMessage} A new place can take up to two minutes.
               </p>
             ) : null}
             {generationError ? (

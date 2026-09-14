@@ -1,3 +1,4 @@
+import { getRequestExecutionContext } from "vinext/shims/request-context";
 import { getAgeBand, sanitizeAge, sanitizeDays } from "../../booklet";
 import {
   type BookletSource,
@@ -19,6 +20,11 @@ import {
   writeStoredBooklet,
   writeStoredResearch,
 } from "../../booklet-storage";
+import {
+  type GenerationTask,
+  createGenerationStreamResponse,
+  createGenerationTask,
+} from "../../generation-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +48,15 @@ type CachedValue<T> = {
 
 const researchCache = new Map<string, CachedValue<ResearchResult>>();
 const bookletCache = new Map<string, CachedValue<GeneratedBookletData>>();
-const bookletJobs = new Map<string, Promise<GeneratedBookletData>>();
+const bookletJobs = new Map<string, GenerationTask<GeneratedBookletData>>();
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
 const KIMI_API_BASE = "https://api.moonshot.ai/v1";
 const MEMORY_BOOKLET_TTL = 6 * 60 * 60 * 1000;
 const MEMORY_RESEARCH_TTL = 24 * 60 * 60 * 1000;
 const DURABLE_BOOKLET_TTL = 180 * 24 * 60 * 60 * 1000;
 const DURABLE_RESEARCH_TTL = 30 * 24 * 60 * 60 * 1000;
-const GENERATION_LOCK_TTL = 6 * 60 * 1000;
+const GENERATION_LOCK_TTL = 45 * 1000;
+const GENERATION_LOCK_RENEWAL = 15 * 1000;
 const GENERATION_WAIT_TTL = 3 * 60 * 1000;
 
 const exactAgeGuidance: Record<number, string> = {
@@ -75,6 +82,10 @@ class KimiRequestError extends Error {
     super(message);
   }
 }
+
+class UserCorrectionError extends Error {}
+
+class GenerationBusyError extends Error {}
 
 async function getRuntimeEnvironment(): Promise<RuntimeEnvironment> {
   try {
@@ -155,18 +166,77 @@ async function readDurableBooklet(
   }
 }
 
-async function waitForDurableBooklet(
+async function waitForDurableBookletOrLock(
   runtime: RuntimeEnvironment,
   cacheKey: string,
   identity: BookletCacheIdentity,
+  lockOwner: string,
+  publish: (message: string) => void,
 ) {
   const deadline = Date.now() + GENERATION_WAIT_TTL;
+  publish("Rejoining the copy already being created…");
+
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
     const stored = await readDurableBooklet(runtime, cacheKey, identity);
-    if (stored) return stored;
+    if (stored) return { booklet: stored, ownsLock: false };
+
+    if (!runtime.DB) break;
+    const now = Date.now();
+    try {
+      const ownsLock = await acquireGenerationLock(
+        runtime.DB,
+        cacheKey,
+        lockOwner,
+        now,
+        now + GENERATION_LOCK_TTL,
+      );
+      if (ownsLock) return { booklet: null, ownsLock: true };
+    } catch (error) {
+      logStorageFailure("reacquire generation lock", error);
+      return { booklet: null, ownsLock: false };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
   }
-  return null;
+
+  throw new GenerationBusyError(
+    "This booklet is still being finished. Please try Create again in a moment.",
+  );
+}
+
+function keepGenerationLockAlive(
+  database: BookletDatabase,
+  cacheKey: string,
+  ownerId: string,
+) {
+  let stopped = false;
+  let pending = Promise.resolve();
+  const interval = setInterval(() => {
+    pending = pending.then(async () => {
+      if (stopped) return;
+      const now = Date.now();
+      try {
+        const renewed = await acquireGenerationLock(
+          database,
+          cacheKey,
+          ownerId,
+          now,
+          now + GENERATION_LOCK_TTL,
+        );
+        if (!renewed) {
+          console.warn("[TripQuest storage: renew generation lock] Lock ownership changed");
+        }
+      } catch (error) {
+        logStorageFailure("renew generation lock", error);
+      }
+    });
+  }, GENERATION_LOCK_RENEWAL);
+
+  return async () => {
+    stopped = true;
+    clearInterval(interval);
+    await pending;
+  };
 }
 
 async function kimiRequest(
@@ -310,6 +380,11 @@ Return concise factual notes covering:
 - etiquette and respectful visitor behavior
 - 2 useful local words with plain-English meanings
 
+Begin the brief with exactly two single-line checks:
+DESTINATION_CHECK: OK
+PLAN_CHECK: OK
+If the destination is probably misspelled or ambiguous, replace OK on the first line with a short suggested correction. If a planned stop cannot reasonably be found in or near the destination, replace OK on the second line with the day number and a short explanation. Never force an unrelated planned stop into the destination.
+
 Distinguish the destination from similarly named places. Do not invent legends, claim stereotypes as facts, or suggest photographing/interviewing people without permission.`;
   const payload = await kimiRequest("/responses", apiKey, {
     model,
@@ -375,6 +450,37 @@ Distinguish the destination from similarly named places. Do not invent legends, 
     }
   }
   return result;
+}
+
+function correctionLine(notes: string, label: "DESTINATION_CHECK" | "PLAN_CHECK") {
+  const match = notes
+    .slice(0, 1_200)
+    .match(new RegExp(`(?:^|\\n)\\s*(?:[-*]\\s*)?${label}:\\s*([^\\n]+)`, "i"));
+  const value = match?.[1]
+    ?.replace(/[*_`#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+  return value && !/^ok(?:\b|\s|[.!-])/i.test(value) ? value : null;
+}
+
+function assertResearchMatchesRequest(research: ResearchResult) {
+  const destinationCorrection = correctionLine(
+    research.notes,
+    "DESTINATION_CHECK",
+  );
+  if (destinationCorrection) {
+    throw new UserCorrectionError(
+      `Please check the destination: ${destinationCorrection}`,
+    );
+  }
+
+  const planCorrection = correctionLine(research.notes, "PLAN_CHECK");
+  if (planCorrection) {
+    throw new UserCorrectionError(
+      `Please check the daily plan: ${planCorrection} Edit that day or leave it blank for an AI suggestion.`,
+    );
+  }
 }
 
 function bookletSchema(days: number, age: number) {
@@ -538,6 +644,10 @@ ${research.notes}`,
 }
 
 function generationErrorMessage(error: unknown) {
+  if (error instanceof UserCorrectionError || error instanceof GenerationBusyError) {
+    return error.message;
+  }
+
   if (error instanceof KimiRequestError) {
     return error.status === 429
       ? "The travel studio is busy right now. Please try again shortly."
@@ -551,68 +661,7 @@ function generationErrorMessage(error: unknown) {
   return "The destination research was incomplete. Please try the place again.";
 }
 
-function streamGeneration(job: Promise<GeneratedBookletData>) {
-  const encoder = new TextEncoder();
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let disconnected = false;
-
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        // Leading JSON whitespace keeps mobile and proxy connections active
-        // while Kimi researches and composes the final response.
-        controller.enqueue(encoder.encode(" "));
-        heartbeat = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(" "));
-          } catch {
-            disconnected = true;
-            if (heartbeat) clearInterval(heartbeat);
-          }
-        }, 8_000);
-
-        void job
-          .then((result) => {
-            if (!disconnected) {
-              controller.enqueue(encoder.encode(JSON.stringify(result)));
-            }
-          })
-          .catch((error) => {
-            if (!disconnected) {
-              controller.enqueue(
-                encoder.encode(JSON.stringify({ error: generationErrorMessage(error) })),
-              );
-            }
-          })
-          .finally(() => {
-            if (heartbeat) clearInterval(heartbeat);
-            if (!disconnected) controller.close();
-          });
-      },
-      cancel() {
-        disconnected = true;
-        if (heartbeat) clearInterval(heartbeat);
-      },
-    }),
-    {
-      headers: {
-        "Cache-Control": "private, no-store",
-        "Content-Type": "application/json; charset=utf-8",
-        "X-TripQuest-Cache": "miss-or-inflight",
-        "X-Content-Type-Options": "nosniff",
-      },
-    },
-  );
-}
-
 export async function POST(request: Request) {
-  if (!consumeRateLimit(request)) {
-    return Response.json(
-      { error: "You’ve made several previews recently. Please try again in a little while." },
-      { status: 429 },
-    );
-  }
-
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const destination = normalizeDestination(body.destination);
@@ -663,133 +712,148 @@ export async function POST(request: Request) {
       );
     }
 
-    let job = bookletJobs.get(cacheKey);
-    if (!job) {
-      job = (async () => {
-        const lockOwner = crypto.randomUUID();
-        let ownsLock = false;
-        let lockAvailable = false;
+    let task = bookletJobs.get(cacheKey);
+    if (!task && !consumeRateLimit(request)) {
+      return Response.json(
+        {
+          error:
+            "You’ve made several new previews recently. Saved booklets remain available; please try a new one later.",
+        },
+        { status: 429 },
+      );
+    }
 
-        if (runtime.DB) {
-          try {
-            const now = Date.now();
-            ownsLock = await acquireGenerationLock(
-              runtime.DB,
-              cacheKey,
-              lockOwner,
-              now,
-              now + GENERATION_LOCK_TTL,
-            );
-            lockAvailable = true;
-          } catch (error) {
-            logStorageFailure("acquire generation lock", error);
-          }
-        }
+    if (!task) {
+      task = createGenerationTask(
+        "Starting destination research…",
+        async (publish) => {
+          const lockOwner = crypto.randomUUID();
+          let ownsLock = false;
+          let lockAvailable = false;
+          let stopLockRenewal: (() => Promise<void>) | undefined;
 
-        if (runtime.DB && runtime.BOOKLET_FILES && lockAvailable && !ownsLock) {
-          const sharedResult = await waitForDurableBooklet(runtime, cacheKey, identity);
-          if (sharedResult) {
-            bookletCache.set(cacheKey, {
-              expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
-              value: sharedResult,
-            });
-            return sharedResult;
-          }
-
-          try {
-            const now = Date.now();
-            ownsLock = await acquireGenerationLock(
-              runtime.DB,
-              cacheKey,
-              lockOwner,
-              now,
-              now + GENERATION_LOCK_TTL,
-            );
-          } catch (error) {
-            logStorageFailure("reacquire generation lock", error);
-          }
-        }
-
-        try {
-          const rechecked = await readDurableBooklet(runtime, cacheKey, identity);
-          if (rechecked) return rechecked;
-
-          const research = await researchDestination(
-            destination,
-            itinerary,
-            apiKey,
-            researchModel,
-            runtime.DB,
-          );
-
-          if (ownsLock && runtime.DB) {
+          if (runtime.DB) {
+            publish("Checking for a saved or in-progress edition…");
             try {
               const now = Date.now();
-              await acquireGenerationLock(
+              ownsLock = await acquireGenerationLock(
                 runtime.DB,
                 cacheKey,
                 lockOwner,
                 now,
                 now + GENERATION_LOCK_TTL,
               );
+              lockAvailable = true;
             } catch (error) {
-              logStorageFailure("renew generation lock", error);
+              logStorageFailure("acquire generation lock", error);
             }
           }
 
-          const draft = await composeBooklet(
-            destination,
-            age,
-            days,
-            itinerary,
-            research,
-            apiKey,
-            composerModel,
-          );
-          const result: GeneratedBookletData = {
-            destination,
-            age,
-            days,
-            itinerary,
-            ...draft,
-            sources: research.sources,
-            generatedAt: new Date().toISOString(),
-          };
-          bookletCache.set(cacheKey, {
-            expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
-            value: result,
-          });
-
-          if (runtime.DB && runtime.BOOKLET_FILES) {
-            try {
-              await writeStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, {
-                cacheKey,
-                booklet: result,
-                researchModel,
-                composerModel,
-                expiresAt: Date.now() + DURABLE_BOOKLET_TTL,
+          if (runtime.DB && runtime.BOOKLET_FILES && lockAvailable && !ownsLock) {
+            const shared = await waitForDurableBookletOrLock(
+              runtime,
+              cacheKey,
+              identity,
+              lockOwner,
+              publish,
+            );
+            if (shared.booklet) {
+              bookletCache.set(cacheKey, {
+                expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
+                value: shared.booklet,
               });
-            } catch (error) {
-              logStorageFailure("write booklet", error);
+              return shared.booklet;
             }
+            ownsLock = shared.ownsLock;
           }
 
-          return result;
-        } finally {
           if (ownsLock && runtime.DB) {
-            try {
-              await releaseGenerationLock(runtime.DB, cacheKey, lockOwner);
-            } catch (error) {
-              logStorageFailure("release generation lock", error);
+            stopLockRenewal = keepGenerationLockAlive(
+              runtime.DB,
+              cacheKey,
+              lockOwner,
+            );
+          }
+
+          try {
+            const rechecked = await readDurableBooklet(runtime, cacheKey, identity);
+            if (rechecked) return rechecked;
+
+            publish("Researching real landmarks, culture, and local details…");
+            const research = await researchDestination(
+              destination,
+              itinerary,
+              apiKey,
+              researchModel,
+              runtime.DB,
+            );
+            assertResearchMatchesRequest(research);
+
+            publish(`Designing printable games specifically for age ${age}…`);
+            const draft = await composeBooklet(
+              destination,
+              age,
+              days,
+              itinerary,
+              research,
+              apiKey,
+              composerModel,
+            );
+            const result: GeneratedBookletData = {
+              destination,
+              age,
+              days,
+              itinerary,
+              ...draft,
+              sources: research.sources,
+              generatedAt: new Date().toISOString(),
+            };
+            bookletCache.set(cacheKey, {
+              expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
+              value: result,
+            });
+
+            if (runtime.DB && runtime.BOOKLET_FILES) {
+              publish("Saving this edition for instant reuse…");
+              try {
+                await writeStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, {
+                  cacheKey,
+                  booklet: result,
+                  researchModel,
+                  composerModel,
+                  expiresAt: Date.now() + DURABLE_BOOKLET_TTL,
+                });
+              } catch (error) {
+                logStorageFailure("write booklet", error);
+              }
+            }
+
+            return result;
+          } finally {
+            await stopLockRenewal?.();
+            if (ownsLock && runtime.DB) {
+              try {
+                await releaseGenerationLock(runtime.DB, cacheKey, lockOwner);
+              } catch (error) {
+                logStorageFailure("release generation lock", error);
+              }
             }
           }
-        }
-      })();
-      bookletJobs.set(cacheKey, job);
-      void job.finally(() => bookletJobs.delete(cacheKey)).catch(() => undefined);
+        },
+      );
+      bookletJobs.set(cacheKey, task);
+      void task.promise
+        .finally(() => bookletJobs.delete(cacheKey))
+        .catch(() => undefined);
     }
 
-    return streamGeneration(job);
+    getRequestExecutionContext()?.waitUntil(
+      task.promise.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return createGenerationStreamResponse(task, generationErrorMessage);
   } catch (error) {
     if (error instanceof SyntaxError) {
       return Response.json({ error: "That request could not be read." }, { status: 400 });

@@ -11,7 +11,12 @@ import {
   normalizeItinerary,
   validateBookletDraft,
 } from "../app/booklet-ai.ts";
-import { createCrossword, createMaze, createWordSearch } from "../app/puzzles.ts";
+import {
+  createCrossword,
+  createMaze,
+  createWordSearch,
+  mazeSizeForAge,
+} from "../app/puzzles.ts";
 
 function bookletText(age: number, destination: string) {
   return JSON.stringify(buildBooklet(age, destination, 5));
@@ -198,7 +203,13 @@ test("printable puzzle builders use supplied place vocabulary", () => {
   assert.ok(crossword.grid.flat().filter(Boolean).length >= 10);
 
   const maze = createMaze("Gardens by the Bay");
-  assert.equal(maze.length, 6);
-  assert.equal(maze[0].length, 6);
+  assert.equal(maze.length, 10);
+  assert.equal(maze[0].length, 10);
+  assert.equal(maze[0][0].walls[0], false);
+  assert.equal(maze[9][9].walls[2], false);
   assert.ok(maze.flat().some((cell) => cell.walls.some((wall) => !wall)));
+  assert.deepEqual(
+    [4, 5, 7, 10, 13].map(mazeSizeForAge),
+    [6, 8, 12, 16, 20],
+  );
 });

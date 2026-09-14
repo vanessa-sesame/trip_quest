@@ -49,23 +49,40 @@ function uniqueWords(labels: string[], maximum: number) {
   ).slice(0, 4);
 }
 
-export function createWordSearch(labels: string[], seedText = "tripquest", size = 9): WordSearch {
+export function createWordSearch(
+  labels: string[],
+  seedText = "tripquest",
+  size = 10,
+  allowReverse = false,
+): WordSearch {
   const words = uniqueWords(labels, size);
   if (!words.length) words.push("TRIP");
   const random = makeRandom(`${seedText}|${words.join("|")}`);
   const grid = Array.from({ length: size }, () => Array<string>(size).fill(""));
-  const directions = [
+  const directions: Array<readonly [number, number]> = [
     [0, 1],
     [1, 0],
     [1, 1],
     [1, -1],
-  ] as const;
+  ];
+  if (allowReverse) {
+    directions.push([0, -1], [-1, 0], [-1, -1], [-1, 1]);
+  }
+
+  const placedWords: string[] = [];
 
   for (const word of [...words].sort((left, right) => right.length - left.length)) {
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const [rowStep, columnStep] = directions[Math.floor(random() * directions.length)];
-      const row = Math.floor(random() * size);
-      const column = Math.floor(random() * size);
+    const candidates = directions.flatMap(([rowStep, columnStep]) =>
+      Array.from({ length: size * size }, (_, index) => ({
+        rowStep,
+        columnStep,
+        row: Math.floor(index / size),
+        column: index % size,
+        order: random(),
+      })),
+    ).sort((left, right) => left.order - right.order);
+
+    for (const { rowStep, columnStep, row, column } of candidates) {
       const endRow = row + rowStep * (word.length - 1);
       const endColumn = column + columnStep * (word.length - 1);
       if (endRow < 0 || endRow >= size || endColumn < 0 || endColumn >= size) continue;
@@ -79,8 +96,21 @@ export function createWordSearch(labels: string[], seedText = "tripquest", size 
       Array.from(word).forEach((letter, index) => {
         grid[row + rowStep * index][column + columnStep * index] = letter;
       });
+      placedWords.push(word);
       break;
     }
+  }
+
+  if (placedWords.length !== words.length) {
+    grid.forEach((row) => row.fill(""));
+    placedWords.length = 0;
+    words.forEach((word, index) => {
+      const row = index * 2;
+      Array.from(word).forEach((letter, column) => {
+        grid[row][column] = letter;
+      });
+      placedWords.push(word);
+    });
   }
 
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -90,7 +120,7 @@ export function createWordSearch(labels: string[], seedText = "tripquest", size 
     }
   }
 
-  return { grid, words };
+  return { grid, words: placedWords };
 }
 
 type CrosswordPlacement = {
@@ -188,7 +218,15 @@ export function createCrossword(labels: string[]): Crossword {
   return { grid, answers };
 }
 
-export function createMaze(seedText: string, size = 6): MazeCell[][] {
+export function mazeSizeForAge(age: number) {
+  if (age <= 4) return 6;
+  if (age === 5) return 8;
+  if (age <= 8) return 12;
+  if (age <= 11) return 16;
+  return 20;
+}
+
+export function createMaze(seedText: string, size = 10): MazeCell[][] {
   const random = makeRandom(seedText);
   const maze = Array.from({ length: size }, () =>
     Array.from({ length: size }, (): MazeCell => ({ walls: [true, true, true, true] })),
@@ -222,6 +260,9 @@ export function createMaze(seedText: string, size = 6): MazeCell[][] {
     visited[nextRow][nextColumn] = true;
     stack.push([nextRow, nextColumn]);
   }
+
+  maze[0][0].walls[0] = false;
+  maze[size - 1][size - 1].walls[2] = false;
 
   return maze;
 }

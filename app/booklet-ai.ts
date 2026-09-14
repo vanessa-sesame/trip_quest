@@ -218,7 +218,7 @@ export function validateBookletDraft(
     style: requireText(profileRecord.style, "Profile style", 8, 90),
     intro: requireText(profileRecord.intro, "Profile introduction", 30, 420),
     word: requireText(profileRecord.word, "Local word", 2, 120),
-    etiquette: requireText(profileRecord.etiquette, "Etiquette note", 20, 320),
+    etiquette: requireText(profileRecord.etiquette, "Etiquette note", 10, 320),
   };
 
   if (!Array.isArray(draft.dayPlans) || draft.dayPlans.length !== expectedDays) {

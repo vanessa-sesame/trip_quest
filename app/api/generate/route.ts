@@ -27,6 +27,7 @@ type CachedValue<T> = {
 
 const researchCache = new Map<string, CachedValue<ResearchResult>>();
 const bookletCache = new Map<string, CachedValue<GeneratedBookletData>>();
+const bookletJobs = new Map<string, Promise<GeneratedBookletData>>();
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
 const KIMI_API_BASE = "https://api.moonshot.ai/v1";
 const CACHE_TTL = 6 * 60 * 60 * 1000;
@@ -374,11 +375,11 @@ async function composeBooklet(
     ? { reasoning_effort: "low" }
     : { thinking: { type: "disabled" } };
   const ageGameDirection = age <= 5
-    ? "Use coloring, drawing, matching, bingo, simple mazes, and spot-the-difference. Do not use crosswords or word searches."
+    ? "Use coloring, drawing, matching, bingo, simple mazes, and spot-the-difference. Do not use crosswords or word searches. In booklets with at least two days, include one age-sized maze."
     : age <= 8
-      ? "Use drawing, word searches, mini crosswords, mazes, matching, bingo, simple codebreakers, and scavenger hunts."
+      ? "Use drawing, word searches, mini crosswords, mazes, matching, bingo, simple codebreakers, and scavenger hunts. In booklets with at least two days, include at least one word search and one maze on different days."
       : age <= 11
-        ? "Use crosswords, word searches, codebreakers, map puzzles, quizzes, scavenger hunts, and observational drawing."
+        ? "Use crosswords, word searches, challenging mazes, codebreakers, map puzzles, quizzes, scavenger hunts, and observational drawing. In booklets with at least two days, include one word puzzle and one maze on different days."
         : "Use sophisticated crosswords, codebreakers, map logic, quizzes, field-journal stories, and design drawing. Avoid babyish coloring tasks.";
   const itineraryText = itinerary
     .map((plan, index) => `Day ${index + 1}: ${plan || "Open day - select a strong subject from the research"}`)
@@ -447,6 +448,73 @@ ${research.notes}`,
   return validateBookletDraft(JSON.parse(message.content), days, age);
 }
 
+function generationErrorMessage(error: unknown) {
+  if (error instanceof KimiRequestError) {
+    return error.status === 429
+      ? "The travel studio is busy right now. Please try again shortly."
+      : "Kimi could not finish this booklet. Please try again.";
+  }
+
+  const message = error instanceof Error
+    ? error.message
+    : "The booklet could not be generated.";
+  console.error("[TripQuest generation]", message);
+  return "The destination research was incomplete. Please try the place again.";
+}
+
+function streamGeneration(job: Promise<GeneratedBookletData>) {
+  const encoder = new TextEncoder();
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let disconnected = false;
+
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        // Leading JSON whitespace keeps mobile and proxy connections active
+        // while Kimi researches and composes the final response.
+        controller.enqueue(encoder.encode(" "));
+        heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(" "));
+          } catch {
+            disconnected = true;
+            if (heartbeat) clearInterval(heartbeat);
+          }
+        }, 8_000);
+
+        void job
+          .then((result) => {
+            if (!disconnected) {
+              controller.enqueue(encoder.encode(JSON.stringify(result)));
+            }
+          })
+          .catch((error) => {
+            if (!disconnected) {
+              controller.enqueue(
+                encoder.encode(JSON.stringify({ error: generationErrorMessage(error) })),
+              );
+            }
+          })
+          .finally(() => {
+            if (heartbeat) clearInterval(heartbeat);
+            if (!disconnected) controller.close();
+          });
+      },
+      cancel() {
+        disconnected = true;
+        if (heartbeat) clearInterval(heartbeat);
+      },
+    }),
+    {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Type": "application/json; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    },
+  );
+}
+
 export async function POST(request: Request) {
   if (!consumeRateLimit(request)) {
     return Response.json(
@@ -480,49 +548,47 @@ export async function POST(request: Request) {
 
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
     const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
-    const research = await researchDestination(
-      destination,
-      itinerary,
-      apiKey,
-      researchModel,
-    );
-    const draft = await composeBooklet(
-      destination,
-      age,
-      days,
-      itinerary,
-      research,
-      apiKey,
-      composerModel,
-    );
-    const result: GeneratedBookletData = {
-      destination,
-      age,
-      days,
-      itinerary,
-      ...draft,
-      sources: research.sources,
-      generatedAt: new Date().toISOString(),
-    };
-    bookletCache.set(cacheKey, {
-      expiresAt: Date.now() + CACHE_TTL,
-      value: result,
-    });
+    let job = bookletJobs.get(cacheKey);
+    if (!job) {
+      job = (async () => {
+        const research = await researchDestination(
+          destination,
+          itinerary,
+          apiKey,
+          researchModel,
+        );
+        const draft = await composeBooklet(
+          destination,
+          age,
+          days,
+          itinerary,
+          research,
+          apiKey,
+          composerModel,
+        );
+        const result: GeneratedBookletData = {
+          destination,
+          age,
+          days,
+          itinerary,
+          ...draft,
+          sources: research.sources,
+          generatedAt: new Date().toISOString(),
+        };
+        bookletCache.set(cacheKey, {
+          expiresAt: Date.now() + CACHE_TTL,
+          value: result,
+        });
+        return result;
+      })();
+      bookletJobs.set(cacheKey, job);
+      void job.finally(() => bookletJobs.delete(cacheKey)).catch(() => undefined);
+    }
 
-    return Response.json(result, {
-      headers: { "Cache-Control": "private, no-store" },
-    });
+    return streamGeneration(job);
   } catch (error) {
     if (error instanceof SyntaxError) {
       return Response.json({ error: "That request could not be read." }, { status: 400 });
-    }
-
-    if (error instanceof KimiRequestError) {
-      const message =
-        error.status === 429
-          ? "The travel studio is busy right now. Please try again shortly."
-          : "Kimi could not finish this booklet. Please try again.";
-      return Response.json({ error: message }, { status: 502 });
     }
 
     const message = error instanceof Error ? error.message : "The booklet could not be generated.";

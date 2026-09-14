@@ -1,6 +1,12 @@
 import type { CSSProperties } from "react";
 import type { Activity, GameItem, GameType } from "./booklet";
-import { createCrossword, createMaze, createWordSearch, normalizePuzzleWord } from "./puzzles";
+import {
+  createCrossword,
+  createMaze,
+  createWordSearch,
+  mazeSizeForAge,
+  normalizePuzzleWord,
+} from "./puzzles";
 
 const gameNames: Record<GameType, string> = {
   coloring: "Coloring page",
@@ -39,8 +45,14 @@ function DrawingBoard({ items, coloring }: { items: GameItem[]; coloring: boolea
   );
 }
 
-function WordSearchBoard({ activity, items }: { activity: Activity; items: GameItem[] }) {
-  const puzzle = createWordSearch(items.map((item) => item.label), activity.title);
+function WordSearchBoard({ activity, age, items }: { activity: Activity; age: number; items: GameItem[] }) {
+  const size = age <= 8 ? 10 : age <= 11 ? 11 : 12;
+  const puzzle = createWordSearch(
+    items.map((item) => item.label),
+    activity.title,
+    size,
+    age >= 9,
+  );
   return (
     <div className="word-search-layout">
       <div className="word-grid" style={{ "--puzzle-size": puzzle.grid.length } as CSSProperties}>
@@ -75,8 +87,11 @@ function CrosswordBoard({ items }: { items: GameItem[] }) {
   );
 }
 
-function MazeBoard({ activity, items }: { activity: Activity; items: GameItem[] }) {
-  const maze = createMaze(`${activity.title}|${items[0].label}`);
+function MazeBoard({ activity, age, items }: { activity: Activity; age: number; items: GameItem[] }) {
+  const maze = createMaze(
+    `${activity.title}|${items[0].label}|${age}`,
+    mazeSizeForAge(age),
+  );
   return (
     <div className="maze-layout">
       <div className="maze-grid" style={{ "--puzzle-size": maze.length } as CSSProperties}>
@@ -177,7 +192,7 @@ function StoryBoard({ items }: { items: GameItem[] }) {
   );
 }
 
-export function ActivityGame({ activity }: { activity: Activity }) {
+export function ActivityGame({ activity, age }: { activity: Activity; age: number }) {
   const gameType = activity.gameType || "story";
   const items = activity.items?.length === 4 ? activity.items : fallbackItems;
   let board;
@@ -185,9 +200,9 @@ export function ActivityGame({ activity }: { activity: Activity }) {
   switch (gameType) {
     case "coloring": board = <DrawingBoard items={items} coloring />; break;
     case "drawing": board = <DrawingBoard items={items} coloring={false} />; break;
-    case "word_search": board = <WordSearchBoard activity={activity} items={items} />; break;
+    case "word_search": board = <WordSearchBoard activity={activity} age={age} items={items} />; break;
     case "crossword": board = <CrosswordBoard items={items} />; break;
-    case "maze": board = <MazeBoard activity={activity} items={items} />; break;
+    case "maze": board = <MazeBoard activity={activity} age={age} items={items} />; break;
     case "matching": board = <MatchingBoard items={items} />; break;
     case "bingo": board = <BingoBoard items={items} />; break;
     case "spot_the_difference": board = <DifferenceBoard items={items} />; break;

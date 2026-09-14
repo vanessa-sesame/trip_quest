@@ -151,7 +151,9 @@ export default function Home() {
     : [
         "Cover",
         "Explorer guide",
-        ...generatedDays.map((day) => day.theme),
+        ...generatedDays.flatMap((day) =>
+          day.activities.slice(0, 2).map((activity) => activity.title),
+        ),
         "Memory Museum",
         "Certificate",
       ];
@@ -186,9 +188,9 @@ export default function Home() {
         body: JSON.stringify(nextTrip),
       });
       const payload: unknown = await response.json();
+      const errorPayload = payload as { error?: string };
 
-      if (!response.ok) {
-        const errorPayload = payload as { error?: string };
+      if (!response.ok || typeof errorPayload?.error === "string") {
         throw new Error(errorPayload.error || "The booklet could not be generated.");
       }
 
@@ -216,9 +218,10 @@ export default function Home() {
     } catch (error) {
       setGenerationState("error");
       setGenerationError(
-        error instanceof Error
+        error instanceof Error &&
+          !/load failed|failed to fetch|networkerror/i.test(error.message)
           ? error.message
-          : "The booklet could not be generated.",
+          : "The connection closed before the booklet arrived. Please tap Create again; an in-progress copy will be reused when available.",
       );
     }
   }
@@ -625,7 +628,7 @@ export default function Home() {
             </p>
             <ul className="included-list">
               <li><Check size={17} /> {pageTitles.length} high-resolution A4 pages</li>
-              <li><Check size={17} /> {trip.days} itinerary-matched game pages</li>
+              <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
               <li><Check size={17} /> Crosswords, mazes, art, and field games</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
               <li><Check size={17} /> Print again for your own family</li>
@@ -665,6 +668,14 @@ function GeneratedPage({
   profile: GeneratedBookletProfile;
   days: ReturnType<typeof buildBooklet>;
 }) {
+  const activityPages = days.flatMap((day) =>
+    day.activities.slice(0, 2).map((activity, activityIndex) => ({
+      activity,
+      activityIndex,
+      day,
+    })),
+  );
+
   if (page === 0) {
     return (
       <article className="generated-sheet generated-cover">
@@ -697,7 +708,7 @@ function GeneratedPage({
     );
   }
 
-  if (page === days.length + 2) {
+  if (page === activityPages.length + 2) {
     return (
       <article className="generated-sheet generated-memory">
         <span>Memory museum</span>
@@ -713,7 +724,7 @@ function GeneratedPage({
     );
   }
 
-  if (page === days.length + 3) {
+  if (page === activityPages.length + 3) {
     return (
       <article className="generated-sheet generated-certificate">
         <span>Official TripQuest certificate</span>
@@ -725,23 +736,16 @@ function GeneratedPage({
     );
   }
 
-  const day = days[page - 2];
+  const { activity, activityIndex, day } = activityPages[page - 2];
   return (
-    <article className="generated-sheet generated-day">
-      <span>Day {day.day}</span>
-      <h3>{day.theme}</h3>
-      <p className="generated-mission">{day.mission}</p>
-      {day.activities.slice(0, 2).map((activity) => (
-        <section className="activity-block" key={activity.title}>
-          <div className="activity-heading">
-            <small>{activity.kind}</small>
-            <h4>{activity.title}</h4>
-          </div>
-          <p>{activity.body}</p>
-          <ActivityGame activity={activity} />
-          <i>{activity.prompt}</i>
-        </section>
-      ))}
+    <article className="generated-sheet generated-day generated-game-page">
+      <span>Day {day.day} · Game {activityIndex + 1} of 2</span>
+      <p className="game-place">{day.theme}</p>
+      <h3>{activity.title}</h3>
+      <small className="game-kind">{activity.kind}</small>
+      <p className="game-instructions">{activity.body}</p>
+      <ActivityGame activity={activity} age={age} />
+      <i>{activity.prompt}</i>
     </article>
   );
 }

@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  LoaderCircle,
   LockKeyhole,
   MapPin,
   Maximize2,
@@ -22,13 +23,19 @@ import {
   buildBooklet,
   getAgeBand,
   getDestinationProfile,
+  sanitizeAge,
   sanitizeDays,
 } from "./booklet";
+import {
+  type GeneratedBookletData,
+  type GeneratedBookletProfile,
+  isGeneratedBookletData,
+} from "./booklet-ai";
 
-type SupportedAge = 5 | 7;
+type SampleAge = 5 | 7;
 
 type Trip = {
-  age: SupportedAge;
+  age: number;
   destination: string;
   days: number;
 };
@@ -44,7 +51,7 @@ const destinationSuggestions = [
   "Bangkok",
 ];
 
-const samplePageTitles: Record<SupportedAge, string[]> = {
+const samplePageTitles: Record<SampleAge, string[]> = {
   5: [
     "Cover",
     "Grown-up guide",
@@ -69,12 +76,31 @@ const samplePageTitles: Record<SupportedAge, string[]> = {
   ],
 };
 
+const agePreviewCopy: Record<number, string> = {
+  3: "Pointing, naming, movement, and choices with a grown-up reading aloud.",
+  4: "Counting, matching, pretend play, tracing, and generous drawing space.",
+  5: "Sound play, simple sequences, movement, and short draw-or-tell prompts.",
+  6: "Early-reader clues, picture maps, labels, and quick write-or-draw answers.",
+  7: "Short independent reading, playful codes, map logic, and concrete comparisons.",
+  8: "Multi-step hunts, simple scoring, captions, symbols, and explain-one-reason prompts.",
+  9: "Field notes, categorizing, estimation, and evidence-based comparisons.",
+  10: "Mini investigations, annotated sketches, route reasoning, and two-part explanations.",
+  11: "Cultural connections, scale puzzles, respectful questions, and concise reporting.",
+  12: "Self-directed fieldwork, visual analysis, practical planning, and editorial choices.",
+  13: "Design critique, ethical travel choices, mini journalism, and supported opinions.",
+  14: "Cultural context, trade-off analysis, independent research, and lively travel writing.",
+};
+
+function isSampleAge(value: number): value is SampleAge {
+  return value === 5 || value === 7;
+}
+
 function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
 }
 
 export default function Home() {
-  const [age, setAge] = useState<SupportedAge>(5);
+  const [age, setAge] = useState(5);
   const [destination, setDestination] = useState("Singapore");
   const [days, setDays] = useState(5);
   const [trip, setTrip] = useState<Trip>({
@@ -86,23 +112,37 @@ export default function Home() {
   const [fullscreen, setFullscreen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutNote, setCheckoutNote] = useState("");
+  const [generatedBooklet, setGeneratedBooklet] =
+    useState<GeneratedBookletData | null>(null);
+  const [generationState, setGenerationState] = useState<
+    "idle" | "generating" | "error"
+  >("idle");
+  const [generationError, setGenerationError] = useState("");
   const [announcement, setAnnouncement] = useState(
     "Singapore preview ready for age 5.",
   );
 
   const destinationName = trip.destination.trim() || "Your destination";
+  const sampleTitles = isSampleAge(trip.age)
+    ? samplePageTitles[trip.age]
+    : null;
   const isSingaporeSample =
-    destinationName.toLowerCase() === "singapore" && trip.days === 5;
+    generatedBooklet === null &&
+    destinationName.toLowerCase() === "singapore" &&
+    trip.days === 5 &&
+    sampleTitles !== null;
   const destinationProfile = useMemo(
-    () => getDestinationProfile(destinationName),
-    [destinationName],
+    () => generatedBooklet?.profile ?? getDestinationProfile(destinationName),
+    [destinationName, generatedBooklet],
   );
   const generatedDays = useMemo(
-    () => buildBooklet(trip.age, destinationName, trip.days),
-    [trip.age, destinationName, trip.days],
+    () =>
+      generatedBooklet?.dayPlans ??
+      buildBooklet(trip.age, destinationName, trip.days),
+    [generatedBooklet, trip.age, destinationName, trip.days],
   );
-  const pageTitles = isSingaporeSample
-    ? samplePageTitles[trip.age]
+  const pageTitles = isSingaporeSample && sampleTitles
+    ? sampleTitles
     : [
         "Cover",
         "Explorer guide",
@@ -110,24 +150,67 @@ export default function Home() {
         "Memory Museum",
         "Certificate",
       ];
-  const outlineItems = isSingaporeSample
-    ? samplePageTitles[trip.age].slice(2, 7)
+  const outlineItems = isSingaporeSample && sampleTitles
+    ? sampleTitles.slice(2, 7)
     : generatedDays.map((day) => day.theme);
   const currentPage = clampPage(page, pageTitles.length);
 
-  function handleGenerate(event: FormEvent<HTMLFormElement>) {
+  async function handleGenerate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextTrip = {
-      age,
-      destination: destination.trim() || "Your destination",
+      age: sanitizeAge(age),
+      destination: destination.trim(),
       days: sanitizeDays(days),
     };
-    setTrip(nextTrip);
+
+    if (!nextTrip.destination) {
+      setGenerationState("error");
+      setGenerationError("Enter a city, region, or country first.");
+      return;
+    }
+
+    setGenerationState("generating");
+    setGenerationError("");
     setDays(nextTrip.days);
-    setPage(0);
-    setAnnouncement(
-      `${nextTrip.destination} preview ready for age ${nextTrip.age}.`,
-    );
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextTrip),
+      });
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const errorPayload = payload as { error?: string };
+        throw new Error(errorPayload.error || "The booklet could not be generated.");
+      }
+
+      if (!isGeneratedBookletData(payload)) {
+        throw new Error("The booklet arrived in an unexpected format.");
+      }
+
+      setGeneratedBooklet(payload);
+      setTrip({
+        age: payload.age,
+        destination: payload.destination,
+        days: payload.days,
+      });
+      setAge(payload.age);
+      setDays(payload.days);
+      setPage(0);
+      setGenerationState("idle");
+      setAnnouncement(
+        `${payload.destination} AI preview ready for age ${payload.age}.`,
+      );
+    } catch (error) {
+      setGenerationState("error");
+      setGenerationError(
+        error instanceof Error
+          ? error.message
+          : "The booklet could not be generated.",
+      );
+    }
   }
 
   function changePage(direction: number) {
@@ -161,7 +244,11 @@ export default function Home() {
             <span className="step-count">1 / 3</span>
           </div>
 
-          <form className="trip-form" onSubmit={handleGenerate}>
+          <form
+            className="trip-form"
+            onSubmit={handleGenerate}
+            aria-busy={generationState === "generating"}
+          >
             <label className="field-label" htmlFor="destination">
               Destination
             </label>
@@ -171,6 +258,7 @@ export default function Home() {
                 id="destination"
                 list="destination-options"
                 value={destination}
+                disabled={generationState === "generating"}
                 onChange={(event) => setDestination(event.target.value)}
                 placeholder="City or destination"
               />
@@ -183,19 +271,40 @@ export default function Home() {
 
             <fieldset className="field-group">
               <legend className="field-label">Child&apos;s age</legend>
-              <div className="segmented-control">
-                {([5, 7] as SupportedAge[]).map((option) => (
-                  <button
-                    className={age === option ? "segment active" : "segment"}
-                    key={option}
-                    onClick={() => setAge(option)}
-                    type="button"
-                    aria-pressed={age === option}
-                  >
-                    <UserRound size={17} />
-                    {option} years
-                  </button>
-                ))}
+              <div className="age-control">
+                <UserRound size={19} aria-hidden="true" />
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Reduce age by one year"
+                  disabled={age <= 3 || generationState === "generating"}
+                  onClick={() => setAge((value) => Math.max(3, value - 1))}
+                >
+                  <Minus size={17} />
+                </button>
+                <input
+                  aria-label="Child's age in years"
+                  type="number"
+                  min="3"
+                  max="14"
+                  inputMode="numeric"
+                  value={age}
+                  disabled={generationState === "generating"}
+                  onChange={(event) => {
+                    const value = event.target.valueAsNumber;
+                    if (Number.isFinite(value)) setAge(sanitizeAge(value));
+                  }}
+                />
+                <span>years</span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Increase age by one year"
+                  disabled={age >= 14 || generationState === "generating"}
+                  onClick={() => setAge((value) => Math.min(14, value + 1))}
+                >
+                  <Plus size={17} />
+                </button>
               </div>
             </fieldset>
 
@@ -209,7 +318,7 @@ export default function Home() {
                   className="icon-button"
                   type="button"
                   aria-label="Remove one day"
-                  disabled={days <= 1}
+                  disabled={days <= 1 || generationState === "generating"}
                   onClick={() => setDays((value) => Math.max(1, value - 1))}
                 >
                   <Minus size={18} />
@@ -219,7 +328,7 @@ export default function Home() {
                   className="icon-button"
                   type="button"
                   aria-label="Add one day"
-                  disabled={days >= 14}
+                  disabled={days >= 14 || generationState === "generating"}
                   onClick={() => setDays((value) => Math.min(14, value + 1))}
                 >
                   <Plus size={18} />
@@ -230,22 +339,41 @@ export default function Home() {
             <div className="edition-note">
               <Sparkles size={18} aria-hidden="true" />
               <div>
-                <strong>{age === 5 ? "Play & Draw" : "Clues & Stories"}</strong>
-                <span>
-                  {age === 5
-                    ? "Grown-up reading, movement, matching, and big drawing spaces."
-                    : "Short reading, real evidence, playful writing, and design challenges."}
-                </span>
+                <strong>
+                  Age {age} · {getAgeBand(age).label}
+                </strong>
+                <span>{agePreviewCopy[age]}</span>
               </div>
             </div>
 
-            <button className="primary-button" type="submit">
-              <Sparkles size={19} />
-              Create free preview
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={generationState === "generating"}
+            >
+              {generationState === "generating" ? (
+                <LoaderCircle className="spin" size={19} />
+              ) : (
+                <Sparkles size={19} />
+              )}
+              {generationState === "generating"
+                ? "Researching destination…"
+                : "Create AI preview"}
             </button>
+            {generationState === "generating" ? (
+              <p className="generation-note" role="status">
+                Checking real places and shaping activities for age {age}. A new
+                place can take up to two minutes.
+              </p>
+            ) : null}
+            {generationError ? (
+              <p className="form-error" role="alert">
+                {generationError}
+              </p>
+            ) : null}
             <p className="privacy-note">
               <ShieldCheck size={15} aria-hidden="true" />
-              No child account required
+              No child name or account required
             </p>
             <p className="sr-only" aria-live="polite">
               {announcement}
@@ -384,7 +512,9 @@ export default function Home() {
       >
         <div className="outline-heading">
           <p className="eyebrow">Inside this edition</p>
-          <strong>{trip.age === 5 ? "Made to move, notice, and draw" : "Made to investigate, explain, and design"}</strong>
+          <strong>
+            Age {trip.age}: {getAgeBand(trip.age).pace}
+          </strong>
         </div>
         <ol>
           {outlineItems.map((item, index) => (
@@ -395,6 +525,22 @@ export default function Home() {
           ))}
         </ol>
       </section>
+
+      {generatedBooklet?.sources.length ? (
+        <section className="research-strip" aria-label="Destination research">
+          <div>
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>Place research</span>
+            <strong>
+              {generatedBooklet.sources
+                .slice(0, 3)
+                .map((source) => source.title)
+                .join(" · ")}
+            </strong>
+          </div>
+          <span>{generatedBooklet.sources.length} current sources checked</span>
+        </section>
+      ) : null}
 
       {checkoutOpen ? (
         <div className="modal-backdrop" role="presentation">
@@ -452,10 +598,10 @@ function GeneratedPage({
   profile,
   days,
 }: {
-  age: SupportedAge;
+  age: number;
   destination: string;
   page: number;
-  profile: ReturnType<typeof getDestinationProfile>;
+  profile: GeneratedBookletProfile;
   days: ReturnType<typeof buildBooklet>;
 }) {
   if (page === 0) {
@@ -479,7 +625,7 @@ function GeneratedPage({
       <article className="generated-sheet generated-guide">
         <span>Grown-up guide</span>
         <h3>{getAgeBand(age).label}</h3>
-        <p>{getAgeBand(age).challenge}</p>
+        <p>{profile.intro}</p>
         <div>
           <strong>{getAgeBand(age).minutes} minutes</strong>
           <strong>{profile.word}</strong>

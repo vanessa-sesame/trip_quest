@@ -4,7 +4,9 @@ import {
   buildBooklet,
   getAgeBand,
   getDestinationProfile,
+  sanitizeAge,
 } from "../app/booklet.ts";
+import { validateBookletDraft } from "../app/booklet-ai.ts";
 
 function bookletText(age: number, destination: string) {
   return JSON.stringify(buildBooklet(age, destination, 5));
@@ -79,4 +81,55 @@ test("trip length controls the number of tailored day pages", () => {
   assert.equal(buildBooklet(7, "Paris", 1).length, 1);
   assert.equal(buildBooklet(7, "Paris", 6).length, 6);
   assert.equal(buildBooklet(7, "Paris", 99).length, 14);
+});
+
+test("every age from 3 through 14 can be selected", () => {
+  for (let age = 3; age <= 14; age += 1) {
+    assert.equal(sanitizeAge(age), age);
+  }
+
+  assert.equal(sanitizeAge(1), 3);
+  assert.equal(sanitizeAge(18), 14);
+});
+
+test("AI booklet validation requires the requested day count and unique activities", () => {
+  const draft = {
+    profile: {
+      style: "Harbour stories and tiled streets",
+      intro: "A bright family quest through a real city and its living culture.",
+      word: "obrigado — thank you",
+      etiquette: "Use a quiet voice in churches and ask before photographing people.",
+    },
+    dayPlans: [
+      {
+        day: 8,
+        theme: "Belém Tower Lookout",
+        focusLabel: "River history",
+        mission: "Spot the carved details that connect this tower to Portugal's sea journeys.",
+        activities: [
+          {
+            title: "Stone Sailor Search",
+            kind: "Observation hunt",
+            body: "Find three shapes carved into the pale stone and choose the one that looks most seaworthy.",
+            prompt: "My seaworthy shape is…",
+          },
+          {
+            title: "Tagus Tide Map",
+            kind: "Map play",
+            body: "Trace the river edge with one line, then mark the tower and the direction a boat travels.",
+            prompt: "Tower / boat / river bend",
+          },
+        ],
+      },
+    ],
+  };
+
+  const valid = validateBookletDraft(draft, 1);
+  assert.equal(valid.dayPlans[0].day, 1);
+  assert.equal(valid.dayPlans[0].activities.length, 2);
+  assert.throws(() => validateBookletDraft(draft, 2), /exactly 2 day pages/i);
+
+  const repeated = structuredClone(draft);
+  repeated.dayPlans[0].activities[1].title = "Stone Sailor Search";
+  assert.throws(() => validateBookletDraft(repeated, 1), /repeated/i);
 });

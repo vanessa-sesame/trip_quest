@@ -6,7 +6,12 @@ import {
   getDestinationProfile,
   sanitizeAge,
 } from "../app/booklet.ts";
-import { validateBookletDraft } from "../app/booklet-ai.ts";
+import {
+  allowedGameTypesForAge,
+  normalizeItinerary,
+  validateBookletDraft,
+} from "../app/booklet-ai.ts";
+import { createCrossword, createMaze, createWordSearch } from "../app/puzzles.ts";
 
 function bookletText(age: number, destination: string) {
   return JSON.stringify(buildBooklet(age, destination, 5));
@@ -110,14 +115,28 @@ test("AI booklet validation requires the requested day count and unique activiti
           {
             title: "Stone Sailor Search",
             kind: "Observation hunt",
-            body: "Find three shapes carved into the pale stone and choose the one that looks most seaworthy.",
+            body: "Eight words hide in the grid, including several answers that are not printed in the game items.",
             prompt: "My seaworthy shape is…",
+            gameType: "word_search",
+            items: [
+              { label: "Tower", clue: "A stone lookout beside the Tagus." },
+              { label: "Caravel", clue: "A ship linked to Portuguese sea journeys." },
+              { label: "Rope", clue: "A carved maritime detail." },
+              { label: "Tagus", clue: "The river beside Belém." },
+            ],
           },
           {
             title: "Tagus Tide Map",
             kind: "Map play",
             body: "Trace the river edge with one line, then mark the tower and the direction a boat travels.",
             prompt: "Tower / boat / river bend",
+            gameType: "map_puzzle",
+            items: [
+              { label: "Belém Tower", clue: "Start beside the riverside tower." },
+              { label: "Tagus", clue: "Follow the broad river." },
+              { label: "Monument", clue: "Mark the monument to sea journeys." },
+              { label: "Garden", clue: "Finish in a nearby green space." },
+            ],
           },
         ],
       },
@@ -127,9 +146,59 @@ test("AI booklet validation requires the requested day count and unique activiti
   const valid = validateBookletDraft(draft, 1);
   assert.equal(valid.dayPlans[0].day, 1);
   assert.equal(valid.dayPlans[0].activities.length, 2);
+  assert.match(valid.dayPlans[0].activities[0].body, /these four local words/i);
+  assert.doesNotMatch(valid.dayPlans[0].activities[0].body, /eight words/i);
+  assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7));
+  assert.throws(() => validateBookletDraft(draft, 1, 4), /not an age-4 game/i);
   assert.throws(() => validateBookletDraft(draft, 2), /exactly 2 day pages/i);
 
   const repeated = structuredClone(draft);
   repeated.dayPlans[0].activities[1].title = "Stone Sailor Search";
   assert.throws(() => validateBookletDraft(repeated, 1), /repeated/i);
+
+  const missingGame = structuredClone(draft);
+  delete (missingGame.dayPlans[0].activities[0] as Partial<typeof draft.dayPlans[0]["activities"][0]>).gameType;
+  assert.throws(() => validateBookletDraft(missingGame, 1), /game type/i);
+});
+
+test("daily plans are normalized, padded, and length checked", () => {
+  assert.deepEqual(
+    normalizeItinerary(["  Louvre   morning ", "Seine cruise"], 3),
+    ["Louvre morning", "Seine cruise", ""],
+  );
+  assert.deepEqual(normalizeItinerary(undefined, 2), ["", ""]);
+  assert.throws(() => normalizeItinerary("Louvre", 1), /list/i);
+  assert.throws(() => normalizeItinerary(["x".repeat(141)], 1), /140/i);
+});
+
+test("game mechanics are constrained by the child's age", () => {
+  assert.ok(allowedGameTypesForAge(4).includes("coloring"));
+  assert.ok(allowedGameTypesForAge(4).includes("maze"));
+  assert.ok(!allowedGameTypesForAge(4).includes("crossword"));
+  assert.ok(!allowedGameTypesForAge(4).includes("word_search"));
+  assert.ok(allowedGameTypesForAge(7).includes("word_search"));
+  assert.ok(!allowedGameTypesForAge(13).includes("coloring"));
+});
+
+test("printable puzzle builders use supplied place vocabulary", () => {
+  const search = createWordSearch(["Merlion", "Orchid", "Hawker", "MRT"], "Singapore");
+  const containsWord = (word: string) => {
+    const directions = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    return search.grid.some((row, rowIndex) => row.some((_, columnIndex) =>
+      directions.some(([rowStep, columnStep]) => Array.from(word).every((letter, letterIndex) =>
+        search.grid[rowIndex + rowStep * letterIndex]?.[columnIndex + columnStep * letterIndex] === letter,
+      )),
+    ));
+  };
+  assert.deepEqual(search.words, ["MERLION", "ORCHID", "HAWKER", "MRT"]);
+  assert.ok(search.words.every(containsWord));
+
+  const crossword = createCrossword(["Merlion", "Orchid", "Hawker", "MRT"]);
+  assert.deepEqual(crossword.answers, ["MERLION", "ORCHID", "HAWKER", "MRT"]);
+  assert.ok(crossword.grid.flat().filter(Boolean).length >= 10);
+
+  const maze = createMaze("Gardens by the Bay");
+  assert.equal(maze.length, 6);
+  assert.equal(maze[0].length, 6);
+  assert.ok(maze.flat().some((cell) => cell.walls.some((wall) => !wall)));
 });

@@ -30,7 +30,8 @@ test("server-renders the TripQuest generator", async () => {
   const html = await response.text();
   assert.match(html, /<title>TripQuest \| Travel Booklets for Kids<\/title>/i);
   assert.match(html, /Build a trip they can hold onto/i);
-  assert.match(html, /Create AI preview/i);
+  assert.match(html, /Create custom booklet/i);
+  assert.match(html, /Customize daily plans/i);
   assert.match(html, /Child&#x27;s age|Child's age/i);
   assert.match(html, /Singapore/i);
   assert.match(html, /Merlion Face Finder/i);

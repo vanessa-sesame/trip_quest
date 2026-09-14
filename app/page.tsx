@@ -4,7 +4,9 @@ import { FormEvent, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   BookOpenCheck,
+  CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -31,6 +33,7 @@ import {
   type GeneratedBookletProfile,
   isGeneratedBookletData,
 } from "./booklet-ai";
+import { ActivityGame } from "./activity-game";
 
 type SampleAge = 5 | 7;
 
@@ -103,6 +106,8 @@ export default function Home() {
   const [age, setAge] = useState(5);
   const [destination, setDestination] = useState("Singapore");
   const [days, setDays] = useState(5);
+  const [itinerary, setItinerary] = useState<string[]>(() => Array(14).fill(""));
+  const [itineraryOpen, setItineraryOpen] = useState(false);
   const [trip, setTrip] = useState<Trip>({
     age: 5,
     destination: "Singapore",
@@ -161,6 +166,7 @@ export default function Home() {
       age: sanitizeAge(age),
       destination: destination.trim(),
       days: sanitizeDays(days),
+      itinerary: itinerary.slice(0, sanitizeDays(days)),
     };
 
     if (!nextTrip.destination) {
@@ -198,6 +204,10 @@ export default function Home() {
       });
       setAge(payload.age);
       setDays(payload.days);
+      setItinerary([
+        ...payload.itinerary,
+        ...Array(Math.max(0, 14 - payload.itinerary.length)).fill(""),
+      ]);
       setPage(0);
       setGenerationState("idle");
       setAnnouncement(
@@ -336,6 +346,56 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="itinerary-editor">
+              <button
+                className="itinerary-toggle"
+                type="button"
+                aria-expanded={itineraryOpen}
+                aria-controls="daily-plans"
+                disabled={generationState === "generating"}
+                onClick={() => setItineraryOpen((value) => !value)}
+              >
+                <CalendarDays size={19} aria-hidden="true" />
+                <span>
+                  <strong>Customize daily plans</strong>
+                  <small>
+                    {itinerary.slice(0, days).filter(Boolean).length
+                      ? `${itinerary.slice(0, days).filter(Boolean).length} of ${days} days planned`
+                      : "Optional"}
+                  </small>
+                </span>
+                <ChevronDown
+                  className={itineraryOpen ? "open" : ""}
+                  size={18}
+                  aria-hidden="true"
+                />
+              </button>
+              {itineraryOpen ? (
+                <div id="daily-plans" className="daily-plans">
+                  {itinerary.slice(0, days).map((plan, index) => (
+                    <label key={index}>
+                      <span>Day {index + 1}</span>
+                      <input
+                        value={plan}
+                        maxLength={140}
+                        disabled={generationState === "generating"}
+                        placeholder={
+                          index === 0
+                            ? "e.g. old town and river cruise"
+                            : "Places or plans for this day"
+                        }
+                        onChange={(event) => {
+                          const nextItinerary = [...itinerary];
+                          nextItinerary[index] = event.target.value;
+                          setItinerary(nextItinerary);
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             <div className="edition-note">
               <Sparkles size={18} aria-hidden="true" />
               <div>
@@ -358,7 +418,7 @@ export default function Home() {
               )}
               {generationState === "generating"
                 ? "Researching destination…"
-                : "Create AI preview"}
+                : "Create custom booklet"}
             </button>
             {generationState === "generating" ? (
               <p className="generation-note" role="status">
@@ -565,7 +625,8 @@ export default function Home() {
             </p>
             <ul className="included-list">
               <li><Check size={17} /> {pageTitles.length} high-resolution A4 pages</li>
-              <li><Check size={17} /> {trip.days} different daily missions</li>
+              <li><Check size={17} /> {trip.days} itinerary-matched game pages</li>
+              <li><Check size={17} /> Crosswords, mazes, art, and field games</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
               <li><Check size={17} /> Print again for your own family</li>
             </ul>
@@ -671,12 +732,15 @@ function GeneratedPage({
       <h3>{day.theme}</h3>
       <p className="generated-mission">{day.mission}</p>
       {day.activities.slice(0, 2).map((activity) => (
-        <div key={activity.title}>
-          <small>{activity.kind}</small>
-          <h4>{activity.title}</h4>
+        <section className="activity-block" key={activity.title}>
+          <div className="activity-heading">
+            <small>{activity.kind}</small>
+            <h4>{activity.title}</h4>
+          </div>
           <p>{activity.body}</p>
+          <ActivityGame activity={activity} />
           <i>{activity.prompt}</i>
-        </div>
+        </section>
       ))}
     </article>
   );

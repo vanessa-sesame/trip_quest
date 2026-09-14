@@ -1,8 +1,33 @@
+export const gameTypes = [
+  "coloring",
+  "drawing",
+  "crossword",
+  "word_search",
+  "maze",
+  "matching",
+  "bingo",
+  "spot_the_difference",
+  "codebreaker",
+  "map_puzzle",
+  "scavenger_hunt",
+  "quiz",
+  "story",
+] as const;
+
+export type GameType = (typeof gameTypes)[number];
+
+export type GameItem = {
+  label: string;
+  clue: string;
+};
+
 export type Activity = {
   title: string;
   kind: string;
   body: string;
   prompt: string;
+  gameType?: GameType;
+  items?: GameItem[];
 };
 
 export type DayPlan = {

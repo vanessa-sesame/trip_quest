@@ -574,8 +574,8 @@ async function composeBooklet(
     : age <= 8
       ? "Use drawing, word searches, mini crosswords, mazes, matching, bingo, simple codebreakers, and scavenger hunts. In booklets with at least two days, include at least one word search and one maze on different days."
       : age <= 11
-        ? "Use crosswords, word searches, challenging mazes, codebreakers, map puzzles, quizzes, scavenger hunts, and observational drawing. In booklets with at least two days, include one word puzzle and one maze on different days."
-        : "Use sophisticated crosswords, codebreakers, map logic, quizzes, field-journal stories, and design drawing. Avoid babyish coloring tasks.";
+        ? "Use crosswords, word searches, challenging mazes, codebreakers, one route-planning puzzle, quizzes, scavenger hunts, and observational drawing. In booklets with at least two days, include one word puzzle and one maze on different days."
+        : "Use sophisticated crosswords, codebreakers, one route-planning challenge, quizzes, field-journal stories, and design drawing. Avoid babyish coloring tasks.";
   const itineraryText = itinerary
     .map((plan, index) => `Day ${index + 1}: ${plan || "Open day - select a strong subject from the research"}`)
     .join("\n");
@@ -602,9 +602,11 @@ CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
 - Follow the DAILY ITINERARY exactly on every day with a family plan. Build that day's theme, mission, facts, vocabulary, and games around those named stops. For an open day, choose a strong subject from the research.
 - Put a recognizable local detail in every day theme and mission. Never use generic themes such as “Hello Destination”, “Landmark Lab”, “Culture Day”, or “Memory Maker”.
-- Give every activity a unique title and a real printable game. Rotate game types across the booklet and never repeat one on consecutive days.
+- Give every activity a unique title and a real printable game. Rotate game types across the booklet, never repeat one on consecutive days, and use map_puzzle no more than once in the entire booklet.
 - ${ageGameDirection}
-- For crossword and word-search items, each item label must be one locally relevant answer word of 3 to 9 letters. For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
+- For crossword and word-search items, each item label must be one unique, locally relevant answer word of 3 to 9 letters. A crossword's four answers must form one connected letter-sharing set: every answer must share at least one letter with another answer, and all four must connect as one group. If four suitable answers cannot connect, choose word_search instead. Do not write “Across” or “Down” inside a clue because the layout engine assigns those directions.
+- A map_puzzle is a route-planning street-grid challenge with START, FINISH, closed roads, and four named local stops. The child must choose and trace the route; never pre-draw the answer or describe it as connecting four dots. Never call an activity Sudoku because Sudoku is not a supported game mechanic.
+- For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
 - Exactly four items appear in each printed game. Never mention a fifth item, extra target, or different answer in the activity body or prompt.
 - The first activity on each day should be a sit-down puzzle or creative page. The second should turn noticing the real place into a field game, scavenger hunt, map challenge, or family mission.
 - Do not repeat a fill-in template, activity title, sentence frame, or “create your own” task.

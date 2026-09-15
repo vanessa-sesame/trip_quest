@@ -1156,7 +1156,7 @@ p {
 
 .crossword-grid {
   width: 54px;
-  height: 54px;
+  height: auto;
 }
 
 .crossword-grid > span {
@@ -1186,15 +1186,30 @@ p {
   max-width: 54%;
   gap: 1px;
   margin: 0;
-  padding-left: 12px;
+  padding: 0;
+  list-style: none;
 }
 
 .crossword-clues li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 13px minmax(0, 1fr);
+  gap: 2px;
   overflow: hidden;
   font-size: 0.25rem;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.crossword-clues li b {
+  color: var(--coral);
+  font-size: 0.22rem;
+}
+
+.crossword-clues li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .maze-layout {
@@ -1355,50 +1370,107 @@ p {
 }
 
 .map-board {
-  position: relative;
   display: grid;
   min-height: 55px;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: minmax(70px, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 7px;
+  padding-top: 5px;
+}
+
+.route-map {
+  width: 100%;
+  height: auto;
+  max-height: 67px;
+  overflow: visible;
+}
+
+.route-street-base {
+  stroke: var(--line);
+  stroke-width: 1.8;
+}
+
+.route-street-open {
+  stroke: var(--teal-dark);
+  stroke-linecap: round;
+  stroke-width: 2.4;
+}
+
+.route-closure line {
+  stroke: var(--coral);
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.route-junction {
+  fill: var(--paper);
+  stroke: var(--muted);
+  stroke-width: 0.8;
+}
+
+.route-terminal rect {
+  fill: var(--paper);
+  stroke-width: 1.4;
+}
+
+.route-terminal.start rect { stroke: var(--leaf); }
+.route-terminal.finish rect { stroke: var(--coral); }
+
+.route-terminal text,
+.route-stop text {
+  fill: var(--ink);
+  font-size: 5px;
+  font-weight: 900;
+  text-anchor: middle;
+}
+
+.route-stop circle {
+  fill: var(--sun);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.route-map-legend {
+  display: grid;
+  gap: 2px;
+}
+
+.route-map-legend > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 14px minmax(0, 1fr);
   align-items: center;
   gap: 3px;
-  padding-top: 8px;
 }
 
-.map-board::before {
-  position: absolute;
-  top: 52%;
-  right: 9%;
-  left: 9%;
-  height: 1px;
-  background: repeating-linear-gradient(90deg, var(--teal) 0 4px, transparent 4px 7px);
-  content: "";
-}
-
-.map-board > div {
-  position: relative;
-  z-index: 1;
+.route-map-legend span {
   display: grid;
-  justify-items: center;
-  gap: 2px;
-  text-align: center;
-}
-
-.map-board span {
-  display: grid;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   place-items: center;
   border: 1px solid var(--ink);
   border-radius: 50%;
   background: var(--sun);
-  font-size: 0.34rem;
+  font-size: 0.3rem;
   font-weight: 900;
 }
 
-.map-board strong {
-  max-width: 40px;
+.route-map-legend p {
+  min-width: 0;
+  margin: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-map-legend strong {
+  display: block;
   font-size: 0.25rem;
+  line-height: 1.1;
+}
+
+.route-map-legend small {
+  display: none;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1605,15 +1677,21 @@ p {
   width: 100%;
   grid-template-columns: 1fr 1fr;
   gap: 4px 16px;
-  padding-left: 15px;
+  padding: 0;
 }
 
 .generated-game-page .crossword-clues li {
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 5px;
   overflow: visible;
   font-size: 0.4rem;
   line-height: 1.25;
   text-overflow: clip;
   white-space: normal;
+}
+
+.generated-game-page .crossword-clues li b {
+  font-size: 0.36rem;
 }
 
 .generated-game-page .maze-grid {
@@ -1654,6 +1732,43 @@ p {
   padding-top: 8%;
 }
 
+.generated-game-page .map-board {
+  display: flex;
+  align-items: center;
+  gap: 3%;
+  padding-top: 3%;
+}
+
+.generated-game-page .route-map {
+  width: min(84cqw, 350px);
+  max-height: 240px;
+}
+
+.generated-game-page .route-map-legend {
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.generated-game-page .route-map-legend > div {
+  grid-template-columns: 25px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.generated-game-page .route-map-legend p {
+  white-space: normal;
+}
+
+.generated-game-page .route-map-legend small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.38rem;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .generated-game-page .draw-board > strong,
 .generated-game-page .draw-board > small,
 .generated-game-page .matching-board span,
@@ -1690,7 +1805,7 @@ p {
   font-size: 0.85rem;
 }
 
-.generated-game-page .map-board span {
+.generated-game-page .route-map-legend span {
   width: 25px;
   height: 25px;
   font-size: 0.58rem;

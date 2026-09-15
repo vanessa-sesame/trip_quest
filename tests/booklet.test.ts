@@ -14,6 +14,7 @@ import {
 import {
   createCrossword,
   createMaze,
+  createRoutePuzzle,
   createWordSearch,
   mazeSizeForAge,
 } from "../app/puzzles.ts";
@@ -164,6 +165,36 @@ test("AI booklet validation requires the requested day count and unique activiti
   const missingGame = structuredClone(draft);
   delete (missingGame.dayPlans[0].activities[0] as Partial<typeof draft.dayPlans[0]["activities"][0]>).gameType;
   assert.throws(() => validateBookletDraft(missingGame, 1), /game type/i);
+
+  const disconnectedCrossword = structuredClone(draft);
+  disconnectedCrossword.dayPlans[0].activities[0] = {
+    title: "Penguin Sound Crossword",
+    kind: "Mini crossword",
+    body: "Solve four local clues in the crossword.",
+    prompt: "My answer is...",
+    gameType: "crossword",
+    items: [
+      { label: "JACKASS", clue: "An old nickname for the local penguin." },
+      { label: "LOW", clue: "The tide level that exposes more shore." },
+      { label: "SANPARKS", clue: "The national parks organization." },
+      { label: "GRANITE", clue: "The rock forming the beach boulders." },
+    ],
+  };
+  const repairedCrossword = validateBookletDraft(disconnectedCrossword, 1, 10);
+  assert.equal(repairedCrossword.dayPlans[0].activities[0].gameType, "word_search");
+  assert.match(repairedCrossword.dayPlans[0].activities[0].title, /word search/i);
+  assert.match(repairedCrossword.dayPlans[0].activities[0].body, /find and circle/i);
+
+  const repeatedMap = structuredClone(draft);
+  repeatedMap.dayPlans[0].activities[1].title = "Souk Sector Sudoku";
+  repeatedMap.dayPlans.push(structuredClone(repeatedMap.dayPlans[0]));
+  repeatedMap.dayPlans[1].activities[0].title = "Second Stone Search";
+  repeatedMap.dayPlans[1].activities[1].title = "Second Route Mapper";
+  const repairedMaps = validateBookletDraft(repeatedMap, 2, 10);
+  assert.equal(repairedMaps.dayPlans[0].activities[1].gameType, "map_puzzle");
+  assert.match(repairedMaps.dayPlans[0].activities[1].title, /route challenge/i);
+  assert.equal(repairedMaps.dayPlans[1].activities[1].gameType, "scavenger_hunt");
+  assert.match(repairedMaps.dayPlans[1].activities[1].body, /tick each box/i);
 });
 
 test("daily plans are normalized, padded, and length checked", () => {
@@ -200,7 +231,13 @@ test("printable puzzle builders use supplied place vocabulary", () => {
 
   const crossword = createCrossword(["Merlion", "Orchid", "Hawker", "MRT"]);
   assert.deepEqual(crossword.answers, ["MERLION", "ORCHID", "HAWKER", "MRT"]);
+  assert.equal(crossword.complete, true);
+  assert.equal(crossword.entries.length, 4);
   assert.ok(crossword.grid.flat().filter(Boolean).length >= 10);
+  assert.equal(
+    createCrossword(["JACKASS", "LOW", "SANPARKS", "GRANITE"]).complete,
+    false,
+  );
 
   const maze = createMaze("Gardens by the Bay");
   assert.equal(maze.length, 10);
@@ -212,4 +249,12 @@ test("printable puzzle builders use supplied place vocabulary", () => {
     [4, 5, 7, 10, 13].map(mazeSizeForAge),
     [6, 8, 12, 16, 20],
   );
+
+  for (const age of [7, 10, 13]) {
+    const route = createRoutePuzzle("Gardens route", age);
+    assert.equal(route.stops.length, 4);
+    assert.equal(route.solutionStopOrder.length, 4);
+    assert.ok(route.closedStreets.length >= 4);
+    assert.ok(route.minimumStreets > 0);
+  }
 });

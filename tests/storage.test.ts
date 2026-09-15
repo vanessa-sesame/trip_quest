@@ -124,8 +124,8 @@ function generatedBooklet(): GeneratedBookletData {
           {
             title: "Skyway Route Mapper",
             kind: "Observation map",
-            body: "Connect the four stops in order, then add one symbol that makes the route easier to follow.",
-            prompt: "Best route clue: __________",
+            body: "Trace one continuous route from START to FINISH that visits all four local stops. Avoid the closed roads, try not to use the same street twice, and see how few streets you can use.",
+            prompt: "My stop order: __ - __ - __ - __   Streets used: ____",
             gameType: "map_puzzle",
             items: [
               { label: "Grove", clue: "Begin among the tall Supertrees." },

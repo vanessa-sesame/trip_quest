@@ -162,8 +162,8 @@ export function sampleGeneratedBooklet(): GeneratedBookletData {
             "Orchid Garden Route Mapper",
             "Garden map puzzle",
             "map_puzzle",
-            "Connect the four stops in order, then add a symbol that makes your route easy to follow.",
-            "Best route clue: ____________________",
+            "Trace one continuous route from START to FINISH that visits all four local stops. Avoid the closed roads, try not to use the same street twice, and see how few streets you can use.",
+            "My stop order: __ - __ - __ - __   Streets used: ____",
             [
               { label: "Gate", clue: "Mark the family meeting point." },
               { label: "Lake", clue: "Curve the route beside water." },

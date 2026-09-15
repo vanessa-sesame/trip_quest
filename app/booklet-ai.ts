@@ -1,4 +1,5 @@
 import type { DayPlan, GameType } from "./booklet";
+import { createCrossword } from "./puzzles.ts";
 
 const supportedGameTypes: GameType[] = [
   "coloring",
@@ -157,7 +158,7 @@ function gameInstructions(
     case "codebreaker":
       return "Use the starter key to crack the coded local word, then complete the missing letter matches.";
     case "map_puzzle":
-      return "Connect the four stops in order, then add one symbol that makes the route easier to follow.";
+      return "Trace one continuous route from START to FINISH that visits all four local stops. Avoid the closed roads, try not to use the same street twice, and see how few streets you can use.";
     case "scavenger_hunt":
       return "Explore with your family and tick each box when you find its real local detail. Look closely and leave every object where it belongs.";
     case "quiz":
@@ -188,7 +189,7 @@ function gamePrompt(
     case "codebreaker":
       return "Decoded word: __________";
     case "map_puzzle":
-      return "Best route clue: __________";
+      return "My stop order: __ - __ - __ - __   Streets used: ____";
     case "scavenger_hunt":
       return "The hardest detail to find: __________";
     case "quiz":
@@ -196,6 +197,15 @@ function gamePrompt(
     default:
       return original;
   }
+}
+
+function renameActivityForMechanic(value: string, replacement: string) {
+  const cleaned = value
+    .replace(/\bmini\s+crossword\b|\bcrossword\b|\bsudoku\b|\bmap\s+puzzle\b|\broute\s+mapper\b/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/[\s:|-]+$/g, "")
+    .trim();
+  return `${cleaned || "Local"} ${replacement}`.slice(0, 70);
 }
 
 export function validateBookletDraft(
@@ -226,6 +236,7 @@ export function validateBookletDraft(
   }
 
   const usedTitles = new Set<string>();
+  let mapPuzzleCount = 0;
   const dayPlans = draft.dayPlans.map((dayValue, dayIndex): DayPlan => {
     if (!dayValue || typeof dayValue !== "object") {
       throw new Error(`Day ${dayIndex + 1} is missing.`);
@@ -244,17 +255,18 @@ export function validateBookletDraft(
       }
 
       const activity = activityValue as Record<string, unknown>;
-      const title = requireText(
+      let title = requireText(
         activity.title,
         `Activity title on day ${dayIndex + 1}`,
         3,
         70,
       );
-      const normalizedTitle = title.toLocaleLowerCase();
-      if (usedTitles.has(normalizedTitle)) {
-        throw new Error(`The activity title “${title}” was repeated.`);
-      }
-      usedTitles.add(normalizedTitle);
+      let kind = requireText(
+        activity.kind,
+        `Activity type on day ${dayIndex + 1}`,
+        2,
+        32,
+      );
       const rawBody = requireText(
         activity.body,
         `Activity instructions on day ${dayIndex + 1}`,
@@ -264,19 +276,19 @@ export function validateBookletDraft(
       const body = rawBody
         .replace(/\s+(?:prompt|response line):[\s\S]*$/i, "")
         .trim();
-      const gameType = activity.gameType;
+      const declaredGameType = activity.gameType;
       if (
-        typeof gameType !== "string" ||
-        !supportedGameTypes.includes(gameType as GameType)
+        typeof declaredGameType !== "string" ||
+        !supportedGameTypes.includes(declaredGameType as GameType)
       ) {
         throw new Error(`Activity ${activityIndex + 1} on day ${dayIndex + 1} has an invalid game type.`);
       }
       if (
         expectedAge !== undefined &&
-        !allowedGameTypesForAge(expectedAge).includes(gameType as GameType)
+        !allowedGameTypesForAge(expectedAge).includes(declaredGameType as GameType)
       ) {
         throw new Error(
-          `${gameType} is not an age-${expectedAge} game type.`,
+          `${declaredGameType} is not an age-${expectedAge} game type.`,
         );
       }
       if (!Array.isArray(activity.items) || activity.items.length !== 4) {
@@ -284,7 +296,7 @@ export function validateBookletDraft(
           `Activity ${activityIndex + 1} on day ${dayIndex + 1} must contain exactly four game items.`,
         );
       }
-      const items = activity.items.map((itemValue, itemIndex) => {
+      let items = activity.items.map((itemValue, itemIndex) => {
         if (!itemValue || typeof itemValue !== "object") {
           throw new Error(`Game item ${itemIndex + 1} on day ${dayIndex + 1} is missing.`);
         }
@@ -305,23 +317,51 @@ export function validateBookletDraft(
         };
       });
 
+      let gameType = declaredGameType as GameType;
+      if (
+        gameType === "crossword"
+        && !createCrossword(items.map((item) => item.label)).complete
+      ) {
+        gameType = "word_search";
+        title = renameActivityForMechanic(title, "Word Search");
+        kind = "Connected word search";
+      }
+      if (gameType === "crossword") {
+        items = items.map((item) => ({
+          ...item,
+          clue: item.clue.replace(/^\s*(?:across|down)\s*[:.-]\s*/i, ""),
+        }));
+      }
+      if (gameType === "map_puzzle") {
+        if (mapPuzzleCount > 0) {
+          gameType = "scavenger_hunt";
+          title = renameActivityForMechanic(title, "Field Hunt");
+          kind = "On-location field hunt";
+        } else {
+          mapPuzzleCount += 1;
+          if (/\bsudoku\b/i.test(title)) title = renameActivityForMechanic(title, "Route Challenge");
+          if (/\bsudoku\b/i.test(kind)) kind = "Route-planning logic";
+        }
+      }
+
+      const normalizedTitle = title.toLocaleLowerCase();
+      if (usedTitles.has(normalizedTitle)) {
+        throw new Error(`The activity title “${title}” was repeated.`);
+      }
+      usedTitles.add(normalizedTitle);
+
       return {
         title,
-        kind: requireText(
-          activity.kind,
-          `Activity type on day ${dayIndex + 1}`,
-          2,
-          32,
-        ),
+        kind,
         body: requireText(
-          gameInstructions(gameType as GameType, items, body),
+          gameInstructions(gameType, items, body),
           `Activity instructions on day ${dayIndex + 1}`,
           15,
           360,
         ),
         prompt: requireText(
           gamePrompt(
-            gameType as GameType,
+            gameType,
             items,
             requireText(
               activity.prompt,

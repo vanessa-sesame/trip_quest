@@ -3,6 +3,7 @@ import type { Activity, GameItem, GameType } from "./booklet";
 import {
   createCrossword,
   createMaze,
+  createRoutePuzzle,
   createWordSearch,
   mazeSizeForAge,
   normalizePuzzleWord,
@@ -18,7 +19,7 @@ const gameNames: Record<GameType, string> = {
   bingo: "Explorer bingo",
   spot_the_difference: "Spot the difference",
   codebreaker: "Codebreaker",
-  map_puzzle: "Map puzzle",
+  map_puzzle: "Route planner",
   scavenger_hunt: "Scavenger hunt",
   quiz: "Quick quiz",
   story: "Story studio",
@@ -71,7 +72,13 @@ function CrosswordBoard({ items }: { items: GameItem[] }) {
   const puzzle = createCrossword(items.map((item) => item.label));
   return (
     <div className="crossword-layout">
-      <div className="crossword-grid" style={{ "--puzzle-size": puzzle.grid[0]?.length || 1 } as CSSProperties}>
+      <div
+        className="crossword-grid"
+        style={{
+          "--puzzle-size": puzzle.grid[0]?.length || 1,
+          aspectRatio: `${puzzle.grid[0]?.length || 1} / ${puzzle.grid.length || 1}`,
+        } as CSSProperties}
+      >
         {puzzle.grid.flatMap((row, rowIndex) =>
           row.map((cell, columnIndex) => (
             <span className={cell ? "open" : "closed"} key={`${rowIndex}-${columnIndex}`}>
@@ -80,9 +87,14 @@ function CrosswordBoard({ items }: { items: GameItem[] }) {
           )),
         )}
       </div>
-      <ol className="crossword-clues">
-        {items.map((item, index) => <li key={`${item.label}-${index}`}>{item.clue}</li>)}
-      </ol>
+      <ul className="crossword-clues">
+        {puzzle.entries.map((entry) => (
+          <li key={`${entry.number}-${entry.direction}`}>
+            <b>{entry.number}{entry.direction === "across" ? "A" : "D"}</b>
+            <span>{items[entry.answerIndex]?.clue}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -153,15 +165,71 @@ function CodebreakerBoard({ items }: { items: GameItem[] }) {
   );
 }
 
-function MapBoard({ items }: { items: GameItem[] }) {
+function MapBoard({ activity, age, items }: { activity: Activity; age: number; items: GameItem[] }) {
+  const puzzle = createRoutePuzzle(`${activity.title}|${items.map((item) => item.label).join("|")}`, age);
+  const point = ({ row, column }: { row: number; column: number }) => ({
+    x: 10 + column * (80 / (puzzle.size - 1)),
+    y: 10 + row * (80 / (puzzle.size - 1)),
+  });
+  const streetKey = (street: typeof puzzle.streets[number]) =>
+    `${street.from.row}-${street.from.column}-${street.to.row}-${street.to.column}`;
   return (
     <div className="map-board">
-      {items.map((item, index) => (
-        <div key={item.label}>
-          <span>{index + 1}</span>
-          <strong>{item.label}</strong>
-        </div>
-      ))}
+      <svg className="route-map" viewBox="0 0 100 100" role="img" aria-label="Street-grid route puzzle with four stops and closed roads">
+        {puzzle.allStreets.map((street) => {
+          const from = point(street.from);
+          const to = point(street.to);
+          return <line className="route-street-base" key={`base-${streetKey(street)}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />;
+        })}
+        {puzzle.streets.map((street) => {
+          const from = point(street.from);
+          const to = point(street.to);
+          return <line className="route-street-open" key={`open-${streetKey(street)}`} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />;
+        })}
+        {puzzle.closedStreets.map((street) => {
+          const from = point(street.from);
+          const to = point(street.to);
+          const middleX = (from.x + to.x) / 2;
+          const middleY = (from.y + to.y) / 2;
+          const horizontal = from.y === to.y;
+          return (
+            <g className="route-closure" key={`closed-${streetKey(street)}`}>
+              <line x1={middleX + (horizontal ? -1.5 : -3)} y1={middleY + (horizontal ? -3 : -1.5)} x2={middleX + (horizontal ? -1.5 : 3)} y2={middleY + (horizontal ? 3 : -1.5)} />
+              <line x1={middleX + (horizontal ? 1.5 : -3)} y1={middleY + (horizontal ? -3 : 1.5)} x2={middleX + (horizontal ? 1.5 : 3)} y2={middleY + (horizontal ? 3 : 1.5)} />
+            </g>
+          );
+        })}
+        {Array.from({ length: puzzle.size * puzzle.size }, (_, index) => {
+          const location = point({ row: Math.floor(index / puzzle.size), column: index % puzzle.size });
+          return <circle className="route-junction" key={`junction-${index}`} cx={location.x} cy={location.y} r="1.2" />;
+        })}
+        {[{ ...puzzle.start, label: "S", className: "start" }, { ...puzzle.finish, label: "F", className: "finish" }].map((terminal) => {
+          const location = point(terminal);
+          return (
+            <g className={`route-terminal ${terminal.className}`} key={terminal.label}>
+              <rect x={location.x - 4} y={location.y - 4} width="8" height="8" rx="1" />
+              <text x={location.x} y={location.y + 2.2}>{terminal.label}</text>
+            </g>
+          );
+        })}
+        {puzzle.stops.map((stop) => {
+          const location = point(stop);
+          return (
+            <g className="route-stop" key={stop.itemIndex}>
+              <circle cx={location.x} cy={location.y} r="4.5" />
+              <text x={location.x} y={location.y + 2.2}>{stop.itemIndex + 1}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="route-map-legend">
+        {items.map((item, index) => (
+          <div key={item.label}>
+            <span>{index + 1}</span>
+            <p><strong>{item.label}</strong><small>{item.clue}</small></p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -193,8 +261,12 @@ function StoryBoard({ items }: { items: GameItem[] }) {
 }
 
 export function ActivityGame({ activity, age }: { activity: Activity; age: number }) {
-  const gameType = activity.gameType || "story";
+  const requestedGameType = activity.gameType || "story";
   const items = activity.items?.length === 4 ? activity.items : fallbackItems;
+  const gameType = requestedGameType === "crossword"
+    && !createCrossword(items.map((item) => item.label)).complete
+    ? "word_search"
+    : requestedGameType;
   let board;
 
   switch (gameType) {
@@ -207,7 +279,7 @@ export function ActivityGame({ activity, age }: { activity: Activity; age: numbe
     case "bingo": board = <BingoBoard items={items} />; break;
     case "spot_the_difference": board = <DifferenceBoard items={items} />; break;
     case "codebreaker": board = <CodebreakerBoard items={items} />; break;
-    case "map_puzzle": board = <MapBoard items={items} />; break;
+    case "map_puzzle": board = <MapBoard activity={activity} age={age} items={items} />; break;
     case "scavenger_hunt": board = <ChecklistBoard items={items} />; break;
     case "quiz": board = <QuizBoard items={items} />; break;
     default: board = <StoryBoard items={items} />;

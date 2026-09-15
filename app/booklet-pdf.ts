@@ -8,10 +8,14 @@ import {
 } from "pdf-lib";
 import type { Activity, GameItem } from "./booklet.ts";
 import { getAgeBand } from "./booklet.ts";
-import type { GeneratedBookletData } from "./booklet-ai.ts";
+import {
+  type GeneratedBookletData,
+  validateBookletDraft,
+} from "./booklet-ai.ts";
 import {
   createCrossword,
   createMaze,
+  createRoutePuzzle,
   createWordSearch,
   mazeSizeForAge,
   normalizePuzzleWord,
@@ -750,22 +754,24 @@ function drawCrossword(page: PDFPage, fonts: Fonts, activity: Activity, box: Box
   const clueX = box.x + width + 18;
   const clueWidth = box.x + box.width - clueX;
   page.drawText("CLUES", { x: clueX, y: box.y + box.height - 8, size: 8, font: fonts.bold, color: colors.coral });
-  activity.items.forEach((item, index) => {
+  puzzle.entries.forEach((entry, index) => {
+    const item = activity.items[entry.answerIndex];
     const y = box.y + box.height - 33 - index * 66;
-    page.drawCircle({ x: clueX + 7, y: y + 3, size: 7, color: colors.yellow });
-    page.drawText(String(index + 1), {
-      x: clueX + 5,
-      y,
-      size: 6,
+    const clueNumber = `${entry.number}${entry.direction === "across" ? "A" : "D"}`;
+    page.drawCircle({ x: clueX + 8, y: y + 3, size: 8, color: colors.yellow });
+    page.drawText(clueNumber, {
+      x: clueX + 8 - fonts.bold.widthOfTextAtSize(clueNumber, 5.5) / 2,
+      y: y + 0.5,
+      size: 5.5,
       font: fonts.bold,
       color: colors.ink,
     });
-    drawWrappedText(page, item.clue, fonts, {
-      x: clueX + 20,
+    drawWrappedText(page, item?.clue || "Solve this local answer.", fonts, {
+      x: clueX + 22,
       y: y + 7,
       size: 8,
       lineHeight: 10,
-      maxWidth: clueWidth - 20,
+      maxWidth: clueWidth - 22,
       maxLines: 5,
       color: colors.muted,
     });
@@ -937,41 +943,75 @@ function drawCodebreaker(page: PDFPage, fonts: Fonts, items: GameItem[], box: Bo
   drawDottedLine(page, box.x + 98, box.x + box.width, box.y + 28, colors.line, 5, 4);
 }
 
-function drawMap(page: PDFPage, fonts: Fonts, items: GameItem[], box: Box) {
-  const points = [
-    { x: box.x + 48, y: box.y + box.height - 52 },
-    { x: box.x + box.width * 0.45, y: box.y + box.height - 108 },
-    { x: box.x + box.width * 0.72, y: box.y + 103 },
-    { x: box.x + box.width - 48, y: box.y + 45 },
-  ];
-  points.slice(0, -1).forEach((point, index) => {
-    const next = points[index + 1];
-    const steps = 12;
-    for (let step = 0; step < steps; step += 2) {
-      const start = step / steps;
-      const end = (step + 1) / steps;
-      page.drawLine({
-        start: { x: point.x + (next.x - point.x) * start, y: point.y + (next.y - point.y) * start },
-        end: { x: point.x + (next.x - point.x) * end, y: point.y + (next.y - point.y) * end },
-        thickness: 2,
-        color: colors.line,
-      });
-    }
+function drawMap(page: PDFPage, fonts: Fonts, activity: Activity, age: number, box: Box) {
+  const items = activity.items;
+  const puzzle = createRoutePuzzle(`${activity.title}|${items.map((item) => item.label).join("|")}`, age);
+  const mapSize = Math.min(220, box.height - 94, box.width - 80);
+  const mapX = box.x + (box.width - mapSize) / 2;
+  const mapY = box.y + 91;
+  const point = ({ row, column }: { row: number; column: number }) => ({
+    x: mapX + column * (mapSize / (puzzle.size - 1)),
+    y: mapY + mapSize - row * (mapSize / (puzzle.size - 1)),
   });
-  points.forEach((point, index) => {
-    page.drawCircle({ x: point.x, y: point.y, size: 18, color: index % 2 ? colors.coral : colors.blue });
-    const number = String(index + 1);
-    page.drawText(number, { x: point.x - fonts.bold.widthOfTextAtSize(number, 9) / 2, y: point.y - 3, size: 9, font: fonts.bold, color: colors.white });
-    const label = wrapText(items[index]?.label || `Stop ${index + 1}`, fonts.bold, 8, 105, 2);
-    label.forEach((line, lineIndex) => {
-      page.drawText(line, {
-        x: Math.max(box.x, Math.min(point.x - fonts.bold.widthOfTextAtSize(line, 8) / 2, box.x + box.width - 105)),
-        y: point.y + (index < 2 ? 30 : -34) - lineIndex * 10,
-        size: 8,
-        font: fonts.bold,
-        color: colors.ink,
+
+  puzzle.allStreets.forEach((street) => {
+    page.drawLine({ start: point(street.from), end: point(street.to), thickness: 1.1, color: colors.softLine });
+  });
+  puzzle.streets.forEach((street) => {
+    page.drawLine({ start: point(street.from), end: point(street.to), thickness: 2.4, color: colors.muted });
+  });
+  puzzle.closedStreets.forEach((street) => {
+    const from = point(street.from);
+    const to = point(street.to);
+    const middle = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+    const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
+    const unit = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+    const perpendicular = { x: -unit.y * 5, y: unit.x * 5 };
+    [-2.2, 2.2].forEach((offset) => {
+      const center = { x: middle.x + unit.x * offset, y: middle.y + unit.y * offset };
+      page.drawLine({
+        start: { x: center.x - perpendicular.x, y: center.y - perpendicular.y },
+        end: { x: center.x + perpendicular.x, y: center.y + perpendicular.y },
+        thickness: 2,
+        color: colors.coral,
       });
     });
+  });
+  for (let row = 0; row < puzzle.size; row += 1) {
+    for (let column = 0; column < puzzle.size; column += 1) {
+      const location = point({ row, column });
+      page.drawCircle({ ...location, size: 2.2, color: colors.white, borderColor: colors.muted, borderWidth: 0.8 });
+    }
+  }
+  [
+    { ...puzzle.start, label: "S", color: colors.green },
+    { ...puzzle.finish, label: "F", color: colors.coral },
+  ].forEach((terminal) => {
+    const location = point(terminal);
+    page.drawRectangle({ x: location.x - 8, y: location.y - 8, width: 16, height: 16, color: colors.white, borderColor: terminal.color, borderWidth: 1.8 });
+    page.drawText(terminal.label, { x: location.x - fonts.bold.widthOfTextAtSize(terminal.label, 7) / 2, y: location.y - 2.5, size: 7, font: fonts.bold, color: terminal.color });
+  });
+  puzzle.stops.forEach((stop) => {
+    const location = point(stop);
+    const number = String(stop.itemIndex + 1);
+    page.drawCircle({ ...location, size: 12, color: colors.yellow, borderColor: colors.ink, borderWidth: 1 });
+    page.drawText(number, { x: location.x - fonts.bold.widthOfTextAtSize(number, 8) / 2, y: location.y - 3, size: 8, font: fonts.bold, color: colors.ink });
+  });
+  page.drawText("S = START", { x: mapX, y: mapY + mapSize + 12, size: 7, font: fonts.bold, color: colors.green });
+  const finishLabel = "F = FINISH";
+  page.drawText(finishLabel, { x: mapX + mapSize - fonts.bold.widthOfTextAtSize(finishLabel, 7), y: mapY - 17, size: 7, font: fonts.bold, color: colors.coral });
+
+  const legendGap = 10;
+  const legendWidth = (box.width - legendGap) / 2;
+  items.forEach((item, index) => {
+    const column = index % 2;
+    const row = Math.floor(index / 2);
+    const x = box.x + column * (legendWidth + legendGap);
+    const y = box.y + 42 - row * 42;
+    page.drawCircle({ x: x + 7, y: y + 12, size: 7, color: colors.yellow, borderColor: colors.ink, borderWidth: 0.7 });
+    page.drawText(String(index + 1), { x: x + 5, y: y + 9.5, size: 6, font: fonts.bold, color: colors.ink });
+    drawWrappedText(page, item.label, fonts, { x: x + 20, y: y + 19, size: 8, font: fonts.bold, maxWidth: legendWidth - 22, maxLines: 1 });
+    drawWrappedText(page, item.clue, fonts, { x: x + 20, y: y + 7, size: 6.5, lineHeight: 8, maxWidth: legendWidth - 22, maxLines: 2, color: colors.muted });
   });
 }
 
@@ -1031,7 +1071,7 @@ function drawGame(page: PDFPage, fonts: Fonts, activity: Activity, age: number, 
     bingo: "Explorer bingo",
     spot_the_difference: "Spot 3 differences",
     codebreaker: "Codebreaker",
-    map_puzzle: "Map puzzle",
+    map_puzzle: "Route-planning challenge",
     scavenger_hunt: "Scavenger hunt",
     quiz: "Quick quiz",
     story: "Story studio",
@@ -1066,7 +1106,7 @@ function drawGame(page: PDFPage, fonts: Fonts, activity: Activity, age: number, 
       drawCodebreaker(page, fonts, activity.items, box);
       break;
     case "map_puzzle":
-      drawMap(page, fonts, activity.items, box);
+      drawMap(page, fonts, activity, age, box);
       break;
     case "scavenger_hunt":
       drawChecklist(page, fonts, activity.items, box);
@@ -1155,7 +1195,7 @@ function drawActivityPage(
   });
 }
 
-function answerFor(activity: Activity) {
+function answerFor(activity: Activity, age: number) {
   switch (activity.gameType) {
     case "word_search":
     case "crossword":
@@ -1166,6 +1206,10 @@ function answerFor(activity: Activity) {
       return normalizePuzzleWord(activity.items[0]?.label || "TRIP", 12);
     case "maze":
       return "One connected route runs from the green dot to the coral dot.";
+    case "map_puzzle": {
+      const puzzle = createRoutePuzzle(`${activity.title}|${activity.items.map((item) => item.label).join("|")}`, age);
+      return `One shortest route visits stops ${puzzle.solutionStopOrder.join("-")} in ${puzzle.minimumStreets} streets; an equal-length order may also work.`;
+    }
     case "spot_the_difference":
       return "Sun position and size / roof shape / one tree disappears.";
     case "quiz":
@@ -1214,7 +1258,7 @@ function drawAnswerKey(
       maxWidth: columnWidth - 48,
       maxLines: 1,
     });
-    drawWrappedText(page, answerFor(entry.activity), fonts, {
+    drawWrappedText(page, answerFor(entry.activity, booklet.age), fonts, {
       x,
       y: y - 15,
       size: 7,
@@ -1304,7 +1348,11 @@ export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destinat
   return `tripquest-${destination}-age-${booklet.age}.pdf`;
 }
 
-export async function createBookletPdf(booklet: GeneratedBookletData) {
+export async function createBookletPdf(inputBooklet: GeneratedBookletData) {
+  const booklet: GeneratedBookletData = {
+    ...inputBooklet,
+    ...validateBookletDraft(inputBooklet, inputBooklet.days, inputBooklet.age),
+  };
   const document = await PDFDocument.create();
   const fonts: Fonts = {
     regular: await document.embedFont(StandardFonts.Helvetica),

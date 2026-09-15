@@ -609,6 +609,7 @@ CREATIVE DIRECTION
 - The first activity on each day should be a sit-down puzzle or creative page. The second should turn noticing the real place into a field game, scavenger hunt, map challenge, or family mission.
 - Do not repeat a fill-in template, activity title, sentence frame, or “create your own” task.
 - Keep facts accurate and culturally respectful. Phrase myths as stories rather than facts.
+- Write in clear English using printable Latin letters. Transliterate local words and include a simple pronunciation cue rather than relying on non-Latin script or emoji.
 - Activities happen with the family in publicly accessible areas. Require grown-up permission for tasting, photos, purchases, or speaking with another person.
 - Avoid opening hours, ticket prices, exact transit schedules, and claims not supported by the research.
 - “style” is a vivid 3-to-7-word destination subtitle. “intro” is 1 or 2 inviting sentences.

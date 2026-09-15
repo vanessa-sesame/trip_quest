@@ -8,12 +8,15 @@ import {
   type BookletObjectStorage,
   acquireGenerationLock,
   bookletArtifactKey,
+  bookletPdfKey,
   createBookletCacheKey,
   createResearchCacheKey,
   readStoredBooklet,
+  readStoredBookletPdf,
   readStoredResearch,
   releaseGenerationLock,
   writeStoredBooklet,
+  writeStoredBookletPdf,
   writeStoredResearch,
 } from "../app/booklet-storage.ts";
 import type { GeneratedBookletData } from "../app/booklet-ai.ts";
@@ -51,15 +54,35 @@ function createTestDatabase(): BookletDatabase {
 }
 
 function createTestArtifacts() {
-  const objects = new Map<string, string>();
+  const objects = new Map<string, string | Uint8Array>();
   const storage: BookletObjectStorage = {
     async get(key) {
       const value = objects.get(key);
-      return value === undefined ? null : { async text() { return value; } };
+      if (value === undefined) return null;
+      const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+      return {
+        async arrayBuffer() {
+          return bytes.buffer.slice(
+            bytes.byteOffset,
+            bytes.byteOffset + bytes.byteLength,
+          ) as ArrayBuffer;
+        },
+        async text() {
+          return typeof value === "string" ? value : new TextDecoder().decode(value);
+        },
+      };
     },
     async put(key, value) {
-      assert.equal(typeof value, "string");
-      objects.set(key, value as string);
+      if (typeof value === "string") {
+        objects.set(key, value);
+      } else if (ArrayBuffer.isView(value)) {
+        objects.set(
+          key,
+          new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice(),
+        );
+      } else {
+        objects.set(key, new Uint8Array(value).slice());
+      }
       return undefined;
     },
   };
@@ -185,6 +208,16 @@ test("D1 metadata and the private R2 artifact restore a generated booklet", asyn
     await readStoredBooklet(database, storage, cacheKey, identity, Date.now() + 120_000),
     null,
   );
+
+  const pdf = new TextEncoder().encode("%PDF-test");
+  await writeStoredBookletPdf(database, storage, {
+    cacheKey,
+    filename: "tripquest-singapore-age-7.pdf",
+    pdf,
+  });
+  assert.ok(objects.has(bookletPdfKey(cacheKey)));
+  const restoredPdf = await readStoredBookletPdf(database, storage, cacheKey);
+  assert.equal(new TextDecoder().decode(restoredPdf?.bytes), "%PDF-test");
 });
 
 test("destination research and generation locks persist in D1", async () => {

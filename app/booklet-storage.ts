@@ -27,12 +27,14 @@ export type BookletDatabase = {
 };
 
 type StoredObject = {
+  arrayBuffer?(): Promise<ArrayBuffer>;
   text(): Promise<string>;
 };
 
 type ObjectMetadata = {
   httpMetadata?: {
     cacheControl?: string;
+    contentDisposition?: string;
     contentType?: string;
   };
   customMetadata?: Record<string, string>;
@@ -40,7 +42,11 @@ type ObjectMetadata = {
 
 export type BookletObjectStorage = {
   get(key: string): Promise<StoredObject | null>;
-  put(key: string, value: string | ArrayBuffer, options?: ObjectMetadata): Promise<unknown>;
+  put(
+    key: string,
+    value: string | ArrayBuffer | ArrayBufferView,
+    options?: ObjectMetadata,
+  ): Promise<unknown>;
 };
 
 export type StoredResearch = {
@@ -304,6 +310,56 @@ export async function writeStoredBooklet(
     .run();
 
   return artifactKey;
+}
+
+export async function readStoredBookletPdf(
+  database: BookletDatabase,
+  artifacts: BookletObjectStorage,
+  cacheKey: string,
+  now = Date.now(),
+) {
+  const row = await database
+    .prepare(
+      "SELECT pdf_key AS pdfKey FROM booklet_cache WHERE cache_key = ? AND pdf_key IS NOT NULL AND expires_at > ?",
+    )
+    .bind(cacheKey, now)
+    .first<{ pdfKey: string }>();
+  if (!row) return null;
+
+  const artifact = await artifacts.get(row.pdfKey);
+  if (!artifact?.arrayBuffer) return null;
+  return {
+    bytes: await artifact.arrayBuffer(),
+    pdfKey: row.pdfKey,
+  };
+}
+
+export async function writeStoredBookletPdf(
+  database: BookletDatabase,
+  artifacts: BookletObjectStorage,
+  input: {
+    cacheKey: string;
+    filename: string;
+    pdf: ArrayBuffer | ArrayBufferView;
+  },
+) {
+  const pdfKey = bookletPdfKey(input.cacheKey);
+  await artifacts.put(pdfKey, input.pdf, {
+    httpMetadata: {
+      cacheControl: "private, no-store",
+      contentDisposition: `attachment; filename="${input.filename}"`,
+      contentType: "application/pdf",
+    },
+    customMetadata: {
+      filename: input.filename,
+      version: BOOKLET_CACHE_VERSION,
+    },
+  });
+  await database
+    .prepare("UPDATE booklet_cache SET pdf_key = ? WHERE cache_key = ?")
+    .bind(pdfKey, input.cacheKey)
+    .run();
+  return pdfKey;
 }
 
 export async function acquireGenerationLock(

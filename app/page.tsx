@@ -122,6 +122,7 @@ export default function Home() {
   const [fullscreen, setFullscreen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutNote, setCheckoutNote] = useState("");
+  const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
   const [generatedBooklet, setGeneratedBooklet] =
     useState<GeneratedBookletData | null>(null);
   const [generationState, setGenerationState] = useState<
@@ -259,6 +260,59 @@ export default function Home() {
           ? error.message
           : "The connection could not stay open after reconnecting. Please wait a moment and tap Create again; your saved work will resume.",
       );
+    }
+  }
+
+  async function handlePdfDownload() {
+    if (!generatedBooklet) {
+      setCheckoutNote(
+        "Create a custom AI booklet above before preparing its PDF. No charge was made.",
+      );
+      return;
+    }
+
+    setPdfState("generating");
+    setCheckoutNote("Preparing the print-quality pages…");
+    try {
+      const response = await fetch("/api/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          age: generatedBooklet.age,
+          days: generatedBooklet.days,
+          destination: generatedBooklet.destination,
+          itinerary: generatedBooklet.itinerary,
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "The PDF could not be prepared.");
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1]
+        || `tripquest-${generatedBooklet.destination.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-age-${generatedBooklet.age}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setCheckoutNote(
+        "Your PDF is ready. Choose the TripQuest Library folder if your browser asks where to save it.",
+      );
+    } catch (error) {
+      setCheckoutNote(
+        error instanceof Error
+          ? error.message
+          : "The PDF could not be prepared. Please try again.",
+      );
+    } finally {
+      setPdfState("idle");
     }
   }
 
@@ -662,9 +716,10 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {pageTitles.length} high-resolution A4 pages</li>
+              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 5 : pageTitles.length + 1} high-resolution A4 pages</li>
               <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
-              <li><Check size={17} /> Crosswords, mazes, art, and field games</li>
+              <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
+              <li><Check size={17} /> Grown-up answer notes</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
               <li><Check size={17} /> Print again for your own family</li>
             </ul>
@@ -675,12 +730,18 @@ export default function Home() {
             <button
               className="primary-button checkout-button"
               type="button"
-              onClick={() =>
-                setCheckoutNote("Checkout is not connected yet. No charge was made.")
-              }
+              disabled={pdfState === "generating"}
+              aria-busy={pdfState === "generating"}
+              onClick={handlePdfDownload}
             >
-              <LockKeyhole size={18} />
-              Continue to secure checkout
+              {pdfState === "generating" ? (
+                <LoaderCircle className="spin" size={18} />
+              ) : (
+                <LockKeyhole size={18} />
+              )}
+              {pdfState === "generating"
+                ? "Preparing printable PDF…"
+                : "Continue to secure checkout"}
             </button>
             {checkoutNote ? <p className="checkout-note">{checkoutNote}</p> : null}
           </section>

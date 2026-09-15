@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
@@ -9,8 +9,10 @@ import {
   acquireGenerationLock,
   bookletArtifactKey,
   bookletPdfKey,
+  consumeGenerationRateLimit,
   createBookletCacheKey,
   createResearchCacheKey,
+  parseStoredResearch,
   readStoredBooklet,
   readStoredBookletPdf,
   readStoredResearch,
@@ -23,12 +25,12 @@ import type { GeneratedBookletData } from "../app/booklet-ai.ts";
 
 function createTestDatabase(): BookletDatabase {
   const sqlite = new DatabaseSync(":memory:");
-  const migration = readFileSync(
-    new URL("../drizzle/0000_misty_scarlet_spider.sql", import.meta.url),
-    "utf8",
-  );
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) sqlite.exec(statement);
+  const migrationsDirectory = new URL("../drizzle/", import.meta.url);
+  for (const filename of readdirSync(migrationsDirectory).filter((name) => name.endsWith(".sql")).sort()) {
+    const migration = readFileSync(new URL(filename, migrationsDirectory), "utf8");
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) sqlite.exec(statement);
+    }
   }
 
   return {
@@ -264,4 +266,30 @@ test("destination research and generation locks persist in D1", async () => {
     await acquireGenerationLock(database, cacheKey, "worker-two", now, now + 30_000),
     true,
   );
+});
+
+test("stored research rejects weak or malformed source data", () => {
+  const notes = "Source-backed destination research. ".repeat(12);
+  assert.equal(parseStoredResearch(JSON.stringify({
+    notes,
+    sources: [{ title: "Only one source", url: "https://example.com" }],
+  })), null);
+  assert.equal(parseStoredResearch(JSON.stringify({
+    notes,
+    sources: [
+      { title: "Broken URL", url: "https://[" },
+      { title: "Official source", url: "https://example.com" },
+    ],
+  })), null);
+});
+
+test("generation rate limits are atomic and reset with the next window", async () => {
+  const database = createTestDatabase();
+  const hour = 60 * 60 * 1000;
+  const now = 1_700_000_000_000;
+  assert.equal(await consumeGenerationRateLimit(database, "client-a", now, 2, hour), true);
+  assert.equal(await consumeGenerationRateLimit(database, "client-a", now + 1, 2, hour), true);
+  assert.equal(await consumeGenerationRateLimit(database, "client-a", now + 2, 2, hour), false);
+  assert.equal(await consumeGenerationRateLimit(database, "client-b", now + 2, 2, hour), true);
+  assert.equal(await consumeGenerationRateLimit(database, "client-a", now + hour, 2, hour), true);
 });

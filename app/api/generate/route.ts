@@ -1,5 +1,5 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
-import { getAgeBand, sanitizeAge, sanitizeDays } from "../../booklet";
+import { getAgeBand } from "../../booklet";
 import {
   type BookletDraft,
   type BookletSource,
@@ -13,6 +13,7 @@ import {
   type BookletDatabase,
   type BookletObjectStorage,
   acquireGenerationLock,
+  consumeGenerationRateLimit,
   createBookletCacheKey,
   createResearchCacheKey,
   readStoredBooklet,
@@ -21,6 +22,13 @@ import {
   writeStoredBooklet,
   writeStoredResearch,
 } from "../../booklet-storage";
+import {
+  HttpRequestError,
+  assertSameOriginRequest,
+  createClientRateLimitKey,
+  readJsonObject,
+  requireInteger,
+} from "../../request-security";
 import {
   type GenerationTask,
   createGenerationStreamResponse,
@@ -59,6 +67,12 @@ const DURABLE_RESEARCH_TTL = 30 * 24 * 60 * 60 * 1000;
 const GENERATION_LOCK_TTL = 45 * 1000;
 const GENERATION_LOCK_RENEWAL = 15 * 1000;
 const GENERATION_WAIT_TTL = 3 * 60 * 1000;
+const RATE_LIMIT_WINDOW = 60 * 60 * 1000;
+const CLIENT_GENERATION_LIMIT = 8;
+const GLOBAL_GENERATION_LIMIT = 120;
+const MAX_ACTIVE_GENERATIONS = 4;
+const MAX_MEMORY_RESEARCH_ENTRIES = 128;
+const MAX_MEMORY_BOOKLET_ENTRIES = 64;
 
 const exactAgeGuidance: Record<number, string> = {
   3: "A grown-up reads everything. Use pointing, finding, naming, movement, and either-or choices. Never require reading or writing.",
@@ -87,6 +101,11 @@ class KimiRequestError extends Error {
 class UserCorrectionError extends Error {}
 
 class GenerationBusyError extends Error {}
+
+type GenerationLockLease = {
+  assertOwned(): void;
+  stop(): Promise<void>;
+};
 
 class GenerationStageError extends Error {
   constructor(
@@ -125,23 +144,57 @@ function normalizeDestination(value: unknown) {
   return destination;
 }
 
-function consumeRateLimit(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const key = forwarded || request.headers.get("cf-connecting-ip") || "anonymous";
-  const now = Date.now();
+function consumeMemoryRateLimit(key: string, limit: number, now: number) {
   const current = requestWindows.get(key);
 
   if (!current || current.resetAt <= now) {
-    requestWindows.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    if (requestWindows.size >= 1_000) {
+      for (const [storedKey, value] of requestWindows) {
+        if (value.resetAt <= now) requestWindows.delete(storedKey);
+      }
+      if (requestWindows.size >= 1_000) {
+        requestWindows.delete(requestWindows.keys().next().value as string);
+      }
+    }
+    requestWindows.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
     return true;
   }
 
-  if (current.count >= 8) {
+  if (current.count >= limit) {
     return false;
   }
 
   current.count += 1;
   return true;
+}
+
+async function consumeRateLimit(
+  request: Request,
+  runtime: RuntimeEnvironment,
+  apiKey: string,
+) {
+  const now = Date.now();
+  const clientKey = await createClientRateLimitKey(request, apiKey);
+  if (!runtime.DB) {
+    return consumeMemoryRateLimit(`client:${clientKey}`, CLIENT_GENERATION_LIMIT, now)
+      && consumeMemoryRateLimit("global", GLOBAL_GENERATION_LIMIT, now);
+  }
+
+  const clientAllowed = await consumeGenerationRateLimit(
+    runtime.DB,
+    `client:${clientKey}`,
+    now,
+    CLIENT_GENERATION_LIMIT,
+    RATE_LIMIT_WINDOW,
+  );
+  if (!clientAllowed) return false;
+  return consumeGenerationRateLimit(
+    runtime.DB,
+    "global",
+    now,
+    GLOBAL_GENERATION_LIMIT,
+    RATE_LIMIT_WINDOW,
+  );
 }
 
 function getCached<T>(cache: Map<string, CachedValue<T>>, key: string) {
@@ -151,7 +204,28 @@ function getCached<T>(cache: Map<string, CachedValue<T>>, key: string) {
     cache.delete(key);
     return null;
   }
+  cache.delete(key);
+  cache.set(key, cached);
   return cached.value;
+}
+
+function setCached<T>(
+  cache: Map<string, CachedValue<T>>,
+  key: string,
+  value: CachedValue<T>,
+  maximumEntries: number,
+) {
+  const now = Date.now();
+  for (const [storedKey, storedValue] of cache) {
+    if (storedValue.expiresAt <= now) cache.delete(storedKey);
+  }
+  cache.delete(key);
+  while (cache.size >= maximumEntries) {
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    cache.delete(oldestKey);
+  }
+  cache.set(key, value);
 }
 
 function logStorageFailure(operation: string, error: unknown) {
@@ -174,7 +248,9 @@ async function readDurableBooklet(
     );
   } catch (error) {
     logStorageFailure("read booklet", error);
-    return null;
+    throw new GenerationBusyError(
+      "Saved booklets are temporarily unavailable. Please try again shortly.",
+    );
   }
 }
 
@@ -205,7 +281,9 @@ async function waitForDurableBookletOrLock(
       if (ownsLock) return { booklet: null, ownsLock: true };
     } catch (error) {
       logStorageFailure("reacquire generation lock", error);
-      return { booklet: null, ownsLock: false };
+      throw new GenerationBusyError(
+        "The travel studio is temporarily unavailable. Please try again shortly.",
+      );
     }
 
     await new Promise((resolve) => setTimeout(resolve, 3_000));
@@ -220,8 +298,10 @@ function keepGenerationLockAlive(
   database: BookletDatabase,
   cacheKey: string,
   ownerId: string,
-) {
+): GenerationLockLease {
   let stopped = false;
+  let ownershipLost = false;
+  let confirmedUntil = Date.now() + GENERATION_LOCK_TTL;
   let pending = Promise.resolve();
   const interval = setInterval(() => {
     pending = pending.then(async () => {
@@ -236,7 +316,10 @@ function keepGenerationLockAlive(
           now + GENERATION_LOCK_TTL,
         );
         if (!renewed) {
+          ownershipLost = true;
           console.warn("[TripQuest storage: renew generation lock] Lock ownership changed");
+        } else {
+          confirmedUntil = now + GENERATION_LOCK_TTL;
         }
       } catch (error) {
         logStorageFailure("renew generation lock", error);
@@ -244,10 +327,22 @@ function keepGenerationLockAlive(
     });
   }, GENERATION_LOCK_RENEWAL);
 
-  return async () => {
-    stopped = true;
-    clearInterval(interval);
-    await pending;
+  return {
+    assertOwned() {
+      if (
+        ownershipLost ||
+        Date.now() + GENERATION_LOCK_RENEWAL >= confirmedUntil
+      ) {
+        throw new GenerationBusyError(
+          "The saved-edition lock could not be renewed. Please try again shortly.",
+        );
+      }
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(interval);
+      await pending;
+    },
   };
 }
 
@@ -370,14 +465,17 @@ async function researchDestination(
     try {
       const stored = await readStoredResearch(database, cacheKey);
       if (stored) {
-        researchCache.set(cacheKey, {
+        setCached(researchCache, cacheKey, {
           expiresAt: Date.now() + MEMORY_RESEARCH_TTL,
           value: stored,
-        });
+        }, MAX_MEMORY_RESEARCH_ENTRIES);
         return stored;
       }
     } catch (error) {
       logStorageFailure("read research", error);
+      throw new GenerationBusyError(
+        "Saved destination research is temporarily unavailable. Please try again shortly.",
+      );
     }
   }
 
@@ -466,10 +564,10 @@ Distinguish the destination from similarly named places. Do not invent legends, 
       ? lastError
       : new Error("Kimi did not return enough source-backed place research.");
   }
-  researchCache.set(cacheKey, {
+  setCached(researchCache, cacheKey, {
     expiresAt: Date.now() + MEMORY_RESEARCH_TTL,
     value: result,
-  });
+  }, MAX_MEMORY_RESEARCH_ENTRIES);
   if (database) {
     try {
       const generatedAt = new Date().toISOString();
@@ -786,10 +884,11 @@ function generationErrorMessage(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
+    assertSameOriginRequest(request);
+    const body = await readJsonObject(request);
     const destination = normalizeDestination(body.destination);
-    const age = sanitizeAge(Number(body.age));
-    const days = sanitizeDays(Number(body.days));
+    const age = requireInteger(body.age, 3, 14, "Age");
+    const days = requireInteger(body.days, 1, 14, "Trip length");
     const itinerary = normalizeItinerary(body.itinerary, days);
     const runtime = await getRuntimeEnvironment();
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
@@ -815,10 +914,10 @@ export async function POST(request: Request) {
 
     const stored = await readDurableBooklet(runtime, cacheKey, identity);
     if (stored) {
-      bookletCache.set(cacheKey, {
+      setCached(bookletCache, cacheKey, {
         expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
         value: stored,
-      });
+      }, MAX_MEMORY_BOOKLET_ENTRIES);
       return Response.json(stored, {
         headers: {
           "Cache-Control": "private, no-store",
@@ -836,7 +935,32 @@ export async function POST(request: Request) {
     }
 
     let task = bookletJobs.get(cacheKey);
-    if (!task && !consumeRateLimit(request)) {
+    if (!task && bookletJobs.size >= MAX_ACTIVE_GENERATIONS) {
+      return Response.json(
+        { error: "The travel studio is busy. Please try again shortly." },
+        { status: 503 },
+      );
+    }
+    let rateLimitAllowed = true;
+    if (!task) {
+      try {
+        rateLimitAllowed = await consumeRateLimit(request, runtime, apiKey);
+      } catch (error) {
+        logStorageFailure("check generation rate limit", error);
+        return Response.json(
+          { error: "The travel studio is temporarily unavailable. Please try again shortly." },
+          { status: 503 },
+        );
+      }
+    }
+    if (!task) task = bookletJobs.get(cacheKey);
+    if (!task && bookletJobs.size >= MAX_ACTIVE_GENERATIONS) {
+      return Response.json(
+        { error: "The travel studio is busy. Please try again shortly." },
+        { status: 503 },
+      );
+    }
+    if (!task && !rateLimitAllowed) {
       return Response.json(
         {
           error:
@@ -853,7 +977,7 @@ export async function POST(request: Request) {
           const lockOwner = crypto.randomUUID();
           let ownsLock = false;
           let lockAvailable = false;
-          let stopLockRenewal: (() => Promise<void>) | undefined;
+          let lockLease: GenerationLockLease | undefined;
 
           if (runtime.DB) {
             publish("Checking for a saved or in-progress edition…");
@@ -869,6 +993,9 @@ export async function POST(request: Request) {
               lockAvailable = true;
             } catch (error) {
               logStorageFailure("acquire generation lock", error);
+              throw new GenerationBusyError(
+                "The travel studio is temporarily unavailable. Please try again shortly.",
+              );
             }
           }
 
@@ -881,17 +1008,17 @@ export async function POST(request: Request) {
               publish,
             );
             if (shared.booklet) {
-              bookletCache.set(cacheKey, {
+              setCached(bookletCache, cacheKey, {
                 expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
                 value: shared.booklet,
-              });
+              }, MAX_MEMORY_BOOKLET_ENTRIES);
               return shared.booklet;
             }
             ownsLock = shared.ownsLock;
           }
 
           if (ownsLock && runtime.DB) {
-            stopLockRenewal = keepGenerationLockAlive(
+            lockLease = keepGenerationLockAlive(
               runtime.DB,
               cacheKey,
               lockOwner,
@@ -910,8 +1037,10 @@ export async function POST(request: Request) {
               researchModel,
               runtime.DB,
             ).catch((error) => {
+              if (error instanceof GenerationBusyError) throw error;
               throw new GenerationStageError("research", error);
             });
+            lockLease?.assertOwned();
             assertResearchMatchesRequest(research);
 
             publish(`Designing printable games specifically for age ${age}…`);
@@ -926,6 +1055,7 @@ export async function POST(request: Request) {
             ).catch((error) => {
               throw new GenerationStageError("composition", error);
             });
+            lockLease?.assertOwned();
             const result: GeneratedBookletData = {
               destination,
               age,
@@ -935,10 +1065,10 @@ export async function POST(request: Request) {
               sources: research.sources,
               generatedAt: new Date().toISOString(),
             };
-            bookletCache.set(cacheKey, {
+            setCached(bookletCache, cacheKey, {
               expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
               value: result,
-            });
+            }, MAX_MEMORY_BOOKLET_ENTRIES);
 
             if (runtime.DB && runtime.BOOKLET_FILES) {
               publish("Saving this edition for instant reuse…");
@@ -957,7 +1087,7 @@ export async function POST(request: Request) {
 
             return result;
           } finally {
-            await stopLockRenewal?.();
+            await lockLease?.stop();
             if (ownsLock && runtime.DB) {
               try {
                 await releaseGenerationLock(runtime.DB, cacheKey, lockOwner);
@@ -982,8 +1112,11 @@ export async function POST(request: Request) {
     );
     return createGenerationStreamResponse(task, generationErrorMessage);
   } catch (error) {
-    if (error instanceof SyntaxError) {
-      return Response.json({ error: "That request could not be read." }, { status: 400 });
+    if (error instanceof HttpRequestError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    if (error instanceof GenerationBusyError) {
+      return Response.json({ error: error.message }, { status: 503 });
     }
 
     const message = error instanceof Error ? error.message : "The booklet could not be generated.";

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,16 +16,8 @@ const title = "TripQuest | Travel Booklets for Kids";
 const description =
   "Create thoughtful, printable travel activity booklets tailored to a child's age, destination, and trip length.";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host =
-    requestHeaders.get("x-forwarded-host") ??
-    requestHeaders.get("host") ??
-    "tripquest-booklet.allophones.chatgpt.site";
-  const protocol =
-    requestHeaders.get("x-forwarded-proto") ??
-    (host.startsWith("localhost") ? "http" : "https");
-  const socialImage = `${protocol}://${host}/og.png`;
+export function generateMetadata(): Metadata {
+  const socialImage = "https://tripquest-booklet.allophones.chatgpt.site/og.png";
 
   return {
     title,

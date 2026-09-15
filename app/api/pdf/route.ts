@@ -12,6 +12,12 @@ import {
   readStoredBookletPdf,
   writeStoredBookletPdf,
 } from "../../booklet-storage";
+import {
+  HttpRequestError,
+  assertSameOriginRequest,
+  readJsonObject,
+  requireInteger,
+} from "../../request-security";
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +46,10 @@ function normalizeDestination(value: unknown) {
   if (destination.length < 2 || destination.length > 70) {
     throw new Error("Enter a destination between 2 and 70 characters.");
   }
-  return destination;
-}
-
-function requireInteger(value: unknown, minimum: number, maximum: number, label: string) {
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < minimum || number > maximum) {
-    throw new Error(`${label} must be between ${minimum} and ${maximum}.`);
+  if (!/^[\p{L}\p{M}\d .,'’()&/-]+$/u.test(destination)) {
+    throw new Error("Use a city, region, or country name only.");
   }
-  return number;
+  return destination;
 }
 
 function isOwnerRequest(request: Request, runtime: RuntimeEnvironment) {
@@ -78,6 +79,7 @@ function pdfResponse(bytes: ArrayBuffer | Uint8Array, filename: string, cache: s
 
 export async function POST(request: Request) {
   try {
+    assertSameOriginRequest(request);
     const runtime = await getRuntimeEnvironment();
     if (!isOwnerRequest(request, runtime)) {
       return Response.json(
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as Record<string, unknown>;
+    const body = await readJsonObject(request);
     const destination = normalizeDestination(body.destination);
     const age = requireInteger(body.age, 3, 14, "Age");
     const days = requireInteger(body.days, 1, 14, "Trip length");
@@ -144,6 +146,9 @@ export async function POST(request: Request) {
     });
     return pdfResponse(pdf, filename, "generated");
   } catch (error) {
+    if (error instanceof HttpRequestError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "The PDF could not be created.";
     console.error("[TripQuest PDF]", message);
     const isInputError = /destination|age|trip length|daily plans|day \d+ plan/i.test(message);

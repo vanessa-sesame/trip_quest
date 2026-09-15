@@ -117,11 +117,19 @@ function parseSources(value: unknown) {
     if (
       typeof source.title !== "string" ||
       typeof source.url !== "string" ||
-      !/^https?:\/\//i.test(source.url)
+      !source.title.trim() ||
+      source.title.length > 300 ||
+      source.url.length > 2_048
     ) {
       return [];
     }
-    return [{ title: source.title, url: source.url }];
+    try {
+      const url = new URL(source.url);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return [];
+      return [{ title: source.title.trim(), url: url.href }];
+    } catch {
+      return [];
+    }
   });
 
   return sources.length === value.length ? sources : null;
@@ -131,7 +139,7 @@ export function parseStoredResearch(value: string): StoredResearch | null {
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
     const sources = parseSources(parsed.sources);
-    if (typeof parsed.notes !== "string" || parsed.notes.length < 300 || !sources?.length) {
+    if (typeof parsed.notes !== "string" || parsed.notes.length < 300 || !sources || sources.length < 2) {
       return null;
     }
     return { notes: parsed.notes, sources };
@@ -393,4 +401,33 @@ export async function releaseGenerationLock(
     .prepare("DELETE FROM generation_locks WHERE cache_key = ? AND owner_id = ?")
     .bind(cacheKey, ownerId)
     .run();
+}
+
+export async function consumeGenerationRateLimit(
+  database: BookletDatabase,
+  clientKey: string,
+  now: number,
+  limit: number,
+  windowMilliseconds: number,
+) {
+  const windowStart = Math.floor(now / windowMilliseconds) * windowMilliseconds;
+  const result = await database
+    .prepare(
+      `INSERT INTO generation_rate_limits
+        (client_key, window_start, request_count, updated_at)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT(client_key) DO UPDATE SET
+        window_start = excluded.window_start,
+        request_count = CASE
+          WHEN generation_rate_limits.window_start = excluded.window_start
+          THEN generation_rate_limits.request_count + 1
+          ELSE 1
+        END,
+        updated_at = excluded.updated_at
+       WHERE generation_rate_limits.window_start != excluded.window_start
+          OR generation_rate_limits.request_count < ?`,
+    )
+    .bind(clientKey, windowStart, now, limit)
+    .run();
+  return Number(result.meta?.changes ?? 0) > 0;
 }

@@ -30,3 +30,10 @@ export const generationLocks = sqliteTable("generation_locks", {
   expiresAt: integer("expires_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const generationRateLimits = sqliteTable("generation_rate_limits", {
+  clientKey: text("client_key").primaryKey(),
+  windowStart: integer("window_start").notNull(),
+  requestCount: integer("request_count").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

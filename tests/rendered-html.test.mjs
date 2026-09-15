@@ -25,6 +25,8 @@ async function render() {
 test("server-renders the TripQuest generator", async () => {
   const response = await render();
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.match(response.headers.get("content-security-policy") || "", /object-src 'none'/);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();

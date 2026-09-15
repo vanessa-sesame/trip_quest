@@ -756,7 +756,7 @@ async function generateOne(testCase: BenchmarkCase, existingResults: BenchmarkRe
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-forwarded-for": `198.51.100.${testCase.id}`,
+            "cf-connecting-ip": `198.51.100.${testCase.id}`,
           },
           body: JSON.stringify(testCase),
         }));

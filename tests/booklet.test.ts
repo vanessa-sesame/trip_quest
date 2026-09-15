@@ -195,6 +195,10 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.match(repairedMaps.dayPlans[0].activities[1].title, /route challenge/i);
   assert.equal(repairedMaps.dayPlans[1].activities[1].gameType, "scavenger_hunt");
   assert.match(repairedMaps.dayPlans[1].activities[1].body, /tick each box/i);
+
+  const oneLetterLabels = structuredClone(draft);
+  oneLetterLabels.dayPlans[0].activities[1].items[0].label = "A";
+  assert.doesNotThrow(() => validateBookletDraft(oneLetterLabels, 1, 7));
 });
 
 test("daily plans are normalized, padded, and length checked", () => {

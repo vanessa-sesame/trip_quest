@@ -305,7 +305,7 @@ export function validateBookletDraft(
           label: requireText(
             item.label,
             `Game item label on day ${dayIndex + 1}`,
-            2,
+            1,
             36,
           ),
           clue: requireText(

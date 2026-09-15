@@ -288,6 +288,246 @@ const cases: BenchmarkCase[] = [
       "Harbour",
     ],
   },
+  {
+    id: 21,
+    destination: "Walt Disney World, Orlando, USA",
+    age: 3,
+    days: 1,
+    placeScale: "Major city",
+    itinerary: ["Magic Kingdom"],
+  },
+  {
+    id: 22,
+    destination: "Koh Samui, Thailand",
+    age: 4,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Big Buddha", "Fisherman's Village"],
+  },
+  {
+    id: 23,
+    destination: "Venice, Italy",
+    age: 5,
+    days: 3,
+    placeScale: "Major city",
+    itinerary: ["Rialto Bridge", "Doge's Palace", "Burano"],
+  },
+  {
+    id: 24,
+    destination: "Aoraki / Mount Cook, New Zealand",
+    age: 6,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Hooker Valley Track", "Tasman Glacier"],
+  },
+  {
+    id: 25,
+    destination: "Lisbon, Portugal",
+    age: 7,
+    days: 4,
+    placeScale: "Major city",
+    itinerary: ["Tram 28", "Belem Tower", "Oceanario de Lisboa", ""],
+  },
+  {
+    id: 26,
+    destination: "Hobart, Australia",
+    age: 8,
+    days: 3,
+    placeScale: "Major city",
+    itinerary: ["MONA", "Salamanca Market", "Mount Wellington"],
+  },
+  {
+    id: 27,
+    destination: "Kigali, Rwanda",
+    age: 9,
+    days: 2,
+    placeScale: "Major city",
+    itinerary: ["Kigali Genocide Memorial", "Kimironko Market"],
+  },
+  {
+    id: 28,
+    destination: "Easter Island (Rapa Nui), Chile",
+    age: 10,
+    days: 4,
+    placeScale: "Small place",
+    itinerary: ["Ahu Tongariki", "Rano Raraku", "Anakena Beach", ""],
+  },
+  {
+    id: 29,
+    destination: "New Orleans, USA",
+    age: 11,
+    days: 5,
+    placeScale: "Major city",
+    itinerary: ["French Quarter", "City Park", "Mardi Gras World", "Garden District", ""],
+  },
+  {
+    id: 30,
+    destination: "Tromso, Norway",
+    age: 12,
+    days: 3,
+    placeScale: "Major city",
+    itinerary: ["Arctic Cathedral", "Polaria", "Fjellheisen Cable Car"],
+  },
+  {
+    id: 31,
+    destination: "Matera, Italy",
+    age: 13,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Sassi di Matera", "Casa Noha"],
+  },
+  {
+    id: 32,
+    destination: "Edinburgh, Scotland",
+    age: 14,
+    days: 6,
+    placeScale: "Major city",
+    itinerary: ["Edinburgh Castle", "Arthur's Seat", "National Museum of Scotland", "Leith", "", "Dean Village"],
+  },
+  {
+    id: 33,
+    destination: "Ubud, Bali, Indonesia",
+    age: 3,
+    days: 7,
+    placeScale: "Small place",
+    itinerary: ["Monkey Forest", "Tegallalang Rice Terrace", ""],
+  },
+  {
+    id: 34,
+    destination: "Quebec City, Canada",
+    age: 5,
+    days: 1,
+    placeScale: "Major city",
+    itinerary: ["Chateau Frontenac"],
+  },
+  {
+    id: 35,
+    destination: "Kotor, Montenegro",
+    age: 6,
+    days: 3,
+    placeScale: "Small place",
+    itinerary: ["Kotor Old Town", "San Giovanni Fortress", "Bay of Kotor"],
+  },
+  {
+    id: 36,
+    destination: "Hanoi, Vietnam",
+    age: 7,
+    days: 8,
+    placeScale: "Major city",
+    itinerary: ["Hoan Kiem Lake", "Temple of Literature", "Water Puppet Theatre", ""],
+  },
+  {
+    id: 37,
+    destination: "Rothenburg ob der Tauber, Germany",
+    age: 8,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Plonlein", "Medieval Town Walls"],
+  },
+  {
+    id: 38,
+    destination: "Buenos Aires, Argentina",
+    age: 9,
+    days: 4,
+    placeScale: "Major city",
+    itinerary: ["La Boca", "Recoleta Cemetery", "Teatro Colon", "San Telmo Market"],
+  },
+  {
+    id: 39,
+    destination: "Svalbard, Norway",
+    age: 10,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Svalbard Museum", "Global Seed Vault"],
+  },
+  {
+    id: 40,
+    destination: "Washington, D.C., USA",
+    age: 11,
+    days: 5,
+    placeScale: "Major city",
+    itinerary: ["National Air and Space Museum", "Lincoln Memorial", "Library of Congress", "National Mall", ""],
+  },
+  {
+    id: 41,
+    destination: "Essaouira, Morocco",
+    age: 12,
+    days: 3,
+    placeScale: "Small place",
+    itinerary: ["Skala de la Ville", "Essaouira Medina", "Fishing Harbour"],
+  },
+  {
+    id: 42,
+    destination: "Melbourne, Australia",
+    age: 13,
+    days: 10,
+    placeScale: "Major city",
+    itinerary: ["Federation Square", "Queen Victoria Market", "NGV International", "St Kilda", "", "Melbourne Museum"],
+  },
+  {
+    id: 43,
+    destination: "Galle, Sri Lanka",
+    age: 14,
+    days: 2,
+    placeScale: "Small place",
+    itinerary: ["Galle Fort", "Dutch Reformed Church"],
+  },
+  {
+    id: 44,
+    destination: "St. John's, Antigua and Barbuda",
+    age: 4,
+    days: 4,
+    placeScale: "Small place",
+    itinerary: ["Nelson's Dockyard", "Shirley Heights", ""],
+  },
+  {
+    id: 45,
+    destination: "Sao Paulo, Brazil",
+    age: 6,
+    days: 3,
+    placeScale: "Major city",
+    itinerary: ["Ibirapuera Park", "MASP", "Liberdade"],
+  },
+  {
+    id: 46,
+    destination: "San Jose, Costa Rica",
+    age: 8,
+    days: 14,
+    placeScale: "Major city",
+    itinerary: ["National Theatre", "Central Market", ""],
+  },
+  {
+    id: 47,
+    destination: "Meteora, Greece",
+    age: 10,
+    days: 1,
+    placeScale: "Small place",
+    itinerary: ["Monastery of Great Meteoron"],
+  },
+  {
+    id: 48,
+    destination: "Bishkek, Kyrgyzstan",
+    age: 12,
+    days: 4,
+    placeScale: "Major city",
+    itinerary: ["Ala-Too Square", "Osh Bazaar", "State History Museum", ""],
+  },
+  {
+    id: 49,
+    destination: "Lerwick, Shetland",
+    age: 7,
+    days: 3,
+    placeScale: "Small place",
+    itinerary: ["Shetland Museum", "Clickimin Broch", "Mareel"],
+  },
+  {
+    id: 50,
+    destination: "São Tomé, São Tomé and Príncipe",
+    age: 14,
+    days: 5,
+    placeScale: "Small place",
+    itinerary: ["Boca de Inferno", "Pico de Sao Tome", "Roça Agostinho Neto", "", "National Museum"],
+  },
 ];
 
 const modelPricing = {
@@ -295,7 +535,7 @@ const modelPricing = {
   "kimi-k2.6": { cachedInput: 0.16, uncachedInput: 0.95, output: 4 },
 } as const;
 const webSearchPrice = 0.005;
-const runName = process.env.BENCHMARK_RUN_NAME || "tripquest-20-place-benchmark";
+const runName = process.env.BENCHMARK_RUN_NAME || "tripquest-parent-50-uat";
 const selectedCaseIds = new Set(
   (process.env.BENCHMARK_CASE_IDS || cases.map((testCase) => testCase.id).join(","))
     .split(",")
@@ -682,17 +922,17 @@ saveResults(results, runStartedAt, openingBalanceUsd);
 try {
   for (const testCase of selectedCases) {
     if (results.some((result) => result.id === testCase.id && result.status === "passed")) {
-      console.log(`[${testCase.id}/20] already complete: ${testCase.destination}`);
+      console.log(`[${testCase.id}/50] already complete: ${testCase.destination}`);
       continue;
     }
     const priorIndex = results.findIndex((result) => result.id === testCase.id);
     if (priorIndex >= 0) results.splice(priorIndex, 1);
-    console.log(`[${testCase.id}/20] generating: ${testCase.destination}, age ${testCase.age}, ${testCase.days} days`);
+    console.log(`[${testCase.id}/50] generating: ${testCase.destination}, age ${testCase.age}, ${testCase.days} days`);
     const result = await generateOne(testCase, results);
     results.sort((left, right) => left.id - right.id);
     saveResults(results, runStartedAt, openingBalanceUsd);
     console.log(
-      `[${testCase.id}/20] ${result.status}: ${result.totalSeconds.toFixed(1)}s, $${result.calculatedCostUsd.toFixed(6)}, ${result.pdfPages} pages`,
+      `[${testCase.id}/50] ${result.status}: ${result.totalSeconds.toFixed(1)}s, $${result.calculatedCostUsd.toFixed(6)}, ${result.pdfPages} pages`,
     );
   }
 } finally {

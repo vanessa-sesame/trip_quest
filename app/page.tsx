@@ -38,7 +38,10 @@ import {
   GenerationStreamError,
   readGenerationResponse,
 } from "./generation-stream";
-import { isBookletPageLocked } from "./booklet-preview";
+import {
+  FULL_PREVIEW_FOR_TESTERS,
+  isBookletPageLocked,
+} from "./booklet-preview";
 
 type SampleAge = 5 | 7;
 
@@ -60,16 +63,28 @@ const destinationSuggestions = [
   "Chongqing",
 ];
 
-const samplePreviewTitles: Record<SampleAge, string[]> = {
+const samplePageTitles: Record<SampleAge, string[]> = {
   5: [
     "Cover",
     "Grown-up guide",
     "Merlion Face Finder",
+    "MRT Color Parade",
+    "Hawker Rainbow Hunt",
+    "Garden Move & Match",
+    "Shophouse Shape Party",
+    "Memory Gallery",
+    "Certificate",
   ],
   7: [
     "Cover",
     "Grown-up guide",
     "Merlion Myth Lab",
+    "MRT Route Codebreaker",
+    "Hawker Centre Reporter",
+    "Tropical City Engineer",
+    "Neighborhood Pattern Archive",
+    "Memory Museum",
+    "Certificate",
   ],
 };
 
@@ -127,7 +142,7 @@ export default function Home() {
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
-    ? samplePreviewTitles[trip.age]
+    ? samplePageTitles[trip.age]
     : null;
   const isSingaporeSample =
     generatedBooklet === null &&
@@ -145,10 +160,9 @@ export default function Home() {
     [generatedBooklet, trip.age, destinationName, trip.days],
   );
   const pageTitles = isSingaporeSample && sampleTitles
-    ? [
-        ...sampleTitles,
-        ...Array.from({ length: 6 }, () => "Locked printable page"),
-      ]
+    ? sampleTitles.map((title, index) =>
+        isBookletPageLocked(index) ? "Locked printable page" : title,
+      )
     : [
         "Cover",
         "Explorer guide",
@@ -159,11 +173,14 @@ export default function Home() {
         "Certificate",
       ];
   const outlineItems = (isSingaporeSample && sampleTitles
-    ? [sampleTitles[2], ...Array.from({ length: 4 }, () => "")]
+    ? sampleTitles.slice(2, 7)
     : generatedDays.map((day) => day.theme)
   ).map((title, index) => ({
-    title: index === 0 ? title : "Included in full booklet",
-    locked: index > 0,
+    title:
+      !FULL_PREVIEW_FOR_TESTERS && index > 0
+        ? "Included in full booklet"
+        : title,
+    locked: !FULL_PREVIEW_FOR_TESTERS && index > 0,
   }));
   const currentPage = clampPage(page, pageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);

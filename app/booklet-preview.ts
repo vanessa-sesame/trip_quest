@@ -2,6 +2,7 @@ import type { Activity } from "./booklet";
 import type { GeneratedBookletData } from "./booklet-ai";
 
 export const FREE_PREVIEW_PAGE_COUNT = 3;
+export const FULL_PREVIEW_FOR_TESTERS = true;
 
 const lockedItems = [
   { label: "Locked", clue: "Included in the printable booklet." },
@@ -21,13 +22,19 @@ function lockedActivity(): Activity {
   };
 }
 
-export function isBookletPageLocked(pageIndex: number) {
-  return pageIndex >= FREE_PREVIEW_PAGE_COUNT;
+export function isBookletPageLocked(
+  pageIndex: number,
+  fullPreview = FULL_PREVIEW_FOR_TESTERS,
+) {
+  return !fullPreview && pageIndex >= FREE_PREVIEW_PAGE_COUNT;
 }
 
 export function createBookletPreview(
   booklet: GeneratedBookletData,
+  fullPreview = FULL_PREVIEW_FOR_TESTERS,
 ): GeneratedBookletData {
+  if (fullPreview) return booklet;
+
   return {
     ...booklet,
     dayPlans: booklet.dayPlans.map((day, dayIndex) => ({
@@ -40,7 +47,7 @@ export function createBookletPreview(
           : "Included in the complete printable booklet.",
       activities: day.activities.map((activity, activityIndex) => {
         const pageIndex = 2 + dayIndex * 2 + activityIndex;
-        return isBookletPageLocked(pageIndex)
+        return isBookletPageLocked(pageIndex, false)
           ? lockedActivity()
           : activity;
       }),

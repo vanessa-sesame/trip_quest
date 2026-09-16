@@ -14,16 +14,28 @@ test("only the first three booklet pages are exposed in a public preview", () =>
     .flatMap((day) => day.activities)
     .slice(1)
     .map((activity) => activity.title);
-  const preview = createBookletPreview(booklet);
+  const preview = createBookletPreview(booklet, false);
   const serialized = JSON.stringify(preview);
 
   assert.equal(FREE_PREVIEW_PAGE_COUNT, 3);
-  assert.equal(isBookletPageLocked(2), false);
-  assert.equal(isBookletPageLocked(3), true);
+  assert.equal(isBookletPageLocked(2, false), false);
+  assert.equal(isBookletPageLocked(3, false), true);
   assert.deepEqual(preview.dayPlans[0].activities[0], firstActivity);
   assert.equal(preview.dayPlans[0].activities[1].title, "Locked printable page");
   assert.equal(preview.dayPlans[1].theme, "Day 2 adventure");
   for (const title of privateTitles) {
     assert.equal(serialized.includes(title), false, `preview leaked ${title}`);
   }
+});
+
+test("tester mode exposes every page without changing the stored booklet", () => {
+  const booklet = sampleGeneratedBooklet();
+  const preview = createBookletPreview(booklet);
+
+  assert.equal(isBookletPageLocked(8), false);
+  assert.equal(preview, booklet);
+  assert.equal(
+    preview.dayPlans[1].activities[0].title,
+    booklet.dayPlans[1].activities[0].title,
+  );
 });

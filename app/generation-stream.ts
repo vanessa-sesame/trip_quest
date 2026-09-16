@@ -47,9 +47,10 @@ function encodeEvent(event: StreamEvent, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
-export function createGenerationStreamResponse<T>(
+export function createGenerationStreamResponse<T, TResult = T>(
   task: GenerationTask<T>,
   errorMessage: (error: unknown) => string,
+  transformResult: (result: T) => TResult = (result) => result as unknown as TResult,
 ) {
   const encoder = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -89,7 +90,7 @@ export function createGenerationStreamResponse<T>(
         }, 4_000);
 
         void task.promise
-          .then((result) => send("complete", result))
+          .then((result) => send("complete", transformResult(result)))
           .catch((error) => send("error", { message: errorMessage(error) }))
           .finally(() => {
             cleanUp();

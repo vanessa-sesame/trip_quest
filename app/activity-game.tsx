@@ -126,10 +126,19 @@ function MazeBoard({ activity, age, items }: { activity: Activity; age: number; 
 }
 
 function MatchingBoard({ items }: { items: GameItem[] }) {
+  const clues = [...items].reverse();
   return (
     <div className="matching-board">
-      <div>{items.map((item, index) => <span key={item.label}>{index + 1}. {item.label}</span>)}</div>
-      <div>{[...items].reverse().map((item, index) => <span key={item.clue}>{String.fromCharCode(65 + index)}. {item.clue}</span>)}</div>
+      {items.map((item, index) => (
+        <div className="matching-row" key={`${index}-${item.label}`}>
+          <span className="matching-term">
+            <b>{index + 1}.</b> {item.label}
+          </span>
+          <span className="matching-clue">
+            <b>{String.fromCharCode(65 + index)}.</b> {clues[index]?.clue ?? ""}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -237,7 +246,13 @@ function MapBoard({ activity, age, items }: { activity: Activity; age: number; i
 function ChecklistBoard({ items }: { items: GameItem[] }) {
   return (
     <div className="checklist-board">
-      {items.map((item) => <span key={item.label}><i aria-hidden="true" /> <strong>{item.label}</strong> {item.clue}</span>)}
+      {items.map((item, index) => (
+        <div className="checklist-row" key={`${index}-${item.label}`}>
+          <i aria-hidden="true" />
+          <strong>{item.label}</strong>
+          <span>{item.clue}</span>
+        </div>
+      ))}
     </div>
   );
 }

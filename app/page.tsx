@@ -38,6 +38,7 @@ import {
   GenerationStreamError,
   readGenerationResponse,
 } from "./generation-stream";
+import { isBookletPageLocked } from "./booklet-preview";
 
 type SampleAge = 5 | 7;
 
@@ -59,28 +60,16 @@ const destinationSuggestions = [
   "Chongqing",
 ];
 
-const samplePageTitles: Record<SampleAge, string[]> = {
+const samplePreviewTitles: Record<SampleAge, string[]> = {
   5: [
     "Cover",
     "Grown-up guide",
     "Merlion Face Finder",
-    "MRT Color Parade",
-    "Hawker Rainbow Hunt",
-    "Garden Move & Match",
-    "Shophouse Shape Party",
-    "Memory Gallery",
-    "Certificate",
   ],
   7: [
     "Cover",
     "Grown-up guide",
     "Merlion Myth Lab",
-    "MRT Route Codebreaker",
-    "Hawker Centre Reporter",
-    "Tropical City Engineer",
-    "Neighborhood Pattern Archive",
-    "Memory Museum",
-    "Certificate",
   ],
 };
 
@@ -138,7 +127,7 @@ export default function Home() {
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
-    ? samplePageTitles[trip.age]
+    ? samplePreviewTitles[trip.age]
     : null;
   const isSingaporeSample =
     generatedBooklet === null &&
@@ -156,7 +145,10 @@ export default function Home() {
     [generatedBooklet, trip.age, destinationName, trip.days],
   );
   const pageTitles = isSingaporeSample && sampleTitles
-    ? sampleTitles
+    ? [
+        ...sampleTitles,
+        ...Array.from({ length: 6 }, () => "Locked printable page"),
+      ]
     : [
         "Cover",
         "Explorer guide",
@@ -166,10 +158,15 @@ export default function Home() {
         "Memory Museum",
         "Certificate",
       ];
-  const outlineItems = isSingaporeSample && sampleTitles
-    ? sampleTitles.slice(2, 7)
-    : generatedDays.map((day) => day.theme);
+  const outlineItems = (isSingaporeSample && sampleTitles
+    ? [sampleTitles[2], ...Array.from({ length: 4 }, () => "")]
+    : generatedDays.map((day) => day.theme)
+  ).map((title, index) => ({
+    title: index === 0 ? title : "Included in full booklet",
+    locked: index > 0,
+  }));
   const currentPage = clampPage(page, pageTitles.length);
+  const currentPageLocked = isBookletPageLocked(currentPage);
 
   async function handleGenerate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -568,7 +565,15 @@ export default function Home() {
             </button>
 
             <div className="paper-frame">
-              {isSingaporeSample ? (
+              {currentPageLocked ? (
+                <LockedPreviewPage
+                  pageNumber={currentPage + 1}
+                  onUnlock={() => {
+                    setCheckoutNote("");
+                    setCheckoutOpen(true);
+                  }}
+                />
+              ) : isSingaporeSample ? (
                 <Image
                   src={`/booklets/singapore-age-${trip.age}-page-${currentPage + 1}.png`}
                   alt={`${pageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
@@ -586,12 +591,6 @@ export default function Home() {
                   days={generatedDays}
                 />
               )}
-              {currentPage > 2 && !fullscreen ? (
-                <div className="preview-lock" aria-label="Page included in the paid PDF">
-                  <LockKeyhole size={18} />
-                  Included in printable PDF
-                </div>
-              ) : null}
             </div>
 
             <button
@@ -606,36 +605,41 @@ export default function Home() {
           </div>
 
           <div className="page-status">
-            <strong>{pageTitles[currentPage]}</strong>
+            <strong>
+              {currentPageLocked ? "Locked printable page" : pageTitles[currentPage]}
+            </strong>
             <span>
               {currentPage + 1} / {pageTitles.length}
             </span>
           </div>
 
           <div className="thumbnail-strip" aria-label="Booklet pages">
-            {pageTitles.map((pageTitle, index) => (
-              <button
-                className={index === currentPage ? "thumbnail active" : "thumbnail"}
-                key={`${pageTitle}-${index}`}
-                type="button"
-                aria-label={`Open ${pageTitle}`}
-                aria-current={index === currentPage ? "page" : undefined}
-                onClick={() => setPage(index)}
-              >
-                {isSingaporeSample ? (
-                  <Image
-                    src={`/booklets/singapore-age-${trip.age}-page-${index + 1}.png`}
-                    alt=""
-                    fill
-                    sizes="43px"
-                    unoptimized
-                  />
-                ) : (
-                  <span>{index + 1}</span>
-                )}
-                {index > 2 ? <LockKeyhole size={12} aria-hidden="true" /> : null}
-              </button>
-            ))}
+            {pageTitles.map((pageTitle, index) => {
+              const locked = isBookletPageLocked(index);
+              return (
+                <button
+                  className={`thumbnail${index === currentPage ? " active" : ""}${locked ? " locked" : ""}`}
+                  key={`${pageTitle}-${index}`}
+                  type="button"
+                  aria-label={locked ? `Open locked page ${index + 1}` : `Open ${pageTitle}`}
+                  aria-current={index === currentPage ? "page" : undefined}
+                  onClick={() => setPage(index)}
+                >
+                  {isSingaporeSample && !locked ? (
+                    <Image
+                      src={`/booklets/singapore-age-${trip.age}-page-${index + 1}.png`}
+                      alt=""
+                      fill
+                      sizes="43px"
+                      unoptimized
+                    />
+                  ) : (
+                    <span>{index + 1}</span>
+                  )}
+                  {locked ? <LockKeyhole size={12} aria-hidden="true" /> : null}
+                </button>
+              );
+            })}
           </div>
 
           <div className="purchase-bar">
@@ -670,9 +674,12 @@ export default function Home() {
         </div>
         <ol>
           {outlineItems.map((item, index) => (
-            <li key={item}>
+            <li className={item.locked ? "outline-item-locked" : undefined} key={`${index}-${item.title}`}>
               <span>{index + 1}</span>
-              <strong>{item}</strong>
+              <strong>
+                {item.locked ? <LockKeyhole size={13} aria-hidden="true" /> : null}
+                {item.title}
+              </strong>
             </li>
           ))}
         </ol>
@@ -748,6 +755,27 @@ export default function Home() {
         </div>
       ) : null}
     </main>
+  );
+}
+
+function LockedPreviewPage({
+  pageNumber,
+  onUnlock,
+}: {
+  pageNumber: number;
+  onUnlock: () => void;
+}) {
+  return (
+    <article className="generated-sheet locked-preview-page">
+      <LockKeyhole size={30} aria-hidden="true" />
+      <span>Full booklet</span>
+      <h3>Page {pageNumber}</h3>
+      <p>Included in the printable PDF</p>
+      <button type="button" onClick={onUnlock}>
+        <Download size={14} aria-hidden="true" />
+        Unlock PDF
+      </button>
+    </article>
   );
 }
 

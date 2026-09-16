@@ -605,22 +605,6 @@ p {
   right: 18px;
 }
 
-.preview-lock {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--ink);
-  border-radius: 5px;
-  background: rgba(255, 253, 247, 0.94);
-  color: var(--ink);
-  font-size: 0.67rem;
-  font-weight: 900;
-  padding: 7px 9px;
-}
-
 .page-status {
   display: flex;
   align-items: center;
@@ -669,6 +653,14 @@ p {
 
 .thumbnail.active {
   border: 3px solid var(--coral);
+}
+
+.thumbnail.locked {
+  background: #eef0e8;
+}
+
+.thumbnail.locked > span {
+  color: var(--ink);
 }
 
 .thumbnail img {
@@ -780,6 +772,17 @@ p {
   overflow-wrap: anywhere;
   font-size: 0.8rem;
   line-height: 1.35;
+}
+
+.trip-outline li.outline-item-locked strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.trip-outline li.outline-item-locked svg {
+  flex: 0 0 auto;
 }
 
 .research-strip {
@@ -941,6 +944,46 @@ p {
 .generated-sheet p {
   font-size: 0.64rem;
   line-height: 1.45;
+}
+
+.locked-preview-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border-top: 8px solid var(--coral);
+  text-align: center;
+}
+
+.locked-preview-page > svg {
+  margin-bottom: 8%;
+  color: var(--coral);
+}
+
+.locked-preview-page h3 {
+  margin: 4% 0 2%;
+  font-size: 1.35rem;
+}
+
+.locked-preview-page p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.locked-preview-page button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 10%;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: var(--coral);
+  color: var(--white);
+  font-size: 0.58rem;
+  font-weight: 900;
+  padding: 0 12px;
 }
 
 .generated-cover {
@@ -1258,23 +1301,28 @@ p {
 .matching-board {
   display: grid;
   min-height: 54px;
-  grid-template-columns: 0.8fr 1.2fr;
-  gap: 4px;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   padding-top: 9px;
 }
 
-.matching-board > div {
+.matching-row {
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 4px;
+  border-bottom: 1px dotted var(--line);
 }
 
-.matching-board span {
-  overflow: hidden;
-  border-bottom: 1px dotted var(--line);
+.matching-row span {
+  min-width: 0;
   font-size: 0.28rem;
   line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.matching-row b {
+  color: var(--teal-dark);
 }
 
 .bingo-board {
@@ -1483,21 +1531,26 @@ p {
   padding-top: 7px;
 }
 
-.checklist-board > span {
+.checklist-row {
   display: grid;
-  grid-template-columns: 8px auto 1fr;
-  align-items: center;
+  grid-template-columns: 8px minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
   gap: 3px;
-  overflow: hidden;
+  border-bottom: 1px dotted var(--line);
   font-size: 0.27rem;
   line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.checklist-board i {
+.checklist-row strong,
+.checklist-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checklist-row i {
   width: 7px;
   height: 7px;
+  margin-top: 1px;
   border: 1px solid var(--ink);
 }
 
@@ -1771,12 +1824,12 @@ p {
 
 .generated-game-page .draw-board > strong,
 .generated-game-page .draw-board > small,
-.generated-game-page .matching-board span,
+.generated-game-page .matching-row span,
 .generated-game-page .bingo-board span,
 .generated-game-page .code-board small,
 .generated-game-page .code-board i,
 .generated-game-page .map-board strong,
-.generated-game-page .checklist-board > span,
+.generated-game-page .checklist-row,
 .generated-game-page .quiz-board > strong,
 .generated-game-page .quiz-board span,
 .generated-game-page .story-board strong {
@@ -1812,17 +1865,33 @@ p {
 }
 
 .generated-game-page .checklist-board {
-  gap: 7%;
+  align-content: stretch;
+  gap: 0;
+  padding-top: 4%;
 }
 
-.generated-game-page .checklist-board > span {
-  grid-template-columns: 15px auto 1fr;
-  white-space: normal;
+.generated-game-page .checklist-row {
+  grid-template-columns: 15px minmax(0, 0.78fr) minmax(0, 1.22fr);
+  align-items: start;
+  gap: 6px;
+  padding: 4% 0;
 }
 
-.generated-game-page .checklist-board i {
+.generated-game-page .checklist-row i {
   width: 13px;
   height: 13px;
+}
+
+.generated-game-page .matching-board {
+  align-content: stretch;
+  gap: 0;
+  padding-top: 4%;
+}
+
+.generated-game-page .matching-row {
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 6%;
+  padding: 4% 0;
 }
 
 .generated-game-page .story-board {
@@ -2110,11 +2179,6 @@ p {
 
   .unlock-button {
     width: 100%;
-  }
-
-  .preview-lock {
-    max-width: 120px;
-    line-height: 1.2;
   }
 
   .checkout-modal {

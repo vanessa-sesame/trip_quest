@@ -29,6 +29,7 @@ import {
   readJsonObject,
   requireInteger,
 } from "../../request-security";
+import { createBookletPreview } from "../../booklet-preview";
 import {
   type GenerationTask,
   createGenerationStreamResponse,
@@ -904,7 +905,7 @@ export async function POST(request: Request) {
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
     if (cached) {
-      return Response.json(cached, {
+      return Response.json(createBookletPreview(cached), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "memory",
@@ -918,7 +919,7 @@ export async function POST(request: Request) {
         expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
         value: stored,
       }, MAX_MEMORY_BOOKLET_ENTRIES);
-      return Response.json(stored, {
+      return Response.json(createBookletPreview(stored), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "durable",
@@ -1110,7 +1111,11 @@ export async function POST(request: Request) {
         () => undefined,
       ),
     );
-    return createGenerationStreamResponse(task, generationErrorMessage);
+    return createGenerationStreamResponse(
+      task,
+      generationErrorMessage,
+      createBookletPreview,
+    );
   } catch (error) {
     if (error instanceof HttpRequestError) {
       return Response.json({ error: error.message }, { status: error.status });

@@ -28,6 +28,21 @@ test("generation progress streams before the completed result", async () => {
   assert.ok(progress.includes("Designing age-specific games…"));
 });
 
+test("generation streams can redact the completed result", async () => {
+  const task = createGenerationTask("Starting…", async () => ({
+    preview: "safe",
+    privateAnswer: "do not send",
+  }));
+  const response = createGenerationStreamResponse(
+    task,
+    () => "Generation failed",
+    (result) => ({ preview: result.preview }),
+  );
+
+  const result = await readGenerationResponse(response, () => undefined);
+  assert.deepEqual(result, { preview: "safe" });
+});
+
 test("a streamed generation error is not treated as a connection failure", async () => {
   const task = createGenerationTask("Starting…", async () => {
     throw new Error("upstream detail");

@@ -13,7 +13,7 @@
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "pdf:sample": "node --experimental-strip-types scripts/create-pdf-sample.ts",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --experimental-strip-types --test tests/booklet.test.ts tests/storage.test.ts tests/request-security.test.ts tests/generation-stream.test.ts tests/pdf.test.ts tests/rendered-html.test.mjs",
+    "test": "npm run build && node --experimental-strip-types --test tests/booklet.test.ts tests/booklet-preview.test.ts tests/storage.test.ts tests/request-security.test.ts tests/generation-stream.test.ts tests/pdf.test.ts tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

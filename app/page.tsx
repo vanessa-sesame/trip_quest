@@ -155,6 +155,7 @@ export default function Home() {
   );
   const [children, setChildren] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
   const [familyDraft, setFamilyDraft] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
+  const [interestInputs, setInterestInputs] = useState<Record<string, string>>({});
   const [familyPanelOpen, setFamilyPanelOpen] = useState(false);
   const [familyStatus, setFamilyStatus] = useState("");
   const [familyLoading, setFamilyLoading] = useState(true);
@@ -256,11 +257,34 @@ export default function Home() {
       avoid: [...child.avoid],
       preferredMechanics: [...child.preferredMechanics],
     })));
+    setInterestInputs({});
     setFamilyPanelOpen(true);
   }
 
+  function addInterest(childId: string, rawValue = interestInputs[childId] || "") {
+    const tags = parseFamilyTags(rawValue);
+    if (!tags.length) return;
+    setFamilyDraft((current) => current.map((child) => child.id === childId
+      ? { ...child, interests: parseFamilyTags([...child.interests, ...tags].join(",")) }
+      : child));
+    setInterestInputs((current) => ({ ...current, [childId]: "" }));
+  }
+
+  function removeInterest(childId: string, interest: string) {
+    setFamilyDraft((current) => current.map((child) => child.id === childId
+      ? { ...child, interests: child.interests.filter((item) => item !== interest) }
+      : child));
+  }
+
   async function saveFamilyProfiles() {
-    const normalized = normalizeFamilyChildren(familyDraft);
+    const withPendingInterests = familyDraft.map((child) => ({
+      ...child,
+      interests: parseFamilyTags([
+        ...child.interests,
+        ...(parseFamilyTags(interestInputs[child.id] || "")),
+      ].join(",")),
+    }));
+    const normalized = normalizeFamilyChildren(withPendingInterests);
     setChildren(normalized);
     setAge(normalized[0]?.age || age);
     setFamilyNeedsRegeneration(true);
@@ -1001,10 +1025,68 @@ export default function Home() {
                       <option value="confident-reader">Confident reader</option>
                     </select>
                   </label>
-                  <label>
-                    <span>Mission interests</span>
-                    <input value={child.interests.join(", ")} placeholder="dinosaurs, drawing, trains" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, interests: parseFamilyTags(event.target.value) } : item))} />
-                  </label>
+                  <div className="interest-editor">
+                    <div className="interest-editor-heading">
+                      <div>
+                        <span className="profile-label">What does this child love?</span>
+                        <small>Each interest becomes a real game lens, clue, or drawing mission.</small>
+                      </div>
+                      <span className="interest-count">{child.interests.length}/8</span>
+                    </div>
+                    <div className="interest-input-row">
+                      <input
+                        id={`interest-${child.id}`}
+                        value={interestInputs[child.id] || ""}
+                        placeholder="Type one, e.g. dinosaurs"
+                        maxLength={32}
+                        aria-label={`Add an interest for ${familyChildDisplayName(child, index)}`}
+                        onChange={(event) => setInterestInputs((current) => ({ ...current, [child.id]: event.target.value }))}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
+                            event.preventDefault();
+                            addInterest(child.id);
+                          }
+                        }}
+                      />
+                      <button
+                        className="icon-button interest-add-button"
+                        type="button"
+                        aria-label="Add interest"
+                        title="Add interest"
+                        disabled={!parseFamilyTags(interestInputs[child.id] || "").length || child.interests.length >= 8}
+                        onClick={() => addInterest(child.id)}
+                      >
+                        <Plus size={17} />
+                      </button>
+                    </div>
+                    <small className="field-help">Press Enter or tap + after each interest. Try the examples below.</small>
+                    <small className="field-help">Brand names become original generic themes; official characters and logos are not generated.</small>
+                    {child.interests.length ? (
+                      <div className="interest-tag-list" aria-label="Saved interests">
+                        {child.interests.map((interest) => (
+                          <span className="interest-tag" key={interest}>
+                            {interest}
+                            <button type="button" aria-label={`Remove interest ${interest}`} onClick={() => removeInterest(child.id, interest)}>
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="interest-suggestions" aria-label="Interest examples">
+                      {["dinosaurs", "drawing", "trains", "animals", "space"].map((suggestion) => (
+                        <button
+                          className="interest-suggestion"
+                          type="button"
+                          key={suggestion}
+                          disabled={child.interests.includes(suggestion) || child.interests.length >= 8}
+                          onClick={() => addInterest(child.id, suggestion)}
+                        >
+                          + {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <label>
                     <span>Things to avoid</span>
                     <input value={child.avoid.join(", ")} placeholder="writing, loud places" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, avoid: parseFamilyTags(event.target.value) } : item))} />
@@ -1209,6 +1291,18 @@ function GeneratedPage({
       <h3>{activity.title}</h3>
       <small className="game-kind">{activity.kind}</small>
       <p className="game-instructions">{activity.body}</p>
+      {day.interestHook ? (
+        <div className="day-callout interest-callout">
+          <strong>Interest lens</strong>
+          <span>{day.interestHook}</span>
+        </div>
+      ) : null}
+      {day.siblingMission ? (
+        <div className="day-callout sibling-callout">
+          <strong>Family relay</strong>
+          <span>{day.siblingMission}</span>
+        </div>
+      ) : null}
       <ActivityGame activity={activity} age={age} />
       <i>{activity.prompt}</i>
     </article>

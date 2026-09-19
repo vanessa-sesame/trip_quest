@@ -8,6 +8,7 @@ import {
 } from "../app/booklet.ts";
 import {
   applyInterestPlan,
+  applySiblingPlan,
   allowedGameTypesForAge,
   balancedGameTypePlanForTrip,
   normalizeItinerary,
@@ -162,7 +163,18 @@ test("AI booklet validation requires the requested day count and unique activiti
     interest: "dinosaurs",
   }]);
   assert.match(personalized.dayPlans[0].mission, /reminds you of dinosaurs/i);
+  assert.match(personalized.dayPlans[0].interestHook || "", /Dinosaur lens/i);
+  const withSiblingMission = applySiblingPlan(personalized, true);
+  assert.match(withSiblingMission.dayPlans[0].siblingMission || "", /Swap roles/i);
   assert.ok(personalized.dayPlans[0].mission.length <= 360);
+
+  const branded = applyInterestPlan(valid, [{
+    day: 1,
+    childNumber: 1,
+    interest: "Pokemon",
+  }]);
+  assert.doesNotMatch(branded.dayPlans[0].mission, /Pokemon/i);
+  assert.match(branded.dayPlans[0].interestHook || "", /creature-collecting/i);
   assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7));
   assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7, [{
     day: 1,

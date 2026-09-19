@@ -164,6 +164,7 @@ export type BookletDraft = {
 function dayUsesInterest(day: DayPlan, interest: string) {
   const visibleText = [
     day.mission,
+    day.interestHook,
     ...day.activities.flatMap((activity) => [
       activity.title,
       ...(activity.items || []).flatMap((item) => [item.label, item.clue]),
@@ -172,8 +173,46 @@ function dayUsesInterest(day: DayPlan, interest: string) {
   return visibleText.includes(interest.toLocaleLowerCase());
 }
 
+const protectedInterestLabels: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bpokemon\b/i, label: "a creature-collecting adventure" },
+  { pattern: /\bdisney\b/i, label: "an animated fairy-tale adventure" },
+  { pattern: /\bmarvel\b/i, label: "an original hero mission" },
+  { pattern: /\blego\b/i, label: "a colorful building challenge" },
+  { pattern: /\bbarbie\b/i, label: "a fashion-and-design adventure" },
+  { pattern: /\bminecraft\b/i, label: "a block-building survival adventure" },
+  { pattern: /\bstar\s+wars\b/i, label: "an original space-opera adventure" },
+  { pattern: /\bharry\s+potter\b/i, label: "an original wizard-school mystery" },
+  { pattern: /\bpeppa\s+pig\b/i, label: "a friendly animal-family story" },
+  { pattern: /\bpaw\s+patrol\b/i, label: "a teamwork rescue mission" },
+];
+
+function outputInterestLabel(interest: string) {
+  return protectedInterestLabels.find(({ pattern }) => pattern.test(interest))?.label || interest.trim();
+}
+
+function interestHookFor(interest: string) {
+  const safeInterest = outputInterestLabel(interest);
+  const normalized = interest.toLocaleLowerCase();
+  if (/dinosaur|dino/.test(normalized)) {
+    return `Dinosaur lens: compare one local shape, texture, scale, or habitat clue with how a dinosaur detective might notice tracks and survival clues.`;
+  }
+  if (/draw|art|paint|craft/.test(normalized)) {
+    return `Drawing lens: study one real local shape or pattern, then turn its lines, textures, and colors into an original sketch.`;
+  }
+  if (/train|transport|car|vehicle|rocket/.test(normalized)) {
+    return `Movement lens: follow one local route or machine detail and explain how its shape, sequence, or job helps people get somewhere.`;
+  }
+  if (/animal|bird|insect|nature|space|science/.test(normalized)) {
+    return `Discovery lens: look for one real local clue connected to ${safeInterest}, then record what you observed and what you can reasonably infer.`;
+  }
+  return `Interest lens: use ${safeInterest} as a creative comparison for one real local detail, then explain what matches and what is different.`;
+}
+
 function addInterestLens(mission: string, interest: string) {
-  const lens = `Find one shape, sound, or movement that reminds you of ${interest}.`;
+  const safeInterest = outputInterestLabel(interest);
+  const lens = safeInterest === interest.trim()
+    ? `Find one shape, sound, or movement that reminds you of ${interest}.`
+    : `Find one shape, sound, or movement that fits ${safeInterest}.`;
   const maximumBaseLength = Math.max(20, 360 - lens.length - 1);
   const base = mission
     .slice(0, maximumBaseLength)
@@ -194,14 +233,34 @@ export function applyInterestPlan(
       const globalDay = dayOffset + localDayIndex + 1;
       const interests = interestPlan.filter((item) => item.day === globalDay);
       let mission = day.mission;
+      let interestHook = day.interestHook;
       for (const item of interests) {
         const candidate = { ...day, mission };
         if (!dayUsesInterest(candidate, item.interest)) {
           mission = addInterestLens(mission, item.interest);
         }
+        if (!interestHook || !interestHook.toLocaleLowerCase().includes(item.interest.toLocaleLowerCase())) {
+          interestHook = interestHookFor(item.interest);
+        }
       }
-      return mission === day.mission ? day : { ...day, mission };
+      return mission === day.mission && interestHook === day.interestHook
+        ? day
+        : { ...day, mission, interestHook };
     }),
+  };
+}
+
+export function applySiblingPlan(draft: BookletDraft, hasSiblings: boolean): BookletDraft {
+  return {
+    ...draft,
+    dayPlans: draft.dayPlans.map((day) => day.siblingMission?.trim()
+      ? day
+      : {
+          ...day,
+          siblingMission: hasSiblings
+            ? "Family relay: one explorer spots, counts, or draws a detail while the other reads the clue or explains why it matters. Swap roles and combine both answers into one family discovery."
+            : "Family relay: show a grown-up one detail, hear their observation, then add one new idea of your own to make a shared trip discovery.",
+        }),
   };
 }
 
@@ -519,7 +578,7 @@ export function validateBookletDraft(
       };
     });
 
-    return {
+    const normalizedDay: DayPlan = {
       day: dayIndex + 1,
       theme: requireText(day.theme, `Day ${dayIndex + 1} theme`, 4, 80),
       focusLabel: requireText(
@@ -536,6 +595,23 @@ export function validateBookletDraft(
       ),
       activities,
     };
+    if (typeof day.interestHook === "string") {
+      normalizedDay.interestHook = requireText(
+        day.interestHook,
+        `Day ${dayIndex + 1} interest lens`,
+        12,
+        260,
+      );
+    }
+    if (typeof day.siblingMission === "string") {
+      normalizedDay.siblingMission = requireText(
+        day.siblingMission,
+        `Day ${dayIndex + 1} family relay`,
+        12,
+        280,
+      );
+    }
+    return normalizedDay;
   });
 
   return { profile, dayPlans };

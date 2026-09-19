@@ -35,6 +35,8 @@ export type DayPlan = {
   theme: string;
   focusLabel: string;
   mission: string;
+  interestHook?: string;
+  siblingMission?: string;
   activities: Activity[];
 };
 

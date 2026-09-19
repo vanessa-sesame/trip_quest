@@ -6,7 +6,7 @@ import {
 } from "./booklet-ai.ts";
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
-export const BOOKLET_CACHE_VERSION = "booklet-2026-09-19-3";
+export const BOOKLET_CACHE_VERSION = "booklet-2026-09-19-4";
 
 type D1Value = string | number | null;
 
@@ -62,6 +62,7 @@ export type BookletCacheIdentity = {
   researchModel: string;
   composerModel: string;
   familyContext?: string;
+  familySize?: number;
 };
 
 const encoder = new TextEncoder();
@@ -99,6 +100,7 @@ export async function createBookletCacheKey(identity: BookletCacheIdentity) {
     researchModel: identity.researchModel,
     composerModel: identity.composerModel,
     familyContext: identity.familyContext || "",
+    familySize: identity.familySize || 1,
   });
 }
 

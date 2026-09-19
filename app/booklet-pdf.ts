@@ -1199,11 +1199,51 @@ function drawActivityPage(
     color: colors.muted,
   });
 
+  let gameHeight = 388;
+  if (activityIndex === 0 && (day.interestHook || day.siblingMission)) {
+    const callouts = [
+      day.interestHook ? { label: "INTEREST LENS", text: day.interestHook, color: colors.blueSoft, ink: colors.blue } : null,
+      day.siblingMission ? { label: "FAMILY RELAY", text: day.siblingMission, color: colors.coralSoft, ink: colors.coral } : null,
+    ].filter((callout): callout is { label: string; text: string; color: RGB; ink: RGB } => Boolean(callout));
+    const bandHeight = callouts.length > 1 ? 82 : 44;
+    const bandTop = 548;
+    const bandBottom = bandTop - bandHeight;
+    page.drawRectangle({
+      x: MARGIN,
+      y: bandBottom,
+      width: PAGE_WIDTH - MARGIN * 2,
+      height: bandHeight,
+      color: colors.white,
+      borderColor: colors.softLine,
+      borderWidth: 1,
+    });
+    let calloutY = bandTop - 14;
+    callouts.forEach((callout) => {
+      page.drawText(callout.label, {
+        x: MARGIN + 12,
+        y: calloutY,
+        size: 7,
+        font: fonts.bold,
+        color: callout.ink,
+      });
+      calloutY = drawWrappedText(page, callout.text, fonts, {
+        x: MARGIN + 12,
+        y: calloutY - 11,
+        size: 7.5,
+        maxWidth: PAGE_WIDTH - MARGIN * 2 - 24,
+        maxLines: callouts.length > 1 ? 2 : 3,
+        lineHeight: 9,
+        color: colors.muted,
+      }) - 4;
+    });
+    gameHeight = Math.max(275, bandBottom - 18 - 154);
+  }
+
   drawGame(page, fonts, activity, booklet.age, {
     x: MARGIN,
     y: 154,
     width: PAGE_WIDTH - MARGIN * 2,
-    height: 388,
+    height: gameHeight,
   });
 
   page.drawRectangle({

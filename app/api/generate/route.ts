@@ -6,6 +6,7 @@ import {
   type GameTypePlanItem,
   type GeneratedBookletData,
   applyInterestPlan,
+  applySiblingPlan,
   allowedGameTypesForAge,
   balancedGameTypePlanForTrip,
   normalizeItinerary,
@@ -686,6 +687,8 @@ function bookletSchema(days: number, age: number) {
             theme: { type: "string" },
             focusLabel: { type: "string" },
             mission: { type: "string" },
+            interestHook: { type: "string" },
+            siblingMission: { type: "string" },
             activities: {
               type: "array",
               minItems: 2,
@@ -693,7 +696,7 @@ function bookletSchema(days: number, age: number) {
               items: activitySchema,
             },
           },
-          required: ["day", "theme", "focusLabel", "mission", "activities"],
+          required: ["day", "theme", "focusLabel", "mission", "interestHook", "siblingMission", "activities"],
         },
       },
     },
@@ -711,6 +714,7 @@ async function composeBookletBatch(
   apiKey: string,
   model: string,
   familyContext: string,
+  hasSiblings: boolean,
   balancePlan: string,
   gameTypePlan: GameTypePlanItem[],
   interestPlan: InterestPlanItem[],
@@ -765,6 +769,9 @@ FAMILY BRIEF
 ${familyContext}
 Use the lead child's exact age for the main booklet. When there are siblings, make the instructions naturally shareable but include a short adaptation cue so a younger child can point, draw, or count while an older child can read, infer, compare, or explain. Never include child names in the booklet.
 
+FAMILY CO-OPERATION
+There ${hasSiblings ? "are siblings sharing this booklet" : "is one lead explorer; a grown-up can be the partner"}. Return a concrete siblingMission for every day. It must describe a real interaction, not a generic instruction: assign different roles, include a role swap or shared result, and make both children contribute. A younger explorer should be able to point, draw, count, or choose; an older explorer should be able to read, decode, compare, explain, or record. Keep the interaction connected to that day's local subject and activity.
+
 BALANCED QUEST PLAN
 ${balancePlan}
 Use the listed mechanics as the intended mix. Do not use the same mechanic as the only meaningful action on consecutive days.
@@ -775,7 +782,10 @@ Use these exact gameType values in this exact activity order. This schedule has 
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
-For every assigned interest, make that exact interest phrase visibly appear in the day's mission, an activity title, or a game-item clue. Let it shape how the child observes or plays, not just an introductory sentence. Keep the real destination central, and never claim the interest subject is locally present or officially connected unless the research says so.
+For every assigned interest, return an interestHook that makes the interest the actual subject of one observation or game choice. Do not merely say “look for” the interest. For example, a dinosaur interest can drive a comparison of local scale, shapes, textures, tracks, habitats, or deep history without claiming dinosaurs are locally present; a drawing interest can drive a composition or visual-recording mission; a train interest can drive route, sequence, engineering, or station-pattern noticing. Also make the exact interest phrase visibly appear in the day's mission, an activity title, or a game-item clue when it is safe to do so. Keep the real destination central.
+
+BRAND AND COPYRIGHT SAFETY
+An interest may contain a brand, character, franchise, logo, or protected title. Treat it as a private preference, not as permission to copy. Do not reproduce character names beyond the user's input, logos, slogans, catchphrases, plot lines, official artwork, or recognizable character likenesses. Turn branded interests into an original generic theme such as “monster-collecting adventure”, “animated castle story”, or “space-hero mission”, and keep every game, illustration, and clue original. Never imply sponsorship or an official connection. Never claim the branded subject is present at the destination unless the research supports a real public attraction.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
@@ -840,7 +850,10 @@ ${research.notes}`,
         age,
         localGameTypePlan,
       );
-      return applyInterestPlan(draft, assignedInterests, dayOffset);
+      return applySiblingPlan(
+        applyInterestPlan(draft, assignedInterests, dayOffset),
+        hasSiblings,
+      );
     } catch (error) {
       lastError = error;
       correction = `The previous booklet could not be accepted: ${error instanceof Error ? error.message : "invalid output"} Return a complete replacement JSON booklet. Keep every item label non-empty; word-puzzle labels must be unique 3-to-9-letter local words.`;
@@ -880,6 +893,7 @@ async function composeBooklet(
   apiKey: string,
   model: string,
   familyContext: string,
+  hasSiblings: boolean,
   balancePlan: string,
   gameTypePlan: GameTypePlanItem[],
   interestPlan: InterestPlanItem[],
@@ -903,6 +917,7 @@ async function composeBooklet(
       apiKey,
       model,
       familyContext,
+      hasSiblings,
       balancePlan,
       gameTypePlan,
       interestPlan,
@@ -916,7 +931,7 @@ async function composeBooklet(
     }))),
   });
   const validated = validateBookletDraft(combined, days, age, gameTypePlan);
-  return applyInterestPlan(validated, interestPlan);
+  return applySiblingPlan(applyInterestPlan(validated, interestPlan), hasSiblings);
 }
 
 function generationErrorMessage(error: unknown) {
@@ -954,6 +969,7 @@ export async function POST(request: Request) {
     const itinerary = normalizeItinerary(body.itinerary, days);
     const family = normalizeFamilyChildren(body.family);
     const familyContext = familyPromptSummary(family);
+    const hasSiblings = family.length > 1;
     const balancePlan = mechanicPlanForTrip(family, days)
       .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
       .join("\n");
@@ -970,6 +986,7 @@ export async function POST(request: Request) {
       researchModel,
       composerModel,
       familyContext,
+      familySize: family.length,
     };
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
@@ -1123,6 +1140,7 @@ export async function POST(request: Request) {
               apiKey,
               composerModel,
               familyContext,
+              hasSiblings,
               balancePlan,
               gameTypePlan,
               interestPlan,

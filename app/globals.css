@@ -1151,6 +1151,110 @@ p {
   padding: 0 9px;
 }
 
+.interest-editor {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--pale-yellow);
+  padding: 10px;
+}
+
+.interest-editor-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.interest-editor-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.interest-editor-heading small,
+.field-help {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-transform: none;
+}
+
+.interest-count {
+  color: var(--teal-dark);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.interest-input-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.interest-input-row input {
+  flex: 1;
+  background: var(--white);
+}
+
+.interest-add-button {
+  flex: 0 0 auto;
+  min-width: 38px;
+  min-height: 38px;
+  border-color: var(--teal);
+  color: var(--teal-dark);
+}
+
+.interest-add-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.interest-tag-list,
+.interest-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.interest-tag,
+.interest-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--teal);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--teal-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 6px 8px;
+}
+
+.interest-tag button {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.interest-suggestion {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.interest-suggestion:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .mechanic-picker {
   display: flex;
   flex-wrap: wrap;
@@ -2002,6 +2106,33 @@ p {
   margin: 3% 0 2%;
   font-size: 0.52rem;
   line-height: 1.38;
+}
+
+.day-callout {
+  display: grid;
+  gap: 2px;
+  margin: 2% 0;
+  border-left: 3px solid var(--teal);
+  background: var(--pale-blue);
+  padding: 5px 7px;
+  font-size: 0.46rem;
+  line-height: 1.3;
+}
+
+.day-callout strong {
+  color: var(--teal-dark);
+  font-size: 0.41rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.day-callout.sibling-callout {
+  border-left-color: var(--coral);
+  background: var(--pale-coral);
+}
+
+.day-callout.sibling-callout strong {
+  color: var(--coral);
 }
 
 .generated-game-page > i {

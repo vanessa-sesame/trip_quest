@@ -7,6 +7,7 @@ import {
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-19-6";
+export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-19-2";
 
 type D1Value = string | number | null;
 
@@ -109,7 +110,7 @@ export function bookletArtifactKey(cacheKey: string) {
 }
 
 export function bookletPdfKey(cacheKey: string) {
-  return `booklets/${BOOKLET_CACHE_VERSION}/${cacheKey}/booklet.pdf`;
+  return `booklets/${BOOKLET_PDF_CACHE_VERSION}/${cacheKey}/booklet.pdf`;
 }
 
 function parseSources(value: unknown) {
@@ -337,6 +338,7 @@ export async function readStoredBookletPdf(
     .bind(cacheKey, now)
     .first<{ pdfKey: string }>();
   if (!row) return null;
+  if (!row.pdfKey.startsWith(`booklets/${BOOKLET_PDF_CACHE_VERSION}/`)) return null;
 
   const artifact = await artifacts.get(row.pdfKey);
   if (!artifact?.arrayBuffer) return null;
@@ -364,7 +366,7 @@ export async function writeStoredBookletPdf(
     },
     customMetadata: {
       filename: input.filename,
-      version: BOOKLET_CACHE_VERSION,
+      version: BOOKLET_PDF_CACHE_VERSION,
     },
   });
   await database

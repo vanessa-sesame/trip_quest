@@ -694,7 +694,7 @@ p {
 
 .paper-frame {
   position: relative;
-  width: min(360px, 100%);
+  width: min(520px, 100%);
   max-width: 100%;
   aspect-ratio: 210 / 297;
   container-type: inline-size;
@@ -706,7 +706,7 @@ p {
 }
 
 .paper-frame.zoomed {
-  width: calc(360px * var(--preview-zoom, 1));
+  width: calc(520px * var(--preview-zoom, 1));
   max-width: none;
 }
 
@@ -2910,12 +2910,12 @@ p {
   }
 
   .paper-frame {
-    width: min(400px, 100%);
+    width: min(520px, 100%);
     max-width: 100%;
   }
 
   .paper-frame.zoomed {
-    width: calc(400px * var(--preview-zoom, 1));
+    width: calc(520px * var(--preview-zoom, 1));
     max-width: none;
   }
 

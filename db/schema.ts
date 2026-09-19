@@ -43,3 +43,17 @@ export const familyWorkspaces = sqliteTable("family_workspaces", {
   workspaceJson: text("workspace_json").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const purchaseEntitlements = sqliteTable("purchase_entitlements", {
+  purchaseId: text("purchase_id").primaryKey(),
+  checkoutSessionId: text("checkout_session_id").notNull().unique(),
+  familyId: text("family_id").notNull(),
+  cacheKey: text("cache_key").notNull(),
+  requestJson: text("request_json").notNull(),
+  status: text("status").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  currency: text("currency").notNull(),
+  pdfKey: text("pdf_key"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

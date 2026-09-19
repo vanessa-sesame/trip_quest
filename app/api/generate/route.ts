@@ -974,8 +974,8 @@ export async function POST(request: Request) {
     const balancePlan = mechanicPlanForTrip(family, days)
       .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
       .join("\n");
-    const gameTypePlan = balancedGameTypePlanForTrip(age, days);
     const interestPlan = interestPlanForTrip(family, days);
+    const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan);
     const runtime = await getRuntimeEnvironment();
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
     const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";

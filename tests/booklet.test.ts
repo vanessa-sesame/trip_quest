@@ -293,6 +293,39 @@ test("AI game schedules maximize variety and never repeat the four-stop map", ()
   }
 });
 
+test("family interests decide whether drawing is included and where it lands", () => {
+  const noDrawing = balancedGameTypePlanForTrip(5, 6, [{ day: 1, childNumber: 1, interest: "dinosaurs" }]);
+  assert.equal(noDrawing.some((day) => day.gameTypes.includes("drawing")), false);
+
+  const withDrawing = balancedGameTypePlanForTrip(5, 6, [
+    { day: 1, childNumber: 1, interest: "dinosaurs" },
+    { day: 4, childNumber: 2, interest: "drawing" },
+  ]);
+  assert.equal(withDrawing[3].gameTypes.includes("drawing"), true);
+  assert.equal(withDrawing.filter((day) => day.gameTypes.includes("drawing")).length, 1);
+});
+
+test("named sibling missions use richer roles and match sketch work to the interested child", () => {
+  const missions = applySiblingPlan({
+    profile: { style: "Local", intro: "A local trip.", word: "hello", etiquette: "Be kind." },
+    dayPlans: Array.from({ length: 3 }, (_, index) => ({
+      day: index + 1,
+      theme: "A local place",
+      focusLabel: "Notice",
+      mission: "Find one useful local clue and share what it means.",
+      activities: [],
+    })),
+  }, [
+    { id: "a", name: "Edwin", age: 5, readingLevel: "pre-reader", interests: ["dinosaurs"], avoid: [], preferredMechanics: [] },
+    { id: "b", name: "Chris", age: 7, readingLevel: "early-reader", interests: ["drawing"], avoid: [], preferredMechanics: [] },
+    { id: "c", name: "Vanessa", age: 12, readingLevel: "confident-reader", interests: [], avoid: [], preferredMechanics: [] },
+  ]);
+  assert.match(missions.dayPlans[0].siblingMission || "", /Scout|Storyteller/);
+  assert.match(missions.dayPlans[0].siblingMission || "", /Edwin|Chris|Vanessa/);
+  assert.match(missions.dayPlans[1].siblingMission || "", /Chris \/ Sketcher/);
+  assert.doesNotMatch(JSON.stringify(missions), /younger sibling|older sibling/i);
+});
+
 test("printable puzzle builders use supplied place vocabulary", () => {
   const search = createWordSearch(["Merlion", "Orchid", "Hawker", "MRT"], "Singapore");
   const containsWord = (word: string) => {

@@ -130,7 +130,25 @@ const TEEN_GAME_PLAN: Array<[GameType, GameType]> = [
   ["drawing", "scavenger_hunt"],
 ];
 
-export function balancedGameTypePlanForTrip(age: number, days: number): GameTypePlanItem[] {
+function drawingInterestPresent(interestPlan: InterestPlanItem[]) {
+  return interestPlan.some((item) => /draw|art|paint|craft|sketch/i.test(item.interest));
+}
+
+function replaceUnwantedDrawing(gameTypes: [GameType, GameType], age: number, previous: GameType | undefined) {
+  const replacements = age <= 5
+    ? ["matching", "story", "scavenger_hunt", "bingo", "spot_the_difference", "maze"] as GameType[]
+    : age <= 8
+      ? ["matching", "quiz", "scavenger_hunt", "bingo", "spot_the_difference", "story"] as GameType[]
+      : ["quiz", "scavenger_hunt", "story", "codebreaker", "word_search", "crossword"] as GameType[];
+  const replacement = replacements.find((candidate) => candidate !== previous && allowedGameTypesForAge(age).includes(candidate));
+  return replacement || replacements.find((candidate) => allowedGameTypesForAge(age).includes(candidate)) || gameTypes[0];
+}
+
+export function balancedGameTypePlanForTrip(
+  age: number,
+  days: number,
+  interestPlan?: InterestPlanItem[],
+): GameTypePlanItem[] {
   const plan = age <= 5
     ? YOUNG_GAME_PLAN
     : age <= 8
@@ -138,7 +156,49 @@ export function balancedGameTypePlanForTrip(age: number, days: number): GameType
       : age <= 11
         ? INVESTIGATOR_GAME_PLAN
         : TEEN_GAME_PLAN;
-  return plan.slice(0, Math.max(0, Math.min(14, days))).map((gameTypes, index) => ({
+  const selected = plan.slice(0, Math.max(0, Math.min(14, days))).map((gameTypes) => [...gameTypes] as [GameType, GameType]);
+  // The default helper remains age-balanced for older callers. Generated family
+  // editions pass the interest plan so a drawing page is intentional, not filler.
+  if (interestPlan) {
+    const hasDrawingInterest = drawingInterestPresent(interestPlan);
+    let previous: GameType | undefined;
+    selected.forEach((gameTypes) => {
+      for (let index = 0; index < gameTypes.length; index += 1) {
+        if (gameTypes[index] === "drawing" && !hasDrawingInterest) {
+          gameTypes[index] = replaceUnwantedDrawing(gameTypes, age, previous);
+        }
+        previous = gameTypes[index];
+      }
+    });
+
+    if (hasDrawingInterest) {
+      const targetDay = interestPlan.find((item) => /draw|art|paint|craft|sketch/i.test(item.interest))?.day;
+      if (targetDay && selected[targetDay - 1]) {
+        const existingDrawingDay = selected.findIndex((gameTypes) => gameTypes.includes("drawing"));
+        if (existingDrawingDay >= 0 && existingDrawingDay !== targetDay - 1) {
+          const targetIndex = selected[targetDay - 1].findIndex((gameType) => gameType !== "drawing");
+          const sourceIndex = selected[existingDrawingDay].findIndex((gameType) => gameType === "drawing");
+          if (targetIndex >= 0 && sourceIndex >= 0) {
+            [selected[targetDay - 1][targetIndex], selected[existingDrawingDay][sourceIndex]] = [
+              selected[existingDrawingDay][sourceIndex],
+              selected[targetDay - 1][targetIndex],
+            ];
+          }
+        }
+        selected.forEach((gameTypes, index) => {
+          if (index === targetDay - 1) return;
+          for (let slot = 0; slot < gameTypes.length; slot += 1) {
+            if (gameTypes[slot] === "drawing") gameTypes[slot] = replaceUnwantedDrawing(gameTypes, age, gameTypes[slot - 1]);
+          }
+        });
+        if (!selected[targetDay - 1].includes("drawing")) {
+          selected[targetDay - 1][0] = "drawing";
+        }
+      }
+    }
+  }
+
+  return selected.map((gameTypes, index) => ({
     day: index + 1,
     gameTypes,
   }));
@@ -252,26 +312,91 @@ export function applyInterestPlan(
   };
 }
 
-const siblingRoleVerbs = [
-  ["spots", "explains", "draws", "checks", "asks", "presents"],
-  ["sketches", "decodes", "counts", "compares", "questions", "shares"],
-  ["counts", "sorts", "maps", "records", "tests", "reports"],
-  ["leads", "looks", "marks", "checks", "chooses", "guides"],
-  ["asks", "finds", "draws", "connects", "explains", "summarizes"],
-  ["collects", "selects", "labels", "verifies", "remembers", "presents"],
+const namedSiblingRolePatterns = [
+  {
+    roles: [
+      ["Scout", "spots one local detail"],
+      ["Storyteller", "explains its clue"],
+      ["Question maker", "asks why it matters"],
+      ["Evidence keeper", "saves the proof"],
+      ["Route keeper", "chooses the next safe stop"],
+      ["Presenter", "shares the family answer"],
+    ],
+    handoff: "Swap roles at the next stop and combine your clues.",
+  },
+  {
+    roles: [
+      ["Sketcher", "turns one local shape into an original line"],
+      ["Decoder", "reads the clue and finds its evidence"],
+      ["Counter", "counts four useful details"],
+      ["Comparer", "checks what is alike and different"],
+      ["Question maker", "asks one curious why question"],
+      ["Presenter", "explains the final answer"],
+    ],
+    handoff: "Trade jobs for the last clue and share one result.",
+  },
+  {
+    roles: [
+      ["Collector", "gathers four tiny observations"],
+      ["Sorter", "groups the clues by pattern"],
+      ["Checker", "tests the answer against the place"],
+      ["Map keeper", "marks where the clue was found"],
+      ["Reporter", "records the strongest evidence"],
+      ["Presenter", "tells the trip story"],
+    ],
+    handoff: "Compare everyone’s evidence before choosing one family answer.",
+  },
+  {
+    roles: [
+      ["Route keeper", "chooses the next safe family stop"],
+      ["Lookout", "watches for the named local clue"],
+      ["Landmark finder", "points to the useful marker"],
+      ["Time keeper", "calls the quiet swap"],
+      ["Question maker", "asks what the route reveals"],
+      ["Guide", "leads the family explanation"],
+    ],
+    handoff: "Swap who leads the check before moving on.",
+  },
+  {
+    roles: [
+      ["Question maker", "asks a why-or-how question"],
+      ["Evidence keeper", "finds a detail that helps answer it"],
+      ["Pattern finder", "spots a connection"],
+      ["Illustrator", "marks the clue with a symbol"],
+      ["Fact checker", "separates noticing from guessing"],
+      ["Presenter", "builds one shared conclusion"],
+    ],
+    handoff: "Join the question and evidence into one family conclusion.",
+  },
+  {
+    roles: [
+      ["Collector", "gathers four observations"],
+      ["Selector", "chooses the strongest clue"],
+      ["Label maker", "gives it a clear name"],
+      ["Verifier", "checks it against the real place"],
+      ["Memory keeper", "remembers the best moment"],
+      ["Presenter", "explains why it matters"],
+    ],
+    handoff: "Switch roles for the last clue and make one family memory.",
+  },
 ];
-
-function joinNames(names: string[]) {
-  if (names.length < 2) return names[0] || "the explorer";
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
 
 function namedSiblingMission(children: FamilyChild[], dayIndex: number) {
   const names = children.map((child, index) => familyChildDisplayName(child, index).slice(0, 24));
-  const verbs = siblingRoleVerbs[dayIndex % siblingRoleVerbs.length];
-  const assignments = names.map((name, index) => `${name} ${verbs[index % verbs.length]}`);
-  return `${joinNames(assignments)}. Swap jobs at the next stop and share one family answer.`;
+  const pattern = namedSiblingRolePatterns[dayIndex % namedSiblingRolePatterns.length];
+  const available = names.map((_, index) => index);
+  const assignments = pattern.roles.slice(0, names.length).map(([label, action], roleIndex) => {
+    const preferred = /sketch|illustrat/i.test(label)
+      ? children.findIndex((child) => child.interests.some((interest) => /draw|art|paint|craft|sketch/i.test(interest)) || child.preferredMechanics.includes("draw"))
+      : -1;
+    const selected = preferred >= 0 && available.includes(preferred)
+      ? preferred
+      : available[roleIndex % Math.max(1, available.length)];
+    const availableIndex = available.indexOf(selected);
+    if (availableIndex >= 0) available.splice(availableIndex, 1);
+    return `${names[selected]} / ${label}: ${action}`;
+  });
+  return `${assignments.join("; ")}. ${pattern.handoff}`.slice(0, 280);
 }
 
 export function applySiblingPlan(

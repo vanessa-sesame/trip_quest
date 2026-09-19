@@ -141,7 +141,11 @@ export default function Home() {
   const [page, setPage] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [checkoutNote, setCheckoutNote] = useState("");
+  const [checkoutNote, setCheckoutNote] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("checkout") === "cancelled"
+      ? "Payment was cancelled. Your booklet is still here whenever you are ready."
+      : "",
+  );
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
   const [generatedBooklet, setGeneratedBooklet] =
     useState<GeneratedBookletData | null>(null);
@@ -165,8 +169,6 @@ export default function Home() {
   const [familyNeedsRegeneration, setFamilyNeedsRegeneration] = useState(false);
   const [itineraryText, setItineraryText] = useState("");
   const [structuredEvents, setStructuredEvents] = useState<ItineraryEvent[]>([]);
-  const [pdfReadyUrl, setPdfReadyUrl] = useState("");
-  const [pdfReadyFilename, setPdfReadyFilename] = useState("");
   const [previewZoom, setPreviewZoom] = useState(1);
 
   useEffect(() => {
@@ -189,12 +191,6 @@ export default function Home() {
       });
     return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pdfReadyUrl) URL.revokeObjectURL(pdfReadyUrl);
-    };
-  }, [pdfReadyUrl]);
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
@@ -433,56 +429,56 @@ export default function Home() {
     }
 
     setPdfState("generating");
-    setCheckoutNote("Preparing the print-quality pages…");
-    const pdfWindow = window.open("about:blank", "_blank");
+    setCheckoutNote("Opening secure checkout…");
     try {
-      const response = await fetch("/api/pdf", {
+      const requestPayload = JSON.stringify({
+        age: generatedBooklet.age,
+        days: generatedBooklet.days,
+        destination: generatedBooklet.destination,
+        itinerary: generatedBooklet.itinerary,
+        family: children,
+        events: structuredEvents,
+      });
+      const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          age: generatedBooklet.age,
-          days: generatedBooklet.days,
-          destination: generatedBooklet.destination,
-          itinerary: generatedBooklet.itinerary,
-          family: children,
-          events: structuredEvents,
-        }),
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: requestPayload,
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error || "The PDF could not be prepared.");
+        if (response.status === 503 && /payment|checkout|storage/i.test(payload.error || "")) {
+          const testResponse = await fetch("/api/pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: requestPayload,
+          });
+          if (testResponse.ok) {
+            const blob = await testResponse.blob();
+            const disposition = testResponse.headers.get("content-disposition") || "";
+            const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || "tripquest-booklet.pdf";
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            link.rel = "noopener";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+            setCheckoutNote("Test PDF downloaded. Secure checkout will appear after Stripe is connected.");
+            return;
+          }
+        }
+        throw new Error(payload.error || "Secure checkout could not be started.");
       }
-
-      const blob = await response.blob();
-      const disposition = response.headers.get("content-disposition") || "";
-      const filename = disposition.match(/filename="([^"]+)"/i)?.[1]
-        || `tripquest-${generatedBooklet.destination.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-age-${generatedBooklet.age}.pdf`;
-      const url = URL.createObjectURL(blob);
-      setPdfReadyUrl((previous) => {
-        if (previous) URL.revokeObjectURL(previous);
-        return url;
-      });
-      setPdfReadyFilename(filename);
-      if (pdfWindow) {
-        pdfWindow.location.href = url;
-      }
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.rel = "noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      setCheckoutNote(
-        "Your family pack is ready. Open the PDF tab, then use the browser share or download button to save it.",
-      );
+      const payload = (await response.json()) as { url?: string };
+      if (!payload.url) throw new Error("Secure checkout did not return a payment link.");
+      window.location.assign(payload.url);
     } catch (error) {
-      pdfWindow?.close();
       setCheckoutNote(
         error instanceof Error
           ? error.message
-          : "The PDF could not be prepared. Please try again.",
+          : "Secure checkout could not be started. Please try again.",
       );
     } finally {
       setPdfState("idle");
@@ -1018,16 +1014,10 @@ export default function Home() {
                 <LockKeyhole size={18} />
               )}
               {pdfState === "generating"
-                ? "Preparing printable PDF…"
-                : "Prepare family pack"}
+                ? "Opening secure checkout…"
+                : "Continue to secure payment"}
             </button>
             {checkoutNote ? <p className="checkout-note">{checkoutNote}</p> : null}
-            {pdfReadyUrl ? (
-              <a className="secondary-button pdf-open-button" href={pdfReadyUrl} target="_blank" rel="noreferrer">
-                <Download size={17} />
-                Open {pdfReadyFilename || "printable PDF"}
-              </a>
-            ) : null}
           </section>
         </div>
       ) : null}

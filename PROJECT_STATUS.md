@@ -15,8 +15,8 @@ trip length, optional family profiles, interests, and an optional itinerary.
 
 Live site: https://tripquestkids.com
 
-Current public release: Sites version 21, commit
-`351dbe9fb77497de81eb47a20318393e5cfe1868` on `main`.
+Current public release: Sites version 22, commit
+`28fa31aa4a1711403c5ef0162e357b69b34903f2` on `main`.
 
 ## Current User Experience
 
@@ -41,6 +41,11 @@ Current public release: Sites version 21, commit
 - A four-stop route-map puzzle is allowed at most once per booklet.
 - The printable family pack includes the booklet, parent guide, family mission
   map, mission cards, badge tracker, memory page, and certificate.
+- The web preview includes zoom controls for laptop and small-screen reading.
+- Avoid preferences use the same reliable add-and-remove tags as interests,
+  with a deliberately quieter visual treatment.
+- Pasted itineraries recognize named dates such as 10 April, April 10, and
+  numeric day/month dates, then group activities by date order.
 - Generated JSON and PDFs are saved for reuse.
 
 ## Important Launch State
@@ -140,7 +145,7 @@ git diff --check
 ```
 
 `npm test` performs a production build and runs the automated test suite. At
-this checkpoint there are 36 passing tests covering age behavior, destination
+this checkpoint there are 37 passing tests covering age behavior, destination
 variation, game validation, puzzles, family profiles, streaming, security,
 D1/R2 storage, and PDF generation.
 

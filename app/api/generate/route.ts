@@ -696,7 +696,7 @@ function bookletSchema(days: number, age: number) {
               items: activitySchema,
             },
           },
-          required: ["day", "theme", "focusLabel", "mission", "interestHook", "siblingMission", "activities"],
+          required: ["day", "theme", "focusLabel", "mission", "siblingMission", "activities"],
         },
       },
     },
@@ -783,7 +783,7 @@ Use these exact gameType values in this exact activity order. This schedule has 
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
-For every assigned interest, return an interestHook that makes the interest the actual subject of one observation or game choice. Do not merely say “look for” the interest. For example, a dinosaur interest can drive a comparison of local scale, shapes, textures, tracks, habitats, or deep history without claiming dinosaurs are locally present; a drawing interest can drive a composition or visual-recording mission; a train interest can drive route, sequence, engineering, or station-pattern noticing. Also make the exact interest phrase visibly appear in the day's mission, an activity title, or a game-item clue when it is safe to do so. Keep the real destination central.
+Only return an interestHook on days listed in the assigned interest schedule. Omit interestHook entirely on every other day; do not invent a generic lens and do not copy a lens from another day. For every assigned interest, return an interestHook that makes the interest the actual subject of one observation or game choice. Do not merely say “look for” the interest. For example, a dinosaur interest can drive a comparison of local scale, shapes, textures, tracks, habitats, or deep history without claiming dinosaurs are locally present; a drawing interest can drive a composition or visual-recording mission; a train interest can drive route, sequence, engineering, or station-pattern noticing. Also make the exact interest phrase visibly appear in the day's mission, an activity title, or a game-item clue when it is safe to do so. Keep the real destination central.
 
 BRAND AND COPYRIGHT SAFETY
 An interest may contain a brand, character, franchise, logo, or protected title. Treat it as a private preference, not as permission to copy. Do not reproduce character names beyond the user's input, logos, slogans, catchphrases, plot lines, official artwork, or recognizable character likenesses. Turn branded interests into an original generic theme such as “monster-collecting adventure”, “animated castle story”, or “space-hero mission”, and keep every game, illustration, and clue original. Never imply sponsorship or an official connection. Never claim the branded subject is present at the destination unless the research supports a real public attraction.

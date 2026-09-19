@@ -168,6 +168,20 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.match(withSiblingMission.dayPlans[0].siblingMission || "", /Swap roles/i);
   assert.ok(personalized.dayPlans[0].mission.length <= 360);
 
+  const repeatedDays = {
+    ...valid,
+    dayPlans: Array.from({ length: 3 }, (_, index) => ({
+      ...valid.dayPlans[0],
+      day: index + 1,
+      siblingMission: "Family relay: do the same thing again.",
+      interestHook: "Copied interest lens",
+    })),
+  };
+  const variedRoles = applySiblingPlan(repeatedDays, true);
+  assert.equal(new Set(variedRoles.dayPlans.map((day) => day.siblingMission)).size, 3);
+  const clearedLens = applyInterestPlan(repeatedDays, []);
+  assert.equal(clearedLens.dayPlans[0].interestHook, undefined);
+
   const branded = applyInterestPlan(valid, [{
     day: 1,
     childNumber: 1,

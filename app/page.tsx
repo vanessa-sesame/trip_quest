@@ -1382,16 +1382,20 @@ function GeneratedPage({
       <h3>{activity.title}</h3>
       <small className="game-kind">{activity.kind}</small>
       <p className="game-instructions">{activity.body}</p>
-      {day.interestHook ? (
-        <div className="day-callout interest-callout">
-          <strong>Interest lens</strong>
-          <span>{day.interestHook}</span>
-        </div>
-      ) : null}
-      {day.siblingMission ? (
-        <div className="day-callout sibling-callout">
-          <strong>Family relay</strong>
-          <span>{day.siblingMission}</span>
+      {activityIndex === 0 && (day.interestHook || day.siblingMission) ? (
+        <div className="day-briefing" aria-label="Daily family briefing">
+          {day.interestHook ? (
+            <p>
+              <strong>Interest lens</strong>
+              <span>{day.interestHook}</span>
+            </p>
+          ) : null}
+          {day.siblingMission ? (
+            <p className="family-briefing-line">
+              <strong>Family roles</strong>
+              <span>{day.siblingMission}</span>
+            </p>
+          ) : null}
         </div>
       ) : null}
       <ActivityGame activity={activity} age={age} />

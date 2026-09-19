@@ -1155,6 +1155,14 @@ function drawGame(page: PDFPage, fonts: Fonts, activity: Activity, age: number, 
   }
 }
 
+function compactDayCue(value: string, maximum = 118) {
+  const safe = pdfText(value);
+  if (safe.length <= maximum) return safe;
+  const clipped = safe.slice(0, maximum - 3);
+  const wordEnd = clipped.lastIndexOf(" ");
+  return `${clipped.slice(0, wordEnd > 0 ? wordEnd : clipped.length)}...`;
+}
+
 function drawActivityPage(
   document: PDFDocument,
   fonts: Fonts,
@@ -1201,42 +1209,25 @@ function drawActivityPage(
 
   let gameHeight = 388;
   if (activityIndex === 0 && (day.interestHook || day.siblingMission)) {
-    const callouts = [
-      day.interestHook ? { label: "INTEREST LENS", text: day.interestHook, color: colors.blueSoft, ink: colors.blue } : null,
-      day.siblingMission ? { label: "FAMILY RELAY", text: day.siblingMission, color: colors.coralSoft, ink: colors.coral } : null,
-    ].filter((callout): callout is { label: string; text: string; color: RGB; ink: RGB } => Boolean(callout));
-    const bandHeight = callouts.length > 1 ? 82 : 44;
-    const bandTop = 548;
-    const bandBottom = bandTop - bandHeight;
-    page.drawRectangle({
-      x: MARGIN,
-      y: bandBottom,
-      width: PAGE_WIDTH - MARGIN * 2,
-      height: bandHeight,
-      color: colors.white,
-      borderColor: colors.softLine,
-      borderWidth: 1,
-    });
-    let calloutY = bandTop - 14;
-    callouts.forEach((callout) => {
-      page.drawText(callout.label, {
-        x: MARGIN + 12,
-        y: calloutY,
+    // Keep the daily roles visible without putting a second card around the
+    // game. The old band squeezed puzzle layouts and made them look broken.
+    const cues = [
+      day.interestHook ? { label: "INTEREST", text: day.interestHook, color: colors.blue } : null,
+      day.siblingMission ? { label: "FAMILY ROLES", text: day.siblingMission, color: colors.coral } : null,
+    ].filter((cue): cue is { label: string; text: string; color: RGB } => Boolean(cue));
+    cues.forEach((cue, index) => {
+      const text = `${cue.label}: ${compactDayCue(cue.text)}`;
+      drawWrappedText(page, text, fonts, {
+        x: MARGIN,
+        y: 548 - index * 14,
         size: 7,
-        font: fonts.bold,
-        color: callout.ink,
+        font: fonts.regular,
+        maxWidth: PAGE_WIDTH - MARGIN * 2,
+        maxLines: 1,
+        color: cue.color,
       });
-      calloutY = drawWrappedText(page, callout.text, fonts, {
-        x: MARGIN + 12,
-        y: calloutY - 11,
-        size: 7.5,
-        maxWidth: PAGE_WIDTH - MARGIN * 2 - 24,
-        maxLines: callouts.length > 1 ? 2 : 3,
-        lineHeight: 9,
-        color: colors.muted,
-      }) - 4;
     });
-    gameHeight = Math.max(275, bandBottom - 18 - 154);
+    gameHeight = 360;
   }
 
   drawGame(page, fonts, activity, booklet.age, {

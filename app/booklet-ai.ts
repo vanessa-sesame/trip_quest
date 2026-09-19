@@ -233,7 +233,9 @@ export function applyInterestPlan(
       const globalDay = dayOffset + localDayIndex + 1;
       const interests = interestPlan.filter((item) => item.day === globalDay);
       let mission = day.mission;
-      let interestHook = day.interestHook;
+      // Models sometimes copy a valid lens onto every day. Only scheduled
+      // interest days should carry one into the child-facing layout.
+      let interestHook: string | undefined;
       for (const item of interests) {
         const candidate = { ...day, mission };
         if (!dayUsesInterest(candidate, item.interest)) {
@@ -251,16 +253,48 @@ export function applyInterestPlan(
 }
 
 export function applySiblingPlan(draft: BookletDraft, hasSiblings: boolean): BookletDraft {
+  const siblingMissionPatterns = [
+    {
+      withSiblings: "Scout and storyteller: one explorer spots the local detail while the other explains the clue. Swap roles before the next stop and combine both observations.",
+      solo: "Scout and storyteller: show a grown-up one local detail, hear their question, then add one observation of your own to make a shared discovery.",
+    },
+    {
+      withSiblings: "Sketcher and decoder: one explorer draws the shape or pattern while the other reads the clue and finds its local evidence. Trade jobs for the final answer.",
+      solo: "Sketcher and decoder: draw one local shape or pattern, then explain to a grown-up which clue it helps you solve.",
+    },
+    {
+      withSiblings: "Counter and comparer: one explorer counts or sorts what you see while the other compares the result with the page clue. Check the evidence together.",
+      solo: "Counter and comparer: count or sort four local details, then compare your result with the page clue with a grown-up.",
+    },
+    {
+      withSiblings: "Route keeper and lookout: one explorer chooses the next safe stop with a grown-up while the other watches for the named local clue. Swap who leads the check.",
+      solo: "Route keeper and lookout: choose the next safe stop with a grown-up, then watch for the named local clue and explain why it helped.",
+    },
+    {
+      withSiblings: "Question maker and evidence keeper: one explorer asks a why-or-how question while the other records a drawing, word, or detail that helps answer it. Build one shared conclusion.",
+      solo: "Question maker and evidence keeper: ask a why-or-how question, then record a drawing, word, or detail that helps answer it with a grown-up.",
+    },
+    {
+      withSiblings: "Collector and presenter: one explorer gathers four tiny observations while the other chooses the strongest and explains why it matters. Switch roles for the last clue.",
+      solo: "Collector and presenter: gather four tiny observations, then choose the strongest one and explain to a grown-up why it matters.",
+    },
+  ];
+  const seen = new Set<string>();
   return {
     ...draft,
-    dayPlans: draft.dayPlans.map((day) => day.siblingMission?.trim()
-      ? day
-      : {
-          ...day,
-          siblingMission: hasSiblings
-            ? "Family relay: one explorer spots, counts, or draws a detail while the other reads the clue or explains why it matters. Swap roles and combine both answers into one family discovery."
-            : "Family relay: show a grown-up one detail, hear their observation, then add one new idea of your own to make a shared trip discovery.",
-        }),
+    dayPlans: draft.dayPlans.map((day, index) => {
+      const existing = day.siblingMission?.trim();
+      const normalized = existing?.toLocaleLowerCase();
+      if (existing && normalized && !seen.has(normalized)) {
+        seen.add(normalized);
+        return day;
+      }
+
+      const pattern = siblingMissionPatterns[index % siblingMissionPatterns.length];
+      const siblingMission = hasSiblings ? pattern.withSiblings : pattern.solo;
+      seen.add(siblingMission.toLocaleLowerCase());
+      return { ...day, siblingMission };
+    }),
   };
 }
 

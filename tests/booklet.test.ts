@@ -21,6 +21,7 @@ import {
   createWordSearch,
   mazeSizeForAge,
 } from "../app/puzzles.ts";
+import { coloringSceneFor } from "../app/coloring.ts";
 
 function bookletText(age: number, destination: string) {
   return JSON.stringify(buildBooklet(age, destination, 5));
@@ -179,6 +180,13 @@ test("AI booklet validation requires the requested day count and unique activiti
   };
   const variedRoles = applySiblingPlan(repeatedDays, true);
   assert.equal(new Set(variedRoles.dayPlans.map((day) => day.siblingMission)).size, 3);
+  const namedFamily = applySiblingPlan(repeatedDays, [
+    { id: "a", name: "Mia", age: 5, readingLevel: "pre-reader", interests: [], avoid: [], preferredMechanics: [] },
+    { id: "b", name: "Leo", age: 8, readingLevel: "early-reader", interests: [], avoid: [], preferredMechanics: [] },
+    { id: "c", name: "Sam", age: 10, readingLevel: "independent-reader", interests: [], avoid: [], preferredMechanics: [] },
+  ]);
+  assert.match(namedFamily.dayPlans[0].siblingMission || "", /Mia|Leo|Sam/);
+  assert.doesNotMatch(JSON.stringify(namedFamily), /younger sibling|older sibling/i);
   const clearedLens = applyInterestPlan(repeatedDays, []);
   assert.equal(clearedLens.dayPlans[0].interestHook, undefined);
 
@@ -242,6 +250,15 @@ test("AI booklet validation requires the requested day count and unique activiti
   const oneLetterLabels = structuredClone(draft);
   oneLetterLabels.dayPlans[0].activities[1].items[0].label = "A";
   assert.doesNotThrow(() => validateBookletDraft(oneLetterLabels, 1, 7));
+});
+
+test("coloring scenes vary deterministically instead of repeating one drawing", () => {
+  const scenes = new Set(
+    ["Harbour", "Garden", "Bridge", "Market", "Mountain", "Temple", "Lantern"].map((title) =>
+      coloringSceneFor({ title, items: [{ label: "local", clue: "A local detail." }] }),
+    ),
+  );
+  assert.ok(scenes.size >= 4);
 });
 
 test("daily plans are normalized, padded, and length checked", () => {

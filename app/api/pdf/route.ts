@@ -1,4 +1,4 @@
-import { normalizeItinerary } from "../../booklet-ai";
+import { applySiblingPlan, normalizeItinerary } from "../../booklet-ai";
 import {
   familyPackPdfFilename,
   createBookletPdf,
@@ -126,6 +126,7 @@ export async function POST(request: Request) {
       researchModel: runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3",
       composerModel: runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6",
       familyContext,
+      familySize: family.length,
     };
     const cacheKey = await createBookletCacheKey(identity);
     const booklet = await readStoredBooklet(
@@ -141,28 +142,38 @@ export async function POST(request: Request) {
       );
     }
 
-    const filename = familyPackPdfFilename(booklet);
-    const stored = await readStoredBookletPdf(
-      runtime.DB,
-      runtime.BOOKLET_FILES,
-      cacheKey,
-    );
-    if (stored) return pdfResponse(stored.bytes, filename, "durable");
+    const personalizedBooklet = applySiblingPlan(booklet, family);
+    const filename = familyPackPdfFilename(personalizedBooklet);
+    // Family names are presentation data and are intentionally excluded from
+    // the shared booklet cache. Never serve a previously rendered family PDF
+    // to a different named family.
+    const reusablePdf = family.length <= 1;
+    if (reusablePdf) {
+      const stored = await readStoredBookletPdf(
+        runtime.DB,
+        runtime.BOOKLET_FILES,
+        cacheKey,
+      );
+      if (stored) return pdfResponse(stored.bytes, filename, "durable");
+    }
 
-    let job = pdfJobs.get(cacheKey);
+    const jobKey = `${cacheKey}:${family.map((child, index) => `${index}:${child.name}`).join("|")}`;
+    let job = pdfJobs.get(jobKey);
     if (!job) {
       const familyPack: FamilyPackContext = { children: family, events, mechanicsByDay };
-      job = createBookletPdf(booklet, familyPack);
-      pdfJobs.set(cacheKey, job);
-      void job.finally(() => pdfJobs.delete(cacheKey)).catch(() => undefined);
+      job = createBookletPdf(personalizedBooklet, familyPack);
+      pdfJobs.set(jobKey, job);
+      void job.finally(() => pdfJobs.delete(jobKey)).catch(() => undefined);
     }
     const pdf = await job;
-    await writeStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, {
-      cacheKey,
-      filename,
-      pdf,
-    });
-    return pdfResponse(pdf, filename, "generated");
+    if (reusablePdf) {
+      await writeStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, {
+        cacheKey,
+        filename,
+        pdf,
+      });
+    }
+    return pdfResponse(pdf, filename, reusablePdf ? "generated" : "family-generated");
   } catch (error) {
     if (error instanceof HttpRequestError) {
       return Response.json({ error: error.message }, { status: error.status });

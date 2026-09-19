@@ -1,5 +1,5 @@
 import type { DayPlan, GameType } from "./booklet";
-import type { InterestPlanItem } from "./family";
+import { familyChildDisplayName, type FamilyChild, type InterestPlanItem } from "./family.ts";
 import { createCrossword } from "./puzzles.ts";
 
 const supportedGameTypes: GameType[] = [
@@ -252,7 +252,34 @@ export function applyInterestPlan(
   };
 }
 
-export function applySiblingPlan(draft: BookletDraft, hasSiblings: boolean): BookletDraft {
+const siblingRoleVerbs = [
+  ["spots", "explains", "draws", "checks", "asks", "presents"],
+  ["sketches", "decodes", "counts", "compares", "questions", "shares"],
+  ["counts", "sorts", "maps", "records", "tests", "reports"],
+  ["leads", "looks", "marks", "checks", "chooses", "guides"],
+  ["asks", "finds", "draws", "connects", "explains", "summarizes"],
+  ["collects", "selects", "labels", "verifies", "remembers", "presents"],
+];
+
+function joinNames(names: string[]) {
+  if (names.length < 2) return names[0] || "the explorer";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function namedSiblingMission(children: FamilyChild[], dayIndex: number) {
+  const names = children.map((child, index) => familyChildDisplayName(child, index).slice(0, 24));
+  const verbs = siblingRoleVerbs[dayIndex % siblingRoleVerbs.length];
+  const assignments = names.map((name, index) => `${name} ${verbs[index % verbs.length]}`);
+  return `${joinNames(assignments)}. Swap jobs at the next stop and share one family answer.`;
+}
+
+export function applySiblingPlan(
+  draft: BookletDraft,
+  familyOrHasSiblings: FamilyChild[] | boolean,
+): BookletDraft {
+  const family = Array.isArray(familyOrHasSiblings) ? familyOrHasSiblings : null;
+  const hasSiblings = family ? family.length > 1 : familyOrHasSiblings;
   const siblingMissionPatterns = [
     {
       withSiblings: "Scout and storyteller: one explorer spots the local detail while the other explains the clue. Swap roles before the next stop and combine both observations.",
@@ -283,6 +310,9 @@ export function applySiblingPlan(draft: BookletDraft, hasSiblings: boolean): Boo
   return {
     ...draft,
     dayPlans: draft.dayPlans.map((day, index) => {
+      if (family && family.length > 1) {
+        return { ...day, siblingMission: namedSiblingMission(family, index) };
+      }
       const existing = day.siblingMission?.trim();
       const normalized = existing?.toLocaleLowerCase();
       if (existing && normalized && !seen.has(normalized)) {

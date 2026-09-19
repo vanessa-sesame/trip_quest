@@ -193,11 +193,11 @@ export function familyPromptSummary(children: FamilyChild[]) {
 
 export function familyChildDisplayName(child: FamilyChild, index: number) {
   const name = child.name.trim();
-  if (index === 0 && /^explorer(?:\s*1)?$/i.test(name)) return "Your child";
-  if (index > 0 && new RegExp(`^explorer(?:\\s*${index + 1})?$`, "i").test(name)) {
-    return `Sibling ${index}`;
+  if (index === 0 && /^(?:explorer|your child)(?:\s*1)?$/i.test(name)) return "Your child";
+  if (index > 0 && new RegExp(`^(?:explorer|sibling)(?:\\s*${index + 1})?$`, "i").test(name)) {
+    return `Explorer ${index + 1}`;
   }
-  return name || (index === 0 ? "Your child" : `Sibling ${index}`);
+  return name || (index === 0 ? "Your child" : `Explorer ${index + 1}`);
 }
 
 export function mechanicLabel(mechanic: QuestMechanic) {

@@ -30,7 +30,7 @@ test("server-renders the TripQuest generator", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>TripQuest \| Travel Booklets for Kids<\/title>/i);
+  assert.match(html, /<title>TripQuest Kids<\/title>/i);
   assert.match(html, /Build a trip they can hold onto/i);
   assert.match(html, /Create custom booklet/i);
   assert.match(html, /Customize daily plans/i);

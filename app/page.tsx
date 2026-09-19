@@ -517,7 +517,6 @@ export default function Home() {
               <p className="eyebrow">New booklet</p>
               <h1 id="builder-title">Build a trip they can hold onto.</h1>
             </div>
-            <span className="step-count">1 / 3</span>
           </div>
 
           <form
@@ -1041,7 +1040,7 @@ export default function Home() {
             </button>
             <p className="eyebrow">Saved family</p>
             <h2 id="family-title">Make every explorer count</h2>
-            <p className="modal-subtitle">The lead explorer is the same child as the age on the main form. Add siblings only when they are sharing this booklet.</p>
+            <p className="modal-subtitle">The lead explorer is the same child as the age on the main form. Add siblings only when they are sharing this booklet. Add each child’s real name or nickname so family missions can address everyone accurately.</p>
             <div className="family-profile-list">
               {familyDraft.map((child, index) => (
                 <article className="family-profile-card" key={child.id}>
@@ -1057,7 +1056,8 @@ export default function Home() {
                   <div className="profile-grid">
                     <label>
                       <span>Name or nickname</span>
-                      <input value={child.name} maxLength={40} onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, name: event.target.value } : item))} />
+                      <input value={child.name} placeholder={index === 0 ? "e.g. Maya" : "e.g. Leo"} maxLength={40} onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, name: event.target.value } : item))} />
+                      {index > 0 ? <small className="field-help">Used by the family relay and family pages.</small> : null}
                     </label>
                     <label>
                       <span>Age</span>

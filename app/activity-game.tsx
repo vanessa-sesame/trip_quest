@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Activity, GameItem, GameType } from "./booklet";
+import { coloringSceneFor } from "./coloring";
 import {
   createCrossword,
   createMaze,
@@ -32,10 +33,12 @@ const fallbackItems: GameItem[] = [
   { label: "Share", clue: "Tell your family what surprised you." },
 ];
 
-function DrawingBoard({ items, coloring }: { items: GameItem[]; coloring: boolean }) {
+function DrawingBoard({ activity, coloring }: { activity: Activity; coloring: boolean }) {
+  const items = activity.items;
+  const scene = coloringSceneFor(activity);
   return (
     <div className={coloring ? "draw-board coloring-board" : "draw-board"}>
-      <div className="line-art" aria-hidden="true">
+      <div className={`line-art scene-${scene}`} aria-hidden="true">
         <span />
         <span />
         <span />
@@ -285,8 +288,8 @@ export function ActivityGame({ activity, age }: { activity: Activity; age: numbe
   let board;
 
   switch (gameType) {
-    case "coloring": board = <DrawingBoard items={items} coloring />; break;
-    case "drawing": board = <DrawingBoard items={items} coloring={false} />; break;
+    case "coloring": board = <DrawingBoard activity={activity} coloring />; break;
+    case "drawing": board = <DrawingBoard activity={activity} coloring={false} />; break;
     case "word_search": board = <WordSearchBoard activity={activity} age={age} items={items} />; break;
     case "crossword": board = <CrosswordBoard items={items} />; break;
     case "maze": board = <MazeBoard activity={activity} age={age} items={items} />; break;

@@ -767,11 +767,11 @@ The wording and mechanics must feel designed for exactly age ${age}, not for a b
 
 FAMILY BRIEF
 ${familyContext}
-Use the lead child's exact age for the main booklet. When there are siblings, make the instructions naturally shareable but include a short adaptation cue so a younger child can point, draw, or count while an older child can read, infer, compare, or explain. Never include child names in the booklet.
+Use the lead child's exact age for the main booklet. When there are siblings, make the instructions naturally shareable but include a short adaptation cue so one explorer can point, draw, or count while another can read, infer, compare, or explain. Do not include child names in your generated JSON; the app adds saved names to the family relay after validation.
 Treat every recorded avoid preference as a real design constraint: do not make it a required action, central theme, or repeated mechanic. Offer a nearby alternative such as pointing instead of writing, quiet observation instead of loud participation, or drawing instead of tasting. Do not mention the avoidance as a diagnosis or label in the child-facing booklet.
 
 FAMILY CO-OPERATION
-There ${hasSiblings ? "are siblings sharing this booklet" : "is one lead explorer; a grown-up can be the partner"}. Return a concrete siblingMission for every day. It must describe a real interaction, not a generic instruction: assign different roles, include a role swap or shared result, and make both children contribute. A younger explorer should be able to point, draw, count, or choose; an older explorer should be able to read, decode, compare, explain, or record. Keep the interaction connected to that day's local subject and activity.
+There ${hasSiblings ? "are siblings sharing this booklet" : "is one lead explorer; a grown-up can be the partner"}. Return a concrete siblingMission for every day. It must describe a real interaction, not a generic instruction: assign different roles, include a role swap or shared result, and make every explorer contribute. Use role names rather than labels such as “younger sibling” or “older sibling”. Keep the interaction connected to that day's local subject and activity.
 
 BALANCED QUEST PLAN
 ${balancePlan}
@@ -992,7 +992,7 @@ export async function POST(request: Request) {
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
     if (cached) {
-      return Response.json(createBookletPreview(cached), {
+      return Response.json(createBookletPreview(applySiblingPlan(cached, family)), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "memory",
@@ -1006,7 +1006,7 @@ export async function POST(request: Request) {
         expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
         value: stored,
       }, MAX_MEMORY_BOOKLET_ENTRIES);
-      return Response.json(createBookletPreview(stored), {
+      return Response.json(createBookletPreview(applySiblingPlan(stored, family)), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "durable",
@@ -1154,7 +1154,7 @@ export async function POST(request: Request) {
               age,
               days,
               itinerary,
-              ...draft,
+              ...applySiblingPlan(draft, family),
               sources: research.sources,
               generatedAt: new Date().toISOString(),
             };
@@ -1206,7 +1206,7 @@ export async function POST(request: Request) {
     return createGenerationStreamResponse(
       task,
       generationErrorMessage,
-      createBookletPreview,
+      (booklet) => createBookletPreview(applySiblingPlan(booklet, family)),
     );
   } catch (error) {
     if (error instanceof HttpRequestError) {

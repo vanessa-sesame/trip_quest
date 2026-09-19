@@ -7,6 +7,7 @@ import {
   type RGB,
 } from "pdf-lib";
 import type { Activity, GameItem } from "./booklet.ts";
+import { coloringSceneFor, type ColoringScene } from "./coloring.ts";
 import { getAgeBand } from "./booklet.ts";
 import {
   type GeneratedBookletData,
@@ -612,6 +613,70 @@ function drawGameFrame(page: PDFPage, fonts: Fonts, label: string, box: Box) {
   };
 }
 
+function drawColoringScene(page: PDFPage, scene: Box, variant: ColoringScene) {
+  const { x, y, width, height } = scene;
+  const ground = y + 24;
+  switch (variant) {
+    case "skyline":
+      page.drawCircle({ x: x + width - 42, y: y + height - 36, size: 20, borderColor: colors.yellow, borderWidth: 2 });
+      [0, 1, 2].forEach((index) => {
+        const buildingX = x + 32 + index * 82;
+        const buildingHeight = 56 + index * 18;
+        page.drawRectangle({ x: buildingX, y: ground, width: 56, height: buildingHeight, borderColor: colors.ink, borderWidth: 1.8 });
+        page.drawLine({ start: { x: buildingX + 14, y: ground + buildingHeight }, end: { x: buildingX + 28, y: ground + buildingHeight + 20 }, color: colors.ink, thickness: 1.6 });
+        page.drawLine({ start: { x: buildingX + 42, y: ground + buildingHeight }, end: { x: buildingX + 28, y: ground + buildingHeight + 20 }, color: colors.ink, thickness: 1.6 });
+      });
+      break;
+    case "garden":
+      page.drawLine({ start: { x: x + 34, y: ground }, end: { x: x + width - 34, y: ground }, color: colors.ink, thickness: 1.5 });
+      [0, 1, 2].forEach((index) => {
+        const flowerX = x + 72 + index * 92;
+        const flowerY = ground + 52 + (index % 2) * 20;
+        page.drawLine({ start: { x: flowerX, y: ground }, end: { x: flowerX, y: flowerY }, color: colors.ink, thickness: 1.5 });
+        page.drawCircle({ x: flowerX - 7, y: flowerY, size: 8, borderColor: colors.coral, borderWidth: 1.5 });
+        page.drawCircle({ x: flowerX + 7, y: flowerY, size: 8, borderColor: colors.coral, borderWidth: 1.5 });
+        page.drawCircle({ x: flowerX, y: flowerY + 7, size: 8, borderColor: colors.yellow, borderWidth: 1.5 });
+      });
+      page.drawLine({ start: { x: x + 58, y: ground }, end: { x: x + width / 2, y: y + height - 28 }, color: colors.ink, thickness: 1.2 });
+      page.drawLine({ start: { x: x + width - 58, y: ground }, end: { x: x + width / 2, y: y + height - 28 }, color: colors.ink, thickness: 1.2 });
+      break;
+    case "bridge":
+      page.drawLine({ start: { x: x + 26, y: ground + 42 }, end: { x: x + width - 26, y: ground + 42 }, color: colors.ink, thickness: 2 });
+      page.drawLine({ start: { x: x + 26, y: ground + 30 }, end: { x: x + width - 26, y: ground + 30 }, color: colors.ink, thickness: 1.5 });
+      [0, 1, 2, 3].forEach((index) => {
+        const bridgeX = x + 60 + index * 88;
+        page.drawLine({ start: { x: bridgeX, y: ground + 30 }, end: { x: bridgeX + 20, y: ground }, color: colors.ink, thickness: 1.4 });
+        page.drawLine({ start: { x: bridgeX + 20, y: ground }, end: { x: bridgeX + 40, y: ground + 30 }, color: colors.ink, thickness: 1.4 });
+      });
+      [0, 1, 2].forEach((index) => page.drawLine({ start: { x: x + 35, y: y + 22 + index * 10 }, end: { x: x + width - 35, y: y + 22 + index * 10 }, color: colors.blue, thickness: 1 }));
+      break;
+    case "market":
+      page.drawRectangle({ x: x + 72, y: ground, width: 210, height: 94, borderColor: colors.ink, borderWidth: 1.8 });
+      page.drawLine({ start: { x: x + 58, y: ground + 94 }, end: { x: x + 296, y: ground + 94 }, color: colors.coral, thickness: 3 });
+      [0, 1, 2, 3].forEach((index) => page.drawLine({ start: { x: x + 70 + index * 57, y: ground + 94 }, end: { x: x + 84 + index * 57, y: ground + 72 }, color: colors.coral, thickness: 1.6 }));
+      page.drawCircle({ x: x + 130, y: ground + 38, size: 18, borderColor: colors.green, borderWidth: 1.7 });
+      page.drawCircle({ x: x + 220, y: ground + 44, size: 23, borderColor: colors.yellow, borderWidth: 1.7 });
+      page.drawLine({ start: { x: x + 95, y: ground + 18 }, end: { x: x + 260, y: ground + 18 }, color: colors.ink, thickness: 1.2 });
+      break;
+    case "mountain":
+      page.drawLine({ start: { x: x + 24, y: ground }, end: { x: x + 120, y: y + height - 24 }, color: colors.ink, thickness: 1.8 });
+      page.drawLine({ start: { x: x + 120, y: y + height - 24 }, end: { x: x + 214, y: ground }, color: colors.ink, thickness: 1.8 });
+      page.drawLine({ start: { x: x + 164, y: ground }, end: { x: x + 266, y: y + height - 56 }, color: colors.ink, thickness: 1.8 });
+      page.drawLine({ start: { x: x + 266, y: y + height - 56 }, end: { x: x + width - 20, y: ground }, color: colors.ink, thickness: 1.8 });
+      page.drawCircle({ x: x + width - 45, y: y + height - 32, size: 18, borderColor: colors.yellow, borderWidth: 2 });
+      page.drawLine({ start: { x: x + width / 2, y: ground }, end: { x: x + width / 2 + 24, y: ground + 44 }, color: colors.green, thickness: 1.4 });
+      break;
+    case "temple":
+      page.drawRectangle({ x: x + 92, y: ground, width: 168, height: 92, borderColor: colors.ink, borderWidth: 1.8 });
+      page.drawLine({ start: { x: x + 68, y: ground + 92 }, end: { x: x + 176, y: ground + 136 }, color: colors.coral, thickness: 2 });
+      page.drawLine({ start: { x: x + 284, y: ground + 92 }, end: { x: x + 176, y: ground + 136 }, color: colors.coral, thickness: 2 });
+      page.drawLine({ start: { x: x + 52, y: ground + 78 }, end: { x: x + 300, y: ground + 78 }, color: colors.ink, thickness: 1.6 });
+      [0, 1, 2].forEach((index) => page.drawRectangle({ x: x + 116 + index * 46, y: ground, width: 15, height: 54, borderColor: colors.blue, borderWidth: 1.4 }));
+      page.drawCircle({ x: x + width - 38, y: y + height - 28, size: 17, borderColor: colors.yellow, borderWidth: 2 });
+      break;
+  }
+}
+
 function drawTraceBoard(page: PDFPage, fonts: Fonts, activity: Activity, box: Box, coloring: boolean) {
   const label = pdfText(activity.items[0]?.label || "LOCAL DETAIL").toUpperCase();
   drawWrappedText(page, activity.items[0]?.clue || activity.prompt, fonts, {
@@ -629,48 +694,7 @@ function drawTraceBoard(page: PDFPage, fonts: Fonts, activity: Activity, box: Bo
     borderColor: colors.line,
     borderWidth: 1.2,
   });
-  page.drawCircle({
-    x: scene.x + scene.width - 55,
-    y: scene.y + scene.height - 45,
-    size: 22,
-    borderColor: colors.yellow,
-    borderWidth: 2,
-  });
-  page.drawRectangle({
-    x: scene.x + 58,
-    y: scene.y + 38,
-    width: 82,
-    height: 98,
-    borderColor: colors.ink,
-    borderWidth: 2,
-  });
-  page.drawLine({
-    start: { x: scene.x + 50, y: scene.y + 136 },
-    end: { x: scene.x + 99, y: scene.y + 178 },
-    color: colors.ink,
-    thickness: 2,
-  });
-  page.drawLine({
-    start: { x: scene.x + 148, y: scene.y + 136 },
-    end: { x: scene.x + 99, y: scene.y + 178 },
-    color: colors.ink,
-    thickness: 2,
-  });
-  for (let index = 0; index < 3; index += 1) {
-    page.drawCircle({
-      x: scene.x + 225 + index * 55,
-      y: scene.y + 54 + (index % 2) * 14,
-      size: 18 + index * 3,
-      borderColor: index % 2 ? colors.green : colors.coral,
-      borderWidth: 2,
-    });
-    page.drawLine({
-      start: { x: scene.x + 225 + index * 55, y: scene.y + 35 },
-      end: { x: scene.x + 225 + index * 55, y: scene.y + 10 },
-      color: colors.ink,
-      thickness: 1.5,
-    });
-  }
+  drawColoringScene(page, scene, coloringSceneFor(activity));
   if (!coloring) {
     page.drawText("ADD YOUR OWN LOCAL DETAILS HERE", {
       x: scene.x + 180,
@@ -1566,8 +1590,8 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData, famil
   document.setAuthor("TripQuest");
   document.setSubject("Printable family travel activity booklet");
   document.setKeywords(["travel", "children", "activity booklet", pdfText(booklet.destination)]);
-  document.setCreator("TripQuest Booklet Studio");
-  document.setProducer("TripQuest Booklet Studio");
+  document.setCreator("TripQuest Kids");
+  document.setProducer("TripQuest Kids");
   document.setCreationDate(new Date(booklet.generatedAt));
   document.setModificationDate(new Date());
 

@@ -12,9 +12,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "TripQuest | Travel Booklets for Kids";
+const title = "TripQuest Kids";
 const description =
-  "Create thoughtful, printable travel activity booklets tailored to a child's age, destination, and trip length.";
+  "Create thoughtful travel adventures tailored to a child's age, destination, and trip length.";
 
 export function generateMetadata(): Metadata {
   const socialImage = "https://tripquest-booklet.allophones.chatgpt.site/og.png";
@@ -35,7 +35,7 @@ export function generateMetadata(): Metadata {
           url: socialImage,
           width: 1200,
           height: 630,
-          alt: "TripQuest Booklet with illustrated destination activities",
+          alt: "TripQuest Kids illustrated destination activities",
         },
       ],
     },

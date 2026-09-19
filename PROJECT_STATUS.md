@@ -15,8 +15,8 @@ trip length, optional family profiles, interests, and an optional itinerary.
 
 Live site: https://tripquestkids.com
 
-Current public release: Sites version 19, commit
-`da333ae439c7dd4d2040c3401700e0e8581429c0` on `main`.
+Current public release: Sites version 21, commit
+`351dbe9fb77497de81eb47a20318393e5cfe1868` on `main`.
 
 ## Current User Experience
 
@@ -28,7 +28,15 @@ Current public release: Sites version 19, commit
 - Up to five siblings can be added to the lead explorer.
 - Profiles include age, reading level, interests, things to avoid, and preferred
   quest mechanics.
-- Interests are assigned to visible missions instead of being prompt-only data.
+- Interests use an add-one-at-a-time tag editor and are assigned to visible
+  interest lenses, missions, clues, and drawing prompts instead of being
+  prompt-only data.
+- Every generated day includes a concrete family relay; siblings get different
+  roles, a role swap, and a shared result rather than appearing only in the
+  final family pages.
+- Common branded interests are treated as generic inspiration in the
+  deterministic fallback and the composer prompt; official characters, logos,
+  slogans, and artwork are not generated.
 - Game formats follow an age-safe schedule to reduce repetition.
 - A four-stop route-map puzzle is allowed at most once per booklet.
 - The printable family pack includes the booklet, parent guide, family mission
@@ -69,6 +77,8 @@ charging customers:
 - Research uses web search and asks for source-backed landmarks, culture,
   transport, food, nature, etiquette, and itinerary verification.
 - Composition returns structured JSON and is validated before storage.
+- Composition returns a per-day `interestHook` and `siblingMission`, both shown
+  in the web preview and on the first printable activity page of each day.
 - The application, not the model, renders puzzles and PDF layouts.
 - Booklets over six days are composed in four-day batches.
 - Exact age rules, interest assignments, allowed game types, title uniqueness,
@@ -179,6 +189,9 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 - Destination research cache keys include the itinerary, limiting reuse when
   two families visit the same city with different plans.
 - Family profiles are browser-scoped rather than account-synced.
+- Child photo uploads and photo-in-booklet placement are intentionally not
+  implemented yet; see the product plan in the development handoff for the
+  required consent, private storage, moderation, deletion, and PDF design work.
 - Daily feedback and next-day adaptation are not implemented.
 - A native iOS shell, App Store purchase flow, privacy disclosures, and App
   Store submission assets are not implemented.

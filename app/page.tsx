@@ -452,30 +452,11 @@ export default function Home() {
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
-        if (response.status === 503 && /payment|checkout|storage/i.test(payload.error || "")) {
-          const testResponse = await fetch("/api/pdf", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: requestPayload,
-          });
-          if (testResponse.ok) {
-            const blob = await testResponse.blob();
-            const disposition = testResponse.headers.get("content-disposition") || "";
-            const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || "tripquest-booklet.pdf";
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = filename;
-            link.rel = "noopener";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-            setCheckoutNote("Test PDF downloaded. Secure checkout will appear after Stripe is connected.");
-            return;
-          }
-        }
-        throw new Error(payload.error || "Secure checkout could not be started.");
+        throw new Error(
+          response.status === 503
+            ? "Secure payment is not connected yet. Please try again after Stripe is configured."
+            : payload.error || "Secure checkout could not be started.",
+        );
       }
       const payload = (await response.json()) as { url?: string };
       if (!payload.url) throw new Error("Secure checkout did not return a payment link.");

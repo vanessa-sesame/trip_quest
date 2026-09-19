@@ -46,6 +46,7 @@ import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
   eventTypeLabel,
+  familyChildDisplayName,
   mechanicLabel,
   normalizeFamilyChildren,
   parseItineraryText,
@@ -160,6 +161,7 @@ export default function Home() {
   const [familyPanelOpen, setFamilyPanelOpen] = useState(false);
   const [familyStatus, setFamilyStatus] = useState("");
   const [familyLoading, setFamilyLoading] = useState(true);
+  const [familyNeedsRegeneration, setFamilyNeedsRegeneration] = useState(false);
   const [itineraryText, setItineraryText] = useState("");
   const [structuredEvents, setStructuredEvents] = useState<ItineraryEvent[]>([]);
   const [pdfReadyUrl, setPdfReadyUrl] = useState("");
@@ -239,6 +241,8 @@ export default function Home() {
   }));
   const currentPage = clampPage(page, reportPageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);
+  const leadChild = children[0] || defaultFamilyWorkspace().children[0];
+  const familyInterests = [...new Set(children.flatMap((child) => child.interests))];
 
   function updateLeadAge(value: number) {
     const nextAge = sanitizeAge(value);
@@ -262,6 +266,7 @@ export default function Home() {
     const normalized = normalizeFamilyChildren(familyDraft);
     setChildren(normalized);
     setAge(normalized[0]?.age || age);
+    setFamilyNeedsRegeneration(true);
     setFamilyStatus("Saving family profiles…");
     try {
       const response = await fetch("/api/family", {
@@ -270,7 +275,7 @@ export default function Home() {
         body: JSON.stringify({ workspace: { children: normalized } }),
       });
       if (!response.ok) throw new Error("Family profiles could not be saved.");
-      setFamilyStatus("Family profiles saved for this browser.");
+      setFamilyStatus("Family saved. Create a new booklet to apply these interests and preferences.");
       setFamilyPanelOpen(false);
     } catch (error) {
       setFamilyStatus(error instanceof Error ? error.message : "Family profiles could not be saved.");
@@ -357,6 +362,7 @@ export default function Home() {
       ]);
       setPage(0);
       setGenerationState("idle");
+      setFamilyNeedsRegeneration(false);
       setAnnouncement(
         `${payload.destination} AI preview ready for age ${payload.age}.`,
       );
@@ -561,17 +567,27 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="family-summary">
-              <div>
-                <span className="field-label">Family explorers</span>
-                <p>
-                  {familyLoading ? "Loading saved profiles…" : children.map((child) => `${child.name}, ${child.age}`).join(" · ")}
-                </p>
+            <div className="family-section">
+              <div className="family-summary">
+                <div>
+                  <span className="field-label">Lead explorer <small>same child as age above</small></span>
+                  <p>
+                    {familyLoading
+                      ? "Loading saved profile…"
+                      : <><strong>{familyChildDisplayName(leadChild, 0)}</strong> · age {leadChild.age}{children.length > 1 ? ` · ${children.length - 1} sibling${children.length === 2 ? "" : "s"}` : " · no siblings added"}</>}
+                  </p>
+                  {!familyLoading && familyInterests.length ? (
+                    <small className="family-interest-summary">Interests: {familyInterests.slice(0, 3).join(", ")}{familyInterests.length > 3 ? ` +${familyInterests.length - 3}` : ""}</small>
+                  ) : null}
+                </div>
+                <button className="text-button" type="button" onClick={openFamilyPanel} disabled={generationState === "generating"}>
+                  <UserRound size={16} />
+                  Edit child & siblings
+                </button>
               </div>
-              <button className="text-button" type="button" onClick={openFamilyPanel} disabled={generationState === "generating"}>
-                <UserRound size={16} />
-                Edit family
-              </button>
+              {familyNeedsRegeneration ? (
+                <p className="family-refresh-note" role="status">Profile updated. Tap Create custom booklet to rebuild the missions.</p>
+              ) : null}
             </div>
 
             <div className="itinerary-editor">
@@ -716,6 +732,7 @@ export default function Home() {
               </p>
               <small className="pack-summary">
                 {children.length} explorer{children.length === 1 ? "" : "s"} · family mission map · cards · badge tracker
+                {generatedBooklet && familyInterests.length ? ` · interests: ${familyInterests.slice(0, 2).join(", ")}` : ""}
               </small>
             </div>
             <button
@@ -952,13 +969,16 @@ export default function Home() {
             </button>
             <p className="eyebrow">Saved family</p>
             <h2 id="family-title">Make every explorer count</h2>
-            <p className="modal-subtitle">Profiles are saved to this browser. Names help the printable pack; only ages and play preferences guide the AI.</p>
+            <p className="modal-subtitle">The lead explorer is the same child as the age on the main form. Add siblings only when they are sharing this booklet.</p>
             <div className="family-profile-list">
               {familyDraft.map((child, index) => (
                 <article className="family-profile-card" key={child.id}>
                   <div className="profile-card-heading">
-                    <strong>Explorer {index + 1}</strong>
-                    {familyDraft.length > 1 ? (
+                    <div>
+                      <strong>{index === 0 ? "Lead explorer" : `Sibling ${index}`}</strong>
+                      {index === 0 ? <small>Uses the child age shown on the main form</small> : null}
+                    </div>
+                    {index > 0 ? (
                       <button className="text-button danger-button" type="button" onClick={() => setFamilyDraft((current) => current.filter((item) => item.id !== child.id))}>Remove</button>
                     ) : null}
                   </div>
@@ -985,7 +1005,7 @@ export default function Home() {
                     </select>
                   </label>
                   <label>
-                    <span>Interests</span>
+                    <span>Mission interests</span>
                     <input value={child.interests.join(", ")} placeholder="dinosaurs, drawing, trains" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, interests: splitTagInput(event.target.value) } : item))} />
                   </label>
                   <label>
@@ -1005,8 +1025,8 @@ export default function Home() {
               ))}
             </div>
             <div className="family-modal-actions">
-              <button className="secondary-button" type="button" disabled={familyDraft.length >= 6} onClick={() => setFamilyDraft((current) => [...current, { id: `child-${Date.now()}`, name: `Explorer ${current.length + 1}`, age: 7, readingLevel: "early-reader", interests: [], avoid: [], preferredMechanics: [] }])}>
-                <Plus size={17} /> Add explorer
+              <button className="secondary-button" type="button" disabled={familyDraft.length >= 6} onClick={() => setFamilyDraft((current) => [...current, { id: `child-${Date.now()}`, name: `Sibling ${current.length}`, age: 7, readingLevel: "early-reader", interests: [], avoid: [], preferredMechanics: [] }])}>
+                <Plus size={17} /> Add sibling
               </button>
               <button className="primary-button" type="button" onClick={() => void saveFamilyProfiles()}>
                 <Check size={17} /> Save family
@@ -1059,10 +1079,11 @@ function FamilyPackPreviewPage({
         <h3>{destination} family explorers</h3>
         <p>Same place, different ways to notice it. Each explorer gets a role that matches their age and reading level.</p>
         <div className="family-preview-roles">
-          {explorers.map((child) => (
+          {explorers.map((child, index) => (
             <div key={child.id}>
-              <strong>{child.name} · age {child.age}</strong>
+              <strong>{index === 0 ? "Lead · " : ""}{familyChildDisplayName(child, index)} · age {child.age}</strong>
               <span>{child.age <= 5 ? "Point, find, count, or draw" : child.age <= 8 ? "Read clues and spot patterns" : "Compare, solve, and explain"}</span>
+              {child.interests.length ? <small>Interest missions: {child.interests.slice(0, 3).join(", ")}</small> : null}
             </div>
           ))}
         </div>

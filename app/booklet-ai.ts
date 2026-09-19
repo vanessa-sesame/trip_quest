@@ -56,6 +56,93 @@ export function allowedGameTypesForAge(age: number): GameType[] {
   ];
 }
 
+export type GameTypePlanItem = {
+  day: number;
+  gameTypes: [GameType, GameType];
+};
+
+const YOUNG_GAME_PLAN: Array<[GameType, GameType]> = [
+  ["coloring", "bingo"],
+  ["drawing", "scavenger_hunt"],
+  ["maze", "story"],
+  ["matching", "spot_the_difference"],
+  ["coloring", "scavenger_hunt"],
+  ["drawing", "bingo"],
+  ["maze", "matching"],
+  ["spot_the_difference", "story"],
+  ["coloring", "bingo"],
+  ["drawing", "scavenger_hunt"],
+  ["maze", "story"],
+  ["matching", "spot_the_difference"],
+  ["coloring", "scavenger_hunt"],
+  ["drawing", "bingo"],
+];
+
+const EARLY_READER_GAME_PLAN: Array<[GameType, GameType]> = [
+  ["drawing", "scavenger_hunt"],
+  ["word_search", "bingo"],
+  ["maze", "quiz"],
+  ["matching", "story"],
+  ["crossword", "spot_the_difference"],
+  ["codebreaker", "scavenger_hunt"],
+  ["coloring", "bingo"],
+  ["map_puzzle", "drawing"],
+  ["quiz", "maze"],
+  ["story", "matching"],
+  ["word_search", "spot_the_difference"],
+  ["crossword", "scavenger_hunt"],
+  ["codebreaker", "bingo"],
+  ["coloring", "quiz"],
+];
+
+const INVESTIGATOR_GAME_PLAN: Array<[GameType, GameType]> = [
+  ["drawing", "scavenger_hunt"],
+  ["crossword", "quiz"],
+  ["maze", "story"],
+  ["codebreaker", "word_search"],
+  ["map_puzzle", "drawing"],
+  ["quiz", "scavenger_hunt"],
+  ["crossword", "story"],
+  ["word_search", "maze"],
+  ["codebreaker", "quiz"],
+  ["drawing", "scavenger_hunt"],
+  ["crossword", "story"],
+  ["word_search", "maze"],
+  ["codebreaker", "quiz"],
+  ["drawing", "scavenger_hunt"],
+];
+
+const TEEN_GAME_PLAN: Array<[GameType, GameType]> = [
+  ["drawing", "scavenger_hunt"],
+  ["crossword", "quiz"],
+  ["word_search", "story"],
+  ["codebreaker", "drawing"],
+  ["map_puzzle", "scavenger_hunt"],
+  ["quiz", "story"],
+  ["crossword", "drawing"],
+  ["word_search", "scavenger_hunt"],
+  ["codebreaker", "quiz"],
+  ["story", "drawing"],
+  ["crossword", "scavenger_hunt"],
+  ["word_search", "quiz"],
+  ["codebreaker", "story"],
+  ["drawing", "scavenger_hunt"],
+];
+
+export function balancedGameTypePlanForTrip(age: number, days: number): GameTypePlanItem[] {
+  const plan = age <= 5
+    ? YOUNG_GAME_PLAN
+    : age <= 8
+      ? EARLY_READER_GAME_PLAN
+      : age <= 11
+        ? INVESTIGATOR_GAME_PLAN
+        : TEEN_GAME_PLAN;
+  return plan.slice(0, Math.max(0, Math.min(14, days))).map((gameTypes, index) => ({
+    day: index + 1,
+    gameTypes,
+  }));
+}
+
 export type BookletSource = {
   title: string;
   url: string;
@@ -212,6 +299,7 @@ export function validateBookletDraft(
   value: unknown,
   expectedDays: number,
   expectedAge?: number,
+  expectedGameTypes?: GameTypePlanItem[],
 ): BookletDraft {
   if (!value || typeof value !== "object") {
     throw new Error("The generated booklet is not an object.");
@@ -342,6 +430,13 @@ export function validateBookletDraft(
           if (/\bsudoku\b/i.test(title)) title = renameActivityForMechanic(title, "Route Challenge");
           if (/\bsudoku\b/i.test(kind)) kind = "Route-planning logic";
         }
+      }
+
+      const plannedGameType = expectedGameTypes?.[dayIndex]?.gameTypes[activityIndex];
+      if (plannedGameType && gameType !== plannedGameType) {
+        throw new Error(
+          `Activity ${activityIndex + 1} on day ${dayIndex + 1} must use ${plannedGameType}, not ${gameType}.`,
+        );
       }
 
       const normalizedTitle = title.toLocaleLowerCase();

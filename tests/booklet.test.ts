@@ -8,6 +8,7 @@ import {
 } from "../app/booklet.ts";
 import {
   allowedGameTypesForAge,
+  balancedGameTypePlanForTrip,
   normalizeItinerary,
   validateBookletDraft,
 } from "../app/booklet-ai.ts";
@@ -155,6 +156,14 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.match(valid.dayPlans[0].activities[0].body, /these four local words/i);
   assert.doesNotMatch(valid.dayPlans[0].activities[0].body, /eight words/i);
   assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7));
+  assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7, [{
+    day: 1,
+    gameTypes: ["word_search", "map_puzzle"],
+  }]));
+  assert.throws(() => validateBookletDraft(draft, 1, 7, [{
+    day: 1,
+    gameTypes: ["drawing", "scavenger_hunt"],
+  }]), /must use drawing/i);
   assert.throws(() => validateBookletDraft(draft, 1, 4), /not an age-4 game/i);
   assert.throws(() => validateBookletDraft(draft, 2), /exactly 2 day pages/i);
 
@@ -218,6 +227,19 @@ test("game mechanics are constrained by the child's age", () => {
   assert.ok(!allowedGameTypesForAge(4).includes("word_search"));
   assert.ok(allowedGameTypesForAge(7).includes("word_search"));
   assert.ok(!allowedGameTypesForAge(13).includes("coloring"));
+});
+
+test("AI game schedules maximize variety and never repeat the four-stop map", () => {
+  for (const age of [3, 5, 7, 10, 14]) {
+    const plan = balancedGameTypePlanForTrip(age, 14);
+    const firstFiveDays = plan.slice(0, 5).flatMap((day) => day.gameTypes);
+    const allGames = plan.flatMap((day) => day.gameTypes);
+    assert.equal(plan.length, 14);
+    assert.ok(new Set(firstFiveDays).size >= (age <= 5 ? 8 : 8));
+    assert.ok(allGames.every((game) => allowedGameTypesForAge(age).includes(game)));
+    assert.ok(allGames.every((game, index) => index === 0 || game !== allGames[index - 1]));
+    assert.ok(allGames.filter((game) => game === "map_puzzle").length <= 1);
+  }
 });
 
 test("printable puzzle builders use supplied place vocabulary", () => {

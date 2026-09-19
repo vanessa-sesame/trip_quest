@@ -3,8 +3,10 @@ import { getAgeBand } from "../../booklet";
 import {
   type BookletDraft,
   type BookletSource,
+  type GameTypePlanItem,
   type GeneratedBookletData,
   allowedGameTypesForAge,
+  balancedGameTypePlanForTrip,
   normalizeItinerary,
   validateBookletDraft,
 } from "../../booklet-ai";
@@ -31,7 +33,9 @@ import {
 } from "../../request-security";
 import { createBookletPreview } from "../../booklet-preview";
 import {
+  type InterestPlanItem,
   familyPromptSummary,
+  interestPlanForTrip,
   mechanicPlanForTrip,
   normalizeFamilyChildren,
 } from "../../family";
@@ -707,6 +711,8 @@ async function composeBookletBatch(
   model: string,
   familyContext: string,
   balancePlan: string,
+  gameTypePlan: GameTypePlanItem[],
+  interestPlan: InterestPlanItem[],
 ) {
   const days = itinerary.length;
   const ageBand = getAgeBand(age);
@@ -722,6 +728,22 @@ async function composeBookletBatch(
         : "Use sophisticated crosswords, codebreakers, one route-planning challenge, quizzes, field-journal stories, and design drawing. Avoid babyish coloring tasks.";
   const itineraryText = itinerary
     .map((plan, index) => `Day ${dayOffset + index + 1}: ${plan || "Open day - select a strong subject from the research"}`)
+    .join("\n");
+  const assignedGameTypes = gameTypePlan.slice(dayOffset, dayOffset + days);
+  const localGameTypePlan = assignedGameTypes.map((plan, index) => ({
+    ...plan,
+    day: index + 1,
+  }));
+  const assignedInterests = interestPlan.filter((item) =>
+    item.day > dayOffset && item.day <= dayOffset + days,
+  );
+  const interestDirections = assignedInterests.length
+    ? assignedInterests.map((item) =>
+        `Day ${item.day}: use Child ${item.childNumber}'s interest phrase "${item.interest}" as a playful lens.`,
+      ).join("\n")
+    : "No interests were recorded for these days; keep the activities destination-led.";
+  const exactGameSchedule = assignedGameTypes
+    .map((plan) => `Day ${plan.day}: ${plan.gameTypes.join(" + ")}`)
     .join("\n");
   const messages = [
       {
@@ -745,6 +767,14 @@ Use the lead child's exact age for the main booklet. When there are siblings, ma
 BALANCED QUEST PLAN
 ${balancePlan}
 Use the listed mechanics as the intended mix. Do not use the same mechanic as the only meaningful action on consecutive days.
+
+EXACT PRINTABLE GAME SCHEDULE
+${exactGameSchedule}
+Use these exact gameType values in this exact activity order. This schedule has already been balanced for age and variety; do not substitute a favorite format.
+
+VISIBLE INTEREST LENSES
+${interestDirections}
+For every assigned interest, make that exact interest phrase visibly appear in the day's mission, an activity title, or a game-item clue. Let it shape how the child observes or plays, not just an introductory sentence. Keep the real destination central, and never claim the interest subject is locally present or officially connected unless the research says so.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
@@ -777,7 +807,7 @@ ${research.notes}`,
   let correction = "";
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const payload = await kimiRequest("/chat/completions", apiKey, {
         model,
@@ -803,7 +833,14 @@ ${research.notes}`,
         throw new Error("Kimi returned no booklet content.");
       }
 
-      return validateBookletDraft(JSON.parse(message.content), days, age);
+      const draft = validateBookletDraft(
+        JSON.parse(message.content),
+        days,
+        age,
+        localGameTypePlan,
+      );
+      assertInterestPlan(draft, assignedInterests, dayOffset);
+      return draft;
     } catch (error) {
       lastError = error;
       correction = `The previous booklet could not be accepted: ${error instanceof Error ? error.message : "invalid output"} Return a complete replacement JSON booklet. Keep every item label non-empty; word-puzzle labels must be unique 3-to-9-letter local words.`;
@@ -811,6 +848,31 @@ ${research.notes}`,
   }
 
   throw lastError instanceof Error ? lastError : new Error("Kimi returned no valid booklet content.");
+}
+
+function assertInterestPlan(
+  draft: BookletDraft,
+  interestPlan: InterestPlanItem[],
+  dayOffset: number,
+) {
+  for (const item of interestPlan) {
+    const localDayIndex = item.day - dayOffset - 1;
+    const day = draft.dayPlans[localDayIndex];
+    const visibleText = day
+      ? [
+          day.mission,
+          ...day.activities.flatMap((activity) => [
+            activity.title,
+            ...(activity.items || []).flatMap((gameItem) => [gameItem.label, gameItem.clue]),
+          ]),
+        ].join(" ").toLocaleLowerCase()
+      : "";
+    if (!visibleText.includes(item.interest.toLocaleLowerCase())) {
+      throw new Error(
+        `Day ${item.day} must visibly use the assigned interest phrase "${item.interest}".`,
+      );
+    }
+  }
 }
 
 function makeActivityTitlesUnique(draft: BookletDraft) {
@@ -844,6 +906,8 @@ async function composeBooklet(
   model: string,
   familyContext: string,
   balancePlan: string,
+  gameTypePlan: GameTypePlanItem[],
+  interestPlan: InterestPlanItem[],
 ) {
   const batchSize = days > 6 ? 4 : days;
   const batches = Array.from(
@@ -865,6 +929,8 @@ async function composeBooklet(
       model,
       familyContext,
       balancePlan,
+      gameTypePlan,
+      interestPlan,
     )),
   );
   const combined = makeActivityTitlesUnique({
@@ -874,7 +940,9 @@ async function composeBooklet(
       day: batches[batchIndex].offset + dayIndex + 1,
     }))),
   });
-  return validateBookletDraft(combined, days, age);
+  const validated = validateBookletDraft(combined, days, age, gameTypePlan);
+  assertInterestPlan(validated, interestPlan, 0);
+  return validated;
 }
 
 function generationErrorMessage(error: unknown) {
@@ -915,6 +983,8 @@ export async function POST(request: Request) {
     const balancePlan = mechanicPlanForTrip(family, days)
       .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
       .join("\n");
+    const gameTypePlan = balancedGameTypePlanForTrip(age, days);
+    const interestPlan = interestPlanForTrip(family, days);
     const runtime = await getRuntimeEnvironment();
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
     const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
@@ -1080,6 +1150,8 @@ export async function POST(request: Request) {
               composerModel,
               familyContext,
               balancePlan,
+              gameTypePlan,
+              interestPlan,
             ).catch((error) => {
               throw new GenerationStageError("composition", error);
             });

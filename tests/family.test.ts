@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
+  familyChildDisplayName,
   familyPromptSummary,
+  interestPlanForTrip,
   mechanicPlanForTrip,
   normalizeFamilyChildren,
   parseItineraryText,
@@ -24,9 +26,23 @@ test("family profiles normalize ages, reading levels, and bounded tags", () => {
   assert.equal(children[0].readingLevel, "pre-reader");
   assert.deepEqual(children[0].interests, ["drawing"]);
   assert.equal(children[1].readingLevel, "independent-reader");
-  assert.match(familyPromptSummary(children), /Child 1: age 5/);
+  assert.match(familyPromptSummary(children), /Lead child: age 5/);
   assert.doesNotMatch(familyPromptSummary(children), /Mia|Leo/);
   assert.equal(defaultFamilyWorkspace().children.length, 1);
+  assert.equal(defaultFamilyWorkspace().children[0].name, "Your child");
+  assert.equal(familyChildDisplayName({ ...children[0], name: "Explorer" }, 0), "Your child");
+});
+
+test("interests are spread across the trip and tied to a specific child", () => {
+  const children = normalizeFamilyChildren([
+    { name: "Mia", age: 5, interests: ["dinosaurs", "drawing"] },
+    { name: "Leo", age: 10, interests: ["trains"] },
+  ]);
+  const plan = interestPlanForTrip(children, 5);
+  assert.equal(plan.length, 3);
+  assert.deepEqual(plan.map((item) => item.interest), ["dinosaurs", "trains", "drawing"]);
+  assert.deepEqual(plan.map((item) => item.childNumber), [1, 2, 1]);
+  assert.equal(new Set(plan.map((item) => item.day)).size, plan.length);
 });
 
 test("pasted itinerary becomes typed daily events and plans", () => {
@@ -62,4 +78,3 @@ test("family PDF adds a usable pack section without changing the base booklet", 
   assert.equal((await PDFDocument.load(family)).getPageCount(), 18);
   assert.equal(familyPackPdfFilename(booklet), "tripquest-singapore-age-7-family-pack.pdf");
 });
-

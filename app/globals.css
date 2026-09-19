@@ -320,23 +320,54 @@ p {
   font-size: 0.8rem;
 }
 
-.family-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.family-section {
   border-bottom: 1px solid var(--line);
   padding: 4px 0 13px;
 }
 
+.family-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.family-summary > div {
+  min-width: 0;
+}
+
 .family-summary p {
-  max-width: 205px;
+  max-width: 250px;
   margin: 5px 0 0;
-  overflow: hidden;
   color: var(--muted);
   font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.family-summary .field-label small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.family-interest-summary {
+  display: block;
+  max-width: 260px;
+  margin-top: 4px;
+  color: var(--teal-dark);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.family-refresh-note {
+  margin: 9px 0 0;
+  border-left: 3px solid var(--coral);
+  background: var(--coral-soft);
+  color: var(--ink);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  padding: 7px 9px;
 }
 
 .text-button {
@@ -1081,6 +1112,17 @@ p {
   padding-bottom: 9px;
 }
 
+.profile-card-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-card-heading small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .profile-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 100px;
@@ -1193,6 +1235,12 @@ p {
 .family-preview-roles span {
   color: var(--muted);
   font-size: 0.56rem;
+}
+
+.family-preview-roles small {
+  color: var(--teal-dark);
+  font-size: 0.5rem;
+  font-weight: 800;
 }
 
 .family-preview-card-grid,

@@ -49,6 +49,12 @@ export type FamilyWorkspace = {
   updatedAt?: string;
 };
 
+export type InterestPlanItem = {
+  day: number;
+  childNumber: number;
+  interest: string;
+};
+
 export const QUEST_MECHANICS: QuestMechanic[] = [
   "spot",
   "draw",
@@ -116,7 +122,7 @@ export function defaultFamilyWorkspace(): FamilyWorkspace {
   return {
     children: [{
       id: "child-1",
-      name: "Explorer",
+      name: "Your child",
       age: 5,
       readingLevel: "pre-reader",
       interests: [],
@@ -146,7 +152,7 @@ export function normalizeFamilyChildren(value: unknown): FamilyChild[] {
     const id = cleanText(child.id, 64) || `child-${index + 1}`;
     return {
       id,
-      name: cleanText(child.name, 40) || `Explorer ${index + 1}`,
+      name: cleanText(child.name, 40) || (index === 0 ? "Your child" : `Sibling ${index}`),
       age,
       readingLevel,
       interests: cleanTags(child.interests),
@@ -169,13 +175,22 @@ export function normalizeFamilyWorkspace(value: unknown): FamilyWorkspace {
 
 export function familyPromptSummary(children: FamilyChild[]) {
   return children.map((child, index) => [
-    `Child ${index + 1}: age ${child.age}, reading ${child.readingLevel}`,
+    `${index === 0 ? "Lead child" : `Sibling ${index}`}: age ${child.age}, reading ${child.readingLevel}`,
     child.interests.length ? `interests: ${child.interests.join(", ")}` : "interests: none recorded",
     child.avoid.length ? `avoid: ${child.avoid.join(", ")}` : "avoid: none recorded",
     child.preferredMechanics.length
       ? `preferred mechanics: ${child.preferredMechanics.join(", ")}`
       : "preferred mechanics: open",
   ].join("; ")).join("\n");
+}
+
+export function familyChildDisplayName(child: FamilyChild, index: number) {
+  const name = child.name.trim();
+  if (index === 0 && /^explorer(?:\s*1)?$/i.test(name)) return "Your child";
+  if (index > 0 && new RegExp(`^explorer(?:\\s*${index + 1})?$`, "i").test(name)) {
+    return `Sibling ${index}`;
+  }
+  return name || (index === 0 ? "Your child" : `Sibling ${index}`);
 }
 
 export function mechanicLabel(mechanic: QuestMechanic) {
@@ -194,6 +209,28 @@ export function mechanicPlanForTrip(children: FamilyChild[], days: number) {
     const second = ordered[(index + 3) % ordered.length];
     const shared = children.length > 1 && index % 2 === 1 ? "cooperate" : second;
     return { day: index + 1, mechanics: [first, shared] as QuestMechanic[] };
+  });
+}
+
+export function interestPlanForTrip(children: FamilyChild[], days: number): InterestPlanItem[] {
+  const interests = Array.from(
+    { length: Math.max(0, ...children.map((child) => child.interests.length)) },
+    (_, interestIndex) => children.flatMap((child, childIndex) => {
+      const interest = child.interests[interestIndex];
+      return interest ? [{ childNumber: childIndex + 1, interest }] : [];
+    }),
+  ).flat();
+  if (!interests.length || days < 1) return [];
+
+  const assignmentCount = Math.min(days, Math.max(interests.length, Math.ceil(days / 2)));
+  return Array.from({ length: assignmentCount }, (_, index) => {
+    const position = assignmentCount === 1
+      ? 0
+      : Math.round(index * (days - 1) / (assignmentCount - 1));
+    return {
+      day: position + 1,
+      ...interests[index % interests.length],
+    };
   });
 }
 

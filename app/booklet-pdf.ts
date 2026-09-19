@@ -21,6 +21,7 @@ import {
   normalizePuzzleWord,
 } from "./puzzles.ts";
 import {
+  familyChildDisplayName,
   mechanicLabel,
   type FamilyChild,
   type ItineraryEvent,
@@ -351,7 +352,7 @@ function drawCover(
       font: fonts.bold,
       color: colors.blue,
     });
-    drawWrappedText(page, familyPack.children.map((child) => `${pdfText(child.name)} (age ${child.age})`).join(" / "), fonts, {
+    drawWrappedText(page, familyPack.children.map((child, index) => `${pdfText(familyChildDisplayName(child, index))} (age ${child.age})`).join(" / "), fonts, {
       x: MARGIN,
       y: 395,
       size: 9,
@@ -565,7 +566,7 @@ function drawGuide(
   drawWrappedText(
     page,
     familyPack?.children.length
-      ? `${familyPack.children.map((child) => `${pdfText(child.name)} (age ${child.age})`).join(" / ")} / same place, different ways to play`
+      ? `${familyPack.children.map((child, index) => `${pdfText(familyChildDisplayName(child, index))} (age ${child.age})`).join(" / ")} / same place, different ways to play`
       : `Pencil / colored pencils / a grown-up / ${getAgeBand(booklet.age).minutes}-minute pockets of curious time`,
     fonts,
     {
@@ -1372,10 +1373,15 @@ function drawCertificate(
 }
 
 function familyRole(child: FamilyChild) {
-  if (child.age <= 5) return "Point, find, count, or draw with a grown-up";
-  if (child.age <= 8) return "Read clues, spot patterns, and explain one detail";
-  if (child.age <= 11) return "Compare evidence, solve, and lead one route";
-  return "Investigate context, make a case, and help the team";
+  const role = child.age <= 5
+    ? "Point, find, count, or draw with a grown-up"
+    : child.age <= 8
+      ? "Read clues, spot patterns, and explain one detail"
+      : child.age <= 11
+        ? "Compare evidence, solve, and lead one route"
+        : "Investigate context, make a case, and help the team";
+  const interests = child.interests.slice(0, 2).map(pdfText).join(", ");
+  return interests ? `${role}. Interest missions: ${interests}.` : role;
 }
 
 function mechanicPrompt(mechanic: QuestMechanic, theme: string) {
@@ -1418,7 +1424,7 @@ function drawFamilyMissionPage(
     page.drawRectangle({ x: MARGIN, y: y - 23, width: PAGE_WIDTH - MARGIN * 2, height: 42, color: index % 2 ? colors.greenSoft : colors.white, borderColor: colors.softLine, borderWidth: 0.7 });
     page.drawCircle({ x: MARGIN + 22, y: y - 2, size: 13, color: index % 2 ? colors.green : colors.blue });
     page.drawText(String(index + 1), { x: MARGIN + 19.5, y: y - 5, size: 8, font: fonts.bold, color: colors.white });
-    const label = `${pdfText(child.name)} / AGE ${child.age}`;
+    const label = `${index === 0 ? "LEAD / " : ""}${pdfText(familyChildDisplayName(child, index))} / AGE ${child.age}`;
     page.drawText(label, { x: MARGIN + 44, y: y + 3, size: 9, font: fonts.bold, color: colors.ink });
     drawWrappedText(page, familyRole(child), fonts, { x: MARGIN + 190, y: y + 3, size: 8, maxWidth: PAGE_WIDTH - MARGIN * 2 - 205, maxLines: 2, lineHeight: 10, color: colors.muted });
   });

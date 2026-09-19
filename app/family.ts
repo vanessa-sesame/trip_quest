@@ -252,10 +252,83 @@ function inferEventType(value: string): ItineraryEventType {
   return "attraction";
 }
 
+const monthNumbers: Record<string, string> = {
+  jan: "01",
+  january: "01",
+  feb: "02",
+  february: "02",
+  mar: "03",
+  march: "03",
+  apr: "04",
+  apri: "04",
+  april: "04",
+  may: "05",
+  jun: "06",
+  june: "06",
+  jul: "07",
+  july: "07",
+  aug: "08",
+  august: "08",
+  sep: "09",
+  sept: "09",
+  september: "09",
+  oct: "10",
+  october: "10",
+  nov: "11",
+  november: "11",
+  dec: "12",
+  december: "12",
+};
+
+type ItineraryDateMarker = {
+  key: string;
+  label: string;
+};
+
+function monthNumber(value: string) {
+  const lower = value.toLocaleLowerCase();
+  return monthNumbers[lower]
+    || Object.entries(monthNumbers).find(([name]) => name.length >= 3 && name.startsWith(lower))?.[1];
+}
+
+function itineraryDateMarker(value: string): ItineraryDateMarker | null {
+  const namedDate = value.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\b/i)
+    || value.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+  if (namedDate) {
+    const first = namedDate[1];
+    const second = namedDate[2];
+    const day = /^\d/.test(first) ? first : second;
+    const monthLabel = /^\d/.test(first) ? second : first;
+    const month = monthNumber(/^\d/.test(first) ? second : first);
+    if (month && Number(day) >= 1 && Number(day) <= 31) {
+      return {
+        key: `${month}-${day.padStart(2, "0")}`,
+        label: `${Number(day)} ${monthLabel}`,
+      };
+    }
+  }
+
+  const numericDate = value.match(/\b(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{2,4}))?\b/);
+  if (numericDate) {
+    const day = Number(numericDate[1]);
+    const month = Number(numericDate[2]);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return {
+        key: `${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+        label: `${day}/${month}`,
+      };
+    }
+  }
+  return null;
+}
+
+const itineraryDatePrefix = /^\s*(?:day\s*\d{1,2}\s*[:\-]\s*)?(?:(?:\d{1,2})(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}|(?:[A-Za-z]{3,9})\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?)(?:\s*(?:[:,-]|\u2013|\u2014)\s*|\s+|$)/i;
+
 function eventTitle(value: string) {
   return value
+    .replace(/^\s*day\s*\d{1,2}\s*[:\-]\s*/i, "")
+    .replace(itineraryDatePrefix, "")
     .replace(/^[-*•\d.)\s]+/, "")
-    .replace(/^(day\s*\d+\s*[:\-]\s*)/i, "")
     .replace(/^(flight|train|hotel|attraction|meal|downtime|travel)\s*[:\-]\s*/i, "")
     .trim();
 }
@@ -267,22 +340,35 @@ export function parseItineraryText(text: string, days: number): ItineraryEvent[]
     .filter(Boolean)
     .slice(0, 80);
   let currentDay = 1;
-  return lines.flatMap((line, index) => {
+  const dateDays = new Map<string, number>();
+  const parsed = lines.flatMap((line, index) => {
     const explicitDay = line.match(/\bday\s*(\d{1,2})\b/i);
-    if (explicitDay) currentDay = Math.max(1, Math.min(days, Number(explicitDay[1])));
+    const dateMarker = itineraryDateMarker(line);
+    if (explicitDay) {
+      currentDay = Math.max(1, Math.min(days, Number(explicitDay[1])));
+      if (dateMarker) dateDays.set(dateMarker.key, currentDay);
+    } else if (dateMarker) {
+      const existingDay = dateDays.get(dateMarker.key);
+      currentDay = existingDay || Math.min(days, dateDays.size + 1);
+      dateDays.set(dateMarker.key, currentDay);
+    }
     const parts = line.split(/\s+and\s+(?=(?:airport|hotel|train|museum|lunch|dinner|breakfast|market|walk|flight|attraction)\b)/i);
     return parts.flatMap((part, partIndex) => {
       const title = eventTitle(part);
-      if (title.length < 2) return [];
+      if (title.length < 2 && !dateMarker) return [];
       const type = inferEventType(title);
       return [{
         id: `event-${index + 1}-${partIndex + 1}`,
         day: currentDay,
         type,
-        title: title.slice(0, 120),
+        title: (title || `Plans for ${dateMarker?.label || "this date"}`).slice(0, 120),
       } satisfies ItineraryEvent];
     });
   });
+  const daysWithRealEvents = new Set(parsed
+    .filter((event) => !/^Plans for /i.test(event.title))
+    .map((event) => event.day));
+  return parsed.filter((event) => !/^Plans for /i.test(event.title) || !daysWithRealEvents.has(event.day));
 }
 
 export function eventsToDailyPlans(events: ItineraryEvent[], days: number) {

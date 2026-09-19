@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import {
   BookOpenCheck,
@@ -20,6 +20,8 @@ import {
   Sparkles,
   UserRound,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   buildBooklet,
@@ -156,6 +158,7 @@ export default function Home() {
   const [children, setChildren] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
   const [familyDraft, setFamilyDraft] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
   const [interestInputs, setInterestInputs] = useState<Record<string, string>>({});
+  const [avoidInputs, setAvoidInputs] = useState<Record<string, string>>({});
   const [familyPanelOpen, setFamilyPanelOpen] = useState(false);
   const [familyStatus, setFamilyStatus] = useState("");
   const [familyLoading, setFamilyLoading] = useState(true);
@@ -164,6 +167,7 @@ export default function Home() {
   const [structuredEvents, setStructuredEvents] = useState<ItineraryEvent[]>([]);
   const [pdfReadyUrl, setPdfReadyUrl] = useState("");
   const [pdfReadyFilename, setPdfReadyFilename] = useState("");
+  const [previewZoom, setPreviewZoom] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -258,6 +262,7 @@ export default function Home() {
       preferredMechanics: [...child.preferredMechanics],
     })));
     setInterestInputs({});
+    setAvoidInputs({});
     setFamilyPanelOpen(true);
   }
 
@@ -276,12 +281,31 @@ export default function Home() {
       : child));
   }
 
+  function addAvoid(childId: string, rawValue = avoidInputs[childId] || "") {
+    const tags = parseFamilyTags(rawValue);
+    if (!tags.length) return;
+    setFamilyDraft((current) => current.map((child) => child.id === childId
+      ? { ...child, avoid: parseFamilyTags([...child.avoid, ...tags].join(",")) }
+      : child));
+    setAvoidInputs((current) => ({ ...current, [childId]: "" }));
+  }
+
+  function removeAvoid(childId: string, avoid: string) {
+    setFamilyDraft((current) => current.map((child) => child.id === childId
+      ? { ...child, avoid: child.avoid.filter((item) => item !== avoid) }
+      : child));
+  }
+
   async function saveFamilyProfiles() {
     const withPendingInterests = familyDraft.map((child) => ({
       ...child,
       interests: parseFamilyTags([
         ...child.interests,
         ...(parseFamilyTags(interestInputs[child.id] || "")),
+      ].join(",")),
+      avoid: parseFamilyTags([
+        ...child.avoid,
+        ...(parseFamilyTags(avoidInputs[child.id] || "")),
       ].join(",")),
     }));
     const normalized = normalizeFamilyChildren(withPendingInterests);
@@ -766,7 +790,10 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="document-stage">
+          <div
+            className="document-stage"
+            style={{ "--preview-zoom": previewZoom } as CSSProperties}
+          >
             <button
               className="page-arrow previous"
               type="button"
@@ -777,7 +804,7 @@ export default function Home() {
               <ChevronLeft size={22} />
             </button>
 
-            <div className="paper-frame">
+            <div className={`paper-frame${previewZoom > 1 ? " zoomed" : ""}`}>
               {currentPageLocked ? (
                 <LockedPreviewPage
                   pageNumber={currentPage + 1}
@@ -831,6 +858,30 @@ export default function Home() {
             <span>
               {currentPage + 1} / {reportPageTitles.length}
             </span>
+          </div>
+
+          <div className="preview-zoom-controls" aria-label="Preview zoom controls">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Zoom out"
+              title="Zoom out"
+              disabled={previewZoom <= 1}
+              onClick={() => setPreviewZoom((value) => Math.max(1, Number((value - 0.15).toFixed(2))))}
+            >
+              <ZoomOut size={17} />
+            </button>
+            <output>{Math.round(previewZoom * 100)}%</output>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Zoom in"
+              title="Zoom in"
+              disabled={previewZoom >= 1.8}
+              onClick={() => setPreviewZoom((value) => Math.min(1.8, Number((value + 0.15).toFixed(2))))}
+            >
+              <ZoomIn size={17} />
+            </button>
           </div>
 
           <div className="thumbnail-strip" aria-label="Booklet pages">
@@ -1087,10 +1138,50 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-                  <label>
-                    <span>Things to avoid</span>
-                    <input value={child.avoid.join(", ")} placeholder="writing, loud places" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, avoid: parseFamilyTags(event.target.value) } : item))} />
-                  </label>
+                  <div className="avoid-editor">
+                    <div className="avoid-editor-heading">
+                      <span className="profile-label">Things to avoid</span>
+                      <small>Optional</small>
+                    </div>
+                    <div className="avoid-input-row">
+                      <input
+                        id={`avoid-${child.id}`}
+                        value={avoidInputs[child.id] || ""}
+                        placeholder="e.g. loud places"
+                        maxLength={32}
+                        aria-label={`Add something to avoid for ${familyChildDisplayName(child, index)}`}
+                        onChange={(event) => setAvoidInputs((current) => ({ ...current, [child.id]: event.target.value }))}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === "," || event.key === ";") {
+                            event.preventDefault();
+                            addAvoid(child.id);
+                          }
+                        }}
+                      />
+                      <button
+                        className="icon-button avoid-add-button"
+                        type="button"
+                        aria-label="Add thing to avoid"
+                        title="Add thing to avoid"
+                        disabled={!parseFamilyTags(avoidInputs[child.id] || "").length || child.avoid.length >= 8}
+                        onClick={() => addAvoid(child.id)}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                    {child.avoid.length ? (
+                      <div className="avoid-tag-list" aria-label="Saved things to avoid">
+                        {child.avoid.map((avoid) => (
+                          <span className="avoid-tag" key={avoid}>
+                            {avoid}
+                            <button type="button" aria-label={`Remove thing to avoid ${avoid}`} onClick={() => removeAvoid(child.id, avoid)}>
+                              <X size={11} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   <div>
                     <span className="profile-label">Favorite quest moves</span>
                     <div className="mechanic-picker">

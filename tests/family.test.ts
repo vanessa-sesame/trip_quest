@@ -62,6 +62,18 @@ test("pasted itinerary becomes typed daily events and plans", () => {
   assert.match(eventsToDailyPlans(events, 3)[1], /Train/);
 });
 
+test("pasted itineraries recognize named dates without Day labels", () => {
+  const events = parseItineraryText("10 Apri: airport and hotel\n11 April: museum and lunch", 5);
+  assert.deepEqual(events.map((event) => event.day), [1, 1, 2, 2]);
+  assert.equal(events[0].title, "airport");
+  assert.equal(events[2].title, "museum");
+  assert.match(eventsToDailyPlans(events, 5)[0], /airport/i);
+  assert.match(eventsToDailyPlans(events, 5)[1], /museum/i);
+
+  const dateOnly = parseItineraryText("10 April\n11 April", 5);
+  assert.deepEqual(dateOnly.map((event) => event.day), [1, 2]);
+});
+
 test("quest planning deliberately varies mechanics and includes sibling cooperation", () => {
   const plan = mechanicPlanForTrip(normalizeFamilyChildren([
     { name: "A", age: 5 },

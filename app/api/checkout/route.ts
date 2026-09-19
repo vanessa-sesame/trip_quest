@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       family: input.family,
       events: input.events,
     });
-    const amountCents = Number(runtime.STRIPE_PRICE_CENTS || "599");
+    const amountCents = Number(runtime.STRIPE_PRICE_CENTS || "99");
     const currency = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "usd";
     await writePendingPurchase(runtime.DB, {
       purchaseId,
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       familyId,
       cacheKey,
       requestJson,
-    }, Number.isInteger(amountCents) && amountCents > 0 ? amountCents : 599, currency);
+    }, Number.isInteger(amountCents) && amountCents > 0 ? amountCents : 99, currency);
 
     return response({ url: session.url }, familyId);
   } catch (error) {
@@ -104,4 +104,3 @@ export async function POST(request: Request) {
     return response({ error: /destination|age|trip length|daily plans|family/i.test(message) ? message : "Secure checkout could not be started. No charge was made." }, undefined, 400);
   }
 }
-

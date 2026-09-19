@@ -221,10 +221,16 @@ export default function Home() {
         ...generatedDays.flatMap((day) =>
           day.activities.slice(0, 2).map((activity) => activity.title),
         ),
+        "Grown-up answer notes",
         "Memory Museum",
         "Certificate",
       ];
-  const familyPageTitles = ["Family mission map", "Mission cards", "Badge tracker"];
+  const familyPageTitles = [
+    "Family relay & interest lens",
+    "Family mission map",
+    "Mission cards",
+    "Badge tracker",
+  ];
   const familyPageStart = pageTitles.length;
   const reportPageTitles = [...pageTitles, ...familyPageTitles];
   const outlineItems = (isSingaporeSample && sampleTitles
@@ -814,6 +820,7 @@ export default function Home() {
                   page={currentPage - familyPageStart}
                   explorers={children}
                   days={trip.days}
+                  dayPlans={generatedDays}
                 />
               ) : isSingaporeSample ? (
                 <Image
@@ -821,7 +828,7 @@ export default function Home() {
                   alt={`${reportPageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
                   fill
                   priority={currentPage === 0}
-                  sizes="(max-width: 760px) 300px, 330px"
+                  sizes="(max-width: 760px) 340px, 400px"
                   unoptimized
                 />
               ) : (
@@ -911,7 +918,7 @@ export default function Home() {
           <div className="purchase-bar">
             <div>
               <span>Printable A4 PDF</span>
-              <strong>US$5.99</strong>
+              <strong>S$0.99</strong>
             </div>
             <button
               className="unlock-button"
@@ -989,17 +996,17 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 8 : reportPageTitles.length + 1} high-resolution A4 pages</li>
+              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 9 : reportPageTitles.length + 1} high-resolution A4 pages</li>
               <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
               <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
               <li><Check size={17} /> Grown-up answer notes</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
-              <li><Check size={17} /> Family mission map, cards, badge tracker, and reward page</li>
+              <li><Check size={17} /> Family relay, mission map, cards, badge tracker, and reward page</li>
               <li><Check size={17} /> Print again for your own family</li>
             </ul>
             <div className="price-row">
-              <span>One-time purchase</span>
-              <strong>US$5.99</strong>
+              <span>Early tester price</span>
+              <strong>S$0.99</strong>
             </div>
             <button
               className="primary-button checkout-button"
@@ -1226,13 +1233,40 @@ function FamilyPackPreviewPage({
   page,
   explorers,
   days,
+  dayPlans,
 }: {
   destination: string;
   page: number;
   explorers: FamilyChild[];
   days: number;
+  dayPlans: Array<{
+    day: number;
+    theme: string;
+    interestHook?: string;
+    siblingMission?: string;
+  }>;
 }) {
   if (page === 0) {
+    return (
+      <article className="generated-sheet family-preview-sheet family-preview-relay">
+        <span>Family relay &amp; interest lens</span>
+        <h3>Every day gets a handoff</h3>
+        <p>Interests and sibling roles appear on the day they matter, then move to a different child the next day.</p>
+        <div className="family-relay-preview-list">
+          {dayPlans.slice(0, 6).map((day) => (
+            <div className="family-relay-preview-row" key={day.day}>
+              <strong>DAY {day.day}</strong>
+              <span>{day.theme}</span>
+              <small>{day.interestHook || day.siblingMission || "Share one local discovery."}</small>
+            </div>
+          ))}
+        </div>
+        <small>{days} adventure days · roles change, the place stays shared</small>
+      </article>
+    );
+  }
+
+  if (page === 1) {
     return (
       <article className="generated-sheet family-preview-sheet family-map-preview">
         <span>Family mission map</span>
@@ -1252,7 +1286,7 @@ function FamilyPackPreviewPage({
     );
   }
 
-  if (page === 1) {
+  if (page === 2) {
     const cards = [
       "Spot one tiny local detail.",
       "Draw a shape, texture, or pattern.",
@@ -1271,13 +1305,22 @@ function FamilyPackPreviewPage({
     );
   }
 
-  return (
+  return page === 3 ? (
     <article className="generated-sheet family-preview-sheet family-badges-preview">
       <span>Badge tracker</span>
       <h3>Collect the way you traveled</h3>
       <p>Give each explorer a tick, sticker, or tiny drawing when the family earns a badge.</p>
       <div className="family-preview-badges">
         {["Keen observer", "Kind traveler", "Pattern finder", "Team player", "Story keeper", "Route helper"].map((badge) => <div key={badge}><b>OK</b><span>{badge}</span></div>)}
+      </div>
+    </article>
+  ) : (
+    <article className="generated-sheet family-preview-sheet family-cards-preview">
+      <span>Mission cards</span>
+      <h3>Pick a family spark</h3>
+      <p>Use one card when the day needs a small, screen-free challenge.</p>
+      <div className="family-preview-card-grid">
+        {["Spot one tiny local detail.", "Draw a shape, texture, or pattern.", "Solve a clue, then find the evidence.", "Work together to tell one trip story."].map((card, index) => <div key={card}><strong>MISSION {index + 1}</strong><span>{card}</span></div>)}
       </div>
     </article>
   );
@@ -1338,6 +1381,21 @@ function GeneratedPage({
 
   if (page === activityPages.length + 2) {
     return (
+      <article className="generated-sheet generated-guide generated-answer">
+        <span>Grown-up answer notes</span>
+        <h3>Keep this page tucked away</h3>
+        <p>Use it after the child has had a proper go. Observation and imagination pages can have more than one good answer.</p>
+        <div className="answer-preview-list">
+          {days.slice(0, 5).map((day) => (
+            <strong key={day.day}>Day {day.day}: {day.activities[0]?.title || "Open observation"}</strong>
+          ))}
+        </div>
+      </article>
+    );
+  }
+
+  if (page === activityPages.length + 3) {
+    return (
       <article className="generated-sheet generated-memory">
         <span>Memory museum</span>
         <h3>{destination} moments worth keeping</h3>
@@ -1352,7 +1410,7 @@ function GeneratedPage({
     );
   }
 
-  if (page === activityPages.length + 3) {
+  if (page === activityPages.length + 4) {
     return (
       <article className="generated-sheet generated-certificate">
         <span>Official TripQuest certificate</span>

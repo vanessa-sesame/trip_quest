@@ -37,6 +37,6 @@ test("server-renders the TripQuest generator", async () => {
   assert.match(html, /Child&#x27;s age|Child's age/i);
   assert.match(html, /Singapore/i);
   assert.match(html, /Merlion Face Finder/i);
-  assert.match(html, /US\$5\.99/i);
+  assert.match(html, /S\$0\.99/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });

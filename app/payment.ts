@@ -49,18 +49,18 @@ export function familyCookie(familyId: string) {
 }
 
 export function paymentIsConfigured(runtime: PaymentRuntime) {
-  const cents = Number(runtime.STRIPE_PRICE_CENTS || "599");
+  const cents = Number(runtime.STRIPE_PRICE_CENTS || "99");
   return Boolean(secret(runtime) && (runtime.STRIPE_PRICE_ID?.trim() || Number.isInteger(cents) && cents > 0));
 }
 
 function paymentAmount(runtime: PaymentRuntime) {
-  const amount = Number(runtime.STRIPE_PRICE_CENTS || "599");
-  return Number.isInteger(amount) && amount > 0 ? amount : 599;
+  const amount = Number(runtime.STRIPE_PRICE_CENTS || "99");
+  return Number.isInteger(amount) && amount > 0 ? amount : 99;
 }
 
 function currency(runtime: PaymentRuntime) {
-  const value = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "usd";
-  return /^[a-z]{3}$/.test(value) ? value : "usd";
+  const value = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "sgd";
+  return /^[a-z]{3}$/.test(value) ? value : "sgd";
 }
 
 function publicUrl(runtime: PaymentRuntime, request: Request) {

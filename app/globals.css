@@ -686,15 +686,15 @@ p {
 .document-stage {
   position: relative;
   display: grid;
-  min-height: 315px;
+  min-height: 480px;
   overflow: auto;
   place-items: center;
-  padding: 14px 70px 10px;
+  padding: 22px 76px 16px;
 }
 
 .paper-frame {
   position: relative;
-  width: 220px;
+  width: min(360px, 100%);
   max-width: 100%;
   aspect-ratio: 210 / 297;
   container-type: inline-size;
@@ -706,16 +706,16 @@ p {
 }
 
 .paper-frame.zoomed {
-  width: calc(220px * var(--preview-zoom, 1));
+  width: calc(360px * var(--preview-zoom, 1));
   max-width: none;
 }
 
 .fullscreen .paper-frame {
-  width: 470px;
+  width: 520px;
 }
 
 .fullscreen .paper-frame.zoomed {
-  width: calc(470px * var(--preview-zoom, 1));
+  width: calc(520px * var(--preview-zoom, 1));
 }
 
 .paper-frame > img {
@@ -1415,6 +1415,53 @@ p {
   font-weight: 900;
 }
 
+.family-preview-relay > p {
+  margin-bottom: 7%;
+}
+
+.family-relay-preview-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 5%;
+}
+
+.family-relay-preview-row {
+  display: grid;
+  grid-template-columns: 25% 75%;
+  gap: 2px 7px;
+  border-left: 3px solid var(--coral);
+  background: var(--pale-yellow);
+  padding: 6px 8px;
+}
+
+.family-relay-preview-row:nth-child(2n) {
+  border-left-color: var(--teal);
+  background: var(--pale-blue);
+}
+
+.family-relay-preview-row strong {
+  grid-row: span 2;
+  color: var(--coral);
+  font-size: 0.54rem;
+}
+
+.family-relay-preview-row span,
+.family-relay-preview-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.family-relay-preview-row span {
+  font-size: 0.58rem;
+  font-weight: 900;
+}
+
+.family-relay-preview-row small {
+  color: var(--muted);
+  font-size: 0.5rem;
+  line-height: 1.25;
+}
+
 .family-preview-roles {
   display: grid;
   gap: 7px;
@@ -1626,6 +1673,20 @@ p {
   padding: 8px;
 }
 
+.answer-preview-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10%;
+}
+
+.answer-preview-list strong {
+  border-left: 3px solid var(--sun);
+  background: var(--pale-yellow);
+  font-size: 0.56rem;
+  line-height: 1.3;
+  padding: 7px 8px;
+}
+
 .generated-guide h4,
 .generated-day h4 {
   font-size: 0.7rem;
@@ -1674,7 +1735,7 @@ p {
 .draw-board {
   position: relative;
   display: grid;
-  height: 54px;
+  height: 64px;
   align-content: end;
   overflow: hidden;
   padding: 2px 4px;
@@ -1698,62 +1759,54 @@ p {
   position: absolute;
   top: 9px;
   right: 5px;
-  width: 42%;
-  height: 38px;
+  width: 45%;
+  height: 49px;
   border: 1px solid var(--ink);
-  border-radius: 50% 50% 4px 4px;
+  border-radius: 4px;
+  background: var(--pale-blue);
+  color: var(--ink);
 }
 
-.line-art span {
-  position: absolute;
-  right: 48%;
-  bottom: -4px;
-  width: 1px;
-  height: 42px;
-  background: var(--ink);
-  transform: rotate(24deg);
+.line-art .art-stroke {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
-.line-art span:nth-child(2) {
-  right: 20%;
-  height: 31px;
-  transform: rotate(-34deg);
+.line-art .art-fine {
+  fill: none;
+  stroke: var(--teal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
 }
 
-.line-art span:nth-child(3) {
-  right: 70%;
-  height: 26px;
-  transform: rotate(48deg);
+.line-art .art-accent {
+  fill: none;
+  stroke: var(--coral);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
-.line-art.scene-skyline { border-radius: 0; }
-.line-art.scene-skyline span:nth-child(1) { right: 68%; height: 78%; transform: none; }
-.line-art.scene-skyline span:nth-child(2) { right: 42%; height: 92%; transform: none; }
-.line-art.scene-skyline span:nth-child(3) { right: 16%; height: 66%; transform: none; }
-.line-art.scene-garden { border-radius: 45% 45% 12px 12px; }
-.line-art.scene-garden span:nth-child(1) { right: 55%; height: 82%; transform: rotate(7deg); }
-.line-art.scene-garden span:nth-child(2) { right: 28%; height: 58%; transform: rotate(-21deg); }
-.line-art.scene-garden span:nth-child(3) { right: 78%; height: 51%; transform: rotate(27deg); }
-.line-art.scene-bridge { border: 0; border-bottom: 2px solid var(--ink); border-radius: 0; }
-.line-art.scene-bridge span:nth-child(1) { right: 66%; height: 64%; transform: rotate(90deg); }
-.line-art.scene-bridge span:nth-child(2) { right: 42%; height: 64%; transform: rotate(90deg); }
-.line-art.scene-bridge span:nth-child(3) { right: 18%; height: 64%; transform: rotate(90deg); }
-.line-art.scene-market { border-radius: 3px; border-top-width: 3px; }
-.line-art.scene-market span:nth-child(1) { right: 72%; height: 68%; transform: rotate(0); }
-.line-art.scene-market span:nth-child(2) { right: 48%; height: 68%; transform: rotate(0); }
-.line-art.scene-market span:nth-child(3) { right: 24%; height: 68%; transform: rotate(0); }
-.line-art.scene-mountain { border: 0; border-radius: 0; transform: skewX(-8deg); }
-.line-art.scene-mountain span:nth-child(1) { right: 62%; height: 84%; transform: rotate(53deg); }
-.line-art.scene-mountain span:nth-child(2) { right: 35%; height: 65%; transform: rotate(-48deg); }
-.line-art.scene-mountain span:nth-child(3) { right: 10%; height: 56%; transform: rotate(44deg); }
-.line-art.scene-temple { border-radius: 3px 3px 0 0; }
-.line-art.scene-temple span:nth-child(1) { right: 63%; height: 68%; transform: rotate(90deg); }
-.line-art.scene-temple span:nth-child(2) { right: 38%; height: 68%; transform: rotate(90deg); }
-.line-art.scene-temple span:nth-child(3) { right: 13%; height: 68%; transform: rotate(90deg); }
+.line-art .art-fill {
+  fill: var(--pale-yellow);
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.line-art .art-sun {
+  fill: var(--pale-yellow);
+  stroke: var(--sun);
+  stroke-width: 2;
+}
 
 .coloring-board .line-art {
   border-width: 2px;
-  background: repeating-linear-gradient(45deg, transparent 0 7px, rgba(23, 49, 46, 0.12) 7px 8px);
+  background: repeating-linear-gradient(45deg, transparent 0 7px, rgba(23, 49, 46, 0.08) 7px 8px);
 }
 
 .word-search-layout,
@@ -2479,10 +2532,6 @@ p {
   height: 68%;
 }
 
-.generated-game-page .line-art span {
-  height: 90%;
-}
-
 .generated-game-page .difference-scene {
   height: 75%;
 }
@@ -2725,16 +2774,21 @@ p {
   }
 
   .preview-panel {
-    min-height: 760px;
+    min-height: 860px;
+  }
+
+  .document-stage {
+    min-height: 540px;
+    padding: 22px 42px 16px;
   }
 
   .paper-frame {
-    width: 300px;
+    width: min(340px, 100%);
     max-width: 100%;
   }
 
   .paper-frame.zoomed {
-    width: calc(300px * var(--preview-zoom, 1));
+    width: calc(340px * var(--preview-zoom, 1));
     max-width: none;
   }
 
@@ -2781,7 +2835,7 @@ p {
   }
 
   .preview-panel {
-    min-height: 690px;
+    min-height: 790px;
   }
 
   .preview-toolbar {
@@ -2790,8 +2844,8 @@ p {
   }
 
   .document-stage {
-    min-height: 410px;
-    padding: 18px 45px 14px;
+    min-height: 500px;
+    padding: 20px 42px 14px;
   }
 
   .page-arrow {
@@ -2851,17 +2905,17 @@ p {
   }
 
   .document-stage {
-    min-height: 435px;
+    min-height: 540px;
     padding: 24px 70px 17px;
   }
 
   .paper-frame {
-    width: 330px;
+    width: min(400px, 100%);
     max-width: 100%;
   }
 
   .paper-frame.zoomed {
-    width: calc(330px * var(--preview-zoom, 1));
+    width: calc(400px * var(--preview-zoom, 1));
     max-width: none;
   }
 

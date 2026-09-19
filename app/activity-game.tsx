@@ -33,16 +33,112 @@ const fallbackItems: GameItem[] = [
   { label: "Share", clue: "Tell your family what surprised you." },
 ];
 
+function DestinationLineArt({ scene }: { scene: ReturnType<typeof coloringSceneFor> }) {
+  const common = <path className="art-fine" d="M8 124 Q76 116 148 125 T292 123" />;
+  let details;
+  switch (scene) {
+    case "skyline":
+      details = (
+        <>
+          <circle className="art-sun" cx="257" cy="30" r="14" />
+          <path className="art-stroke" d="M20 55 H57 V124 H20 Z M76 34 H116 V124 H76 Z M136 47 H177 V124 H136 Z" />
+          <path className="art-accent" d="M84 34 L96 20 L108 34 M144 47 L156 33 L168 47" />
+          <path className="art-fine" d="M28 70 H49 M28 86 H49 M84 53 H108 M84 70 H108 M84 87 H108 M144 65 H169 M144 82 H169" />
+          <path className="art-stroke" d="M205 124 V88 M205 88 Q220 68 235 88 M220 76 V124 M236 124 V96" />
+          <path className="art-accent" d="M184 50 q8 -7 16 0 q8 -7 16 0 M224 61 q8 -7 16 0" />
+        </>
+      );
+      break;
+    case "garden":
+      details = (
+        <>
+          <path className="art-stroke" d="M22 124 Q92 66 155 124 M38 124 Q78 91 115 124" />
+          <path className="art-stroke" d="M68 124 V66 M68 66 Q52 50 42 68 M68 78 Q88 55 99 73 M68 91 Q50 78 42 91" />
+          <path className="art-fine" d="M22 102 q9 -12 18 0 M42 94 q9 -12 18 0 M168 124 V77 M168 77 q-14 -14 -24 0 M168 88 q16 -15 26 0" />
+          {[190, 228, 266].map((flowerX, index) => <g key={flowerX}><path className="art-stroke" d={`M${flowerX} 124 V${82 + (index % 2) * 9}`} /><circle className="art-accent" cx={flowerX} cy={78 + (index % 2) * 9} r="6" /><circle className="art-fill" cx={flowerX + 8} cy={78 + (index % 2) * 9} r="4" /></g>)}
+          <path className="art-accent" d="M244 34 q8 -8 16 0 q8 -8 16 0" />
+        </>
+      );
+      break;
+    case "bridge":
+      details = (
+        <>
+          <path className="art-stroke" d="M18 70 H282 M28 82 H272 M42 82 Q60 44 78 82 M98 82 Q116 44 134 82 M154 82 Q172 44 190 82 M210 82 Q228 44 246 82" />
+          <path className="art-fine" d="M12 100 Q46 91 80 100 T148 100 T216 100 T284 100 M12 112 Q46 103 80 112 T148 112 T216 112 T284 112" />
+          <path className="art-stroke" d="M47 70 V47 M232 70 V47 M47 47 H232" />
+          <path className="art-accent" d="M62 41 q7 -7 14 0 M216 41 q7 -7 14 0" />
+          <path className="art-fill" d="M122 106 q18 -13 36 0 l-8 8 h-20 z" />
+        </>
+      );
+      break;
+    case "market":
+      details = (
+        <>
+          <path className="art-stroke" d="M38 50 H262 L278 76 H22 Z M38 50 V124 H262 V50" />
+          <path className="art-accent" d="M32 72 H268 M54 72 V124 M102 72 V124 M150 72 V124 M198 72 V124 M246 72 V124" />
+          <path className="art-fine" d="M48 91 H88 M112 91 H142 M164 91 H188 M210 91 H250" />
+          <circle className="art-fill" cx="78" cy="104" r="13" /><circle className="art-fill" cx="218" cy="103" r="16" />
+          <path className="art-stroke" d="M72 124 V108 M78 108 V124 M212 124 V106 M218 106 V124" />
+          <path className="art-accent" d="M64 37 q7 -10 14 0 q7 -10 14 0 M208 37 q7 -10 14 0 q7 -10 14 0" />
+        </>
+      );
+      break;
+    case "mountain":
+      details = (
+        <>
+          <circle className="art-sun" cx="252" cy="30" r="13" />
+          <path className="art-stroke" d="M14 124 L78 48 L133 124 L180 67 L276 124" />
+          <path className="art-fine" d="M78 48 L91 67 L104 62 L133 124 M180 67 L196 86 L211 80 L236 124" />
+          <path className="art-stroke" d="M35 124 V88 M35 88 q-12 -13 -22 0 M35 98 q14 -13 24 0 M242 124 V89 M242 89 q-12 -13 -22 0 M242 99 q14 -13 24 0" />
+          <path className="art-accent" d="M148 124 Q153 106 164 95 Q174 84 183 72" />
+          <path className="art-fine" d="M194 39 q8 -7 16 0 q8 -7 16 0" />
+        </>
+      );
+      break;
+    case "temple":
+      details = (
+        <>
+          <path className="art-stroke" d="M50 124 V73 H250 V124 M34 73 H266 L240 52 H60 Z M61 52 L150 22 L239 52" />
+          <path className="art-accent" d="M83 73 V124 M112 73 V124 M150 73 V124 M188 73 V124 M217 73 V124" />
+          <path className="art-fine" d="M30 124 H270 M70 42 H230 M150 22 V14" />
+          <path className="art-fill" d="M20 61 q8 -10 16 0 v14 H20 Z M264 61 q8 -10 16 0 v14 H264 Z" />
+          <circle className="art-sun" cx="255" cy="27" r="12" />
+        </>
+      );
+      break;
+    case "cave":
+      details = (
+        <>
+          <path className="art-stroke" d="M20 124 Q24 32 150 23 Q276 32 280 124" />
+          <path className="art-fine" d="M44 124 Q55 61 150 59 Q245 61 256 124" />
+          <path className="art-accent" d="M64 42 L76 72 L87 49 L98 80 M201 46 L213 77 L224 42 L238 74" />
+          <path className="art-stroke" d="M32 124 V91 M32 91 q-12 -13 -22 0 M32 101 q14 -13 24 0 M268 124 V93 M268 93 q-12 -13 -22 0 M268 103 q14 -13 24 0" />
+          <path className="art-fill" d="M133 124 Q139 98 150 98 Q161 98 167 124" />
+          <path className="art-fine" d="M40 112 q14 -7 28 0 M224 112 q14 -7 28 0" />
+        </>
+      );
+      break;
+    case "shophouse":
+      details = (
+        <>
+          <path className="art-stroke" d="M24 124 V45 H92 V124 M100 124 V32 H170 V124 M178 124 V50 H276 V124" />
+          <path className="art-accent" d="M24 73 H92 M100 64 H170 M178 77 H276" />
+          <path className="art-fine" d="M36 58 H80 M112 48 H158 M192 64 H262 M36 90 H80 M112 80 H158 M192 95 H262" />
+          <path className="art-stroke" d="M49 124 V94 H68 V124 M126 124 V83 H145 V124 M218 124 V99 H238 V124" />
+          <path className="art-accent" d="M32 20 q7 -10 14 0 q7 -10 14 0 M120 17 q7 -10 14 0 q7 -10 14 0 M218 24 q7 -10 14 0 q7 -10 14 0" />
+        </>
+      );
+      break;
+  }
+  return <svg className={`line-art scene-${scene}`} viewBox="0 0 300 150" role="img" aria-label={`${scene} line drawing`}>{common}{details}</svg>;
+}
+
 function DrawingBoard({ activity, coloring }: { activity: Activity; coloring: boolean }) {
   const items = activity.items;
   const scene = coloringSceneFor(activity);
   return (
     <div className={coloring ? "draw-board coloring-board" : "draw-board"}>
-      <div className={`line-art scene-${scene}`} aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      <DestinationLineArt scene={scene} />
       <strong>{items[0].label}</strong>
       <small>{coloring ? "Add local colors and patterns" : items[0].clue}</small>
     </div>

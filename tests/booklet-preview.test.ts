@@ -28,14 +28,22 @@ test("only the first three booklet pages are exposed in a public preview", () =>
   }
 });
 
-test("tester mode exposes every page without changing the stored booklet", () => {
+test("full preview mode can still expose every page without changing the stored booklet", () => {
   const booklet = sampleGeneratedBooklet();
-  const preview = createBookletPreview(booklet);
+  const preview = createBookletPreview(booklet, true);
 
-  assert.equal(isBookletPageLocked(8), false);
+  assert.equal(isBookletPageLocked(8, true), false);
   assert.equal(preview, booklet);
   assert.equal(
     preview.dayPlans[1].activities[0].title,
     booklet.dayPlans[1].activities[0].title,
   );
+});
+
+test("public preview mode is locked after the first three pages", () => {
+  const booklet = sampleGeneratedBooklet();
+  const preview = createBookletPreview(booklet);
+
+  assert.equal(isBookletPageLocked(3), true);
+  assert.equal(preview.dayPlans[0].activities[1].title, "Locked printable page");
 });

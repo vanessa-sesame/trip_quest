@@ -94,6 +94,6 @@ test("family PDF adds a usable pack section without changing the base booklet", 
   });
   assert.equal((await PDFDocument.load(base)).getPageCount(), bookletPdfPageCount(booklet));
   assert.equal((await PDFDocument.load(family)).getPageCount(), bookletPdfPageCount(booklet, true));
-  assert.equal((await PDFDocument.load(family)).getPageCount(), 18);
+  assert.equal((await PDFDocument.load(family)).getPageCount(), 19);
   assert.equal(familyPackPdfFilename(booklet), "tripquest-singapore-age-7-family-pack.pdf");
 });

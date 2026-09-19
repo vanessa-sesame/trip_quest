@@ -15,6 +15,13 @@
       "when": 1789472370615,
       "tag": "0001_optimal_micromax",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789781285679,
+      "tag": "0002_furry_queen_noir",
+      "breakpoints": true
     }
   ]
 }

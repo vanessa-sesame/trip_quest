@@ -20,6 +20,12 @@ import {
   mazeSizeForAge,
   normalizePuzzleWord,
 } from "./puzzles.ts";
+import {
+  mechanicLabel,
+  type FamilyChild,
+  type ItineraryEvent,
+  type QuestMechanic,
+} from "./family.ts";
 
 const A4: [number, number] = [595.28, 841.89];
 const PAGE_WIDTH = A4[0];
@@ -67,6 +73,12 @@ type DrawTextOptions = {
   size: number;
   x: number;
   y: number;
+};
+
+export type FamilyPackContext = {
+  children: FamilyChild[];
+  events: ItineraryEvent[];
+  mechanicsByDay: Array<{ day: number; mechanics: QuestMechanic[] }>;
 };
 
 function pdfText(value: string) {
@@ -1336,8 +1348,133 @@ function drawCertificate(
   page.drawText(`AGE ${booklet.age} EDITION  /  ${booklet.days} ${booklet.days === 1 ? "DAY" : "DAYS"}`, { x: centeredX(`AGE ${booklet.age} EDITION  /  ${booklet.days} ${booklet.days === 1 ? "DAY" : "DAYS"}`, fonts.bold, 8, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 111, size: 8, font: fonts.bold, color: colors.green });
 }
 
-export function bookletPdfPageCount(booklet: GeneratedBookletData) {
-  return booklet.dayPlans.length * 2 + 5;
+function familyRole(child: FamilyChild) {
+  if (child.age <= 5) return "Point, find, count, or draw with a grown-up";
+  if (child.age <= 8) return "Read clues, spot patterns, and explain one detail";
+  if (child.age <= 11) return "Compare evidence, solve, and lead one route";
+  return "Investigate context, make a case, and help the team";
+}
+
+function mechanicPrompt(mechanic: QuestMechanic, theme: string) {
+  const subject = pdfText(theme);
+  switch (mechanic) {
+    case "spot": return `Spot one tiny detail at ${subject} that most visitors might miss.`;
+    case "draw": return `Draw the shape, texture, or pattern that best remembers ${subject}.`;
+    case "count": return `Count four examples near ${subject}; compare which one is biggest or brightest.`;
+    case "talk": return `Tell a grown-up one respectful question about what you notice at ${subject}.`;
+    case "imagine": return `Imagine a local object at ${subject} could speak. Give it one helpful sentence.`;
+    case "navigate": return `Choose the safest family route around ${subject}; mark one useful landmark.`;
+    case "photograph": return `With permission, frame one photo of a pattern or detail connected to ${subject}.`;
+    case "solve": return `Solve the clue, then point to the real evidence at ${subject}.`;
+    case "move": return `Make a quiet three-step movement inspired by the shapes or rhythm at ${subject}.`;
+    default: return `Combine your clues and make one family answer about ${subject}.`;
+  }
+}
+
+function drawFamilyMissionPage(
+  document: PDFDocument,
+  fonts: Fonts,
+  booklet: GeneratedBookletData,
+  pack: FamilyPackContext,
+  pageNumber: number,
+  totalPages: number,
+) {
+  const page = drawPageBase(document, fonts, "Family pack", pageNumber, totalPages, colors.green);
+  page.drawText("FAMILY MISSION MAP", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.green });
+  drawWrappedText(page, "One trip, many ways to play", fonts, {
+    x: MARGIN, y: 733, size: 28, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 31,
+  });
+  drawWrappedText(page, `This ${pdfText(booklet.destination)} pack gives every explorer a useful role. Share the same place, then let each child notice it at the right level.`, fonts, {
+    x: MARGIN, y: 660, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 3, lineHeight: 14, color: colors.muted,
+  });
+
+  page.drawText("EXPLORER ROLES", { x: MARGIN, y: 600, size: 9, font: fonts.bold, color: colors.coral });
+  const childRows = Math.min(pack.children.length, 6);
+  pack.children.slice(0, childRows).forEach((child, index) => {
+    const y = 560 - index * 57;
+    page.drawRectangle({ x: MARGIN, y: y - 23, width: PAGE_WIDTH - MARGIN * 2, height: 42, color: index % 2 ? colors.greenSoft : colors.white, borderColor: colors.softLine, borderWidth: 0.7 });
+    page.drawCircle({ x: MARGIN + 22, y: y - 2, size: 13, color: index % 2 ? colors.green : colors.blue });
+    page.drawText(String(index + 1), { x: MARGIN + 19.5, y: y - 5, size: 8, font: fonts.bold, color: colors.white });
+    const label = `${pdfText(child.name)} / AGE ${child.age}`;
+    page.drawText(label, { x: MARGIN + 44, y: y + 3, size: 9, font: fonts.bold, color: colors.ink });
+    drawWrappedText(page, familyRole(child), fonts, { x: MARGIN + 190, y: y + 3, size: 8, maxWidth: PAGE_WIDTH - MARGIN * 2 - 205, maxLines: 2, lineHeight: 10, color: colors.muted });
+  });
+
+  const timelineY = 560 - childRows * 57 - 18;
+  page.drawText("TRIP THREAD", { x: MARGIN, y: timelineY, size: 9, font: fonts.bold, color: colors.blue });
+  const eventLines = Array.from({ length: booklet.days }, (_, index) => {
+    const dayEvents = pack.events.filter((event) => event.day === index + 1).map((event) => `${event.title}`).join(" / ");
+    return `DAY ${index + 1}: ${dayEvents || booklet.dayPlans[index]?.theme || "Open adventure"}`;
+  });
+  eventLines.slice(0, 8).forEach((line, index) => drawWrappedText(page, line, fonts, {
+    x: MARGIN, y: timelineY - 25 - index * 25, size: 8, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: index % 2 ? colors.muted : colors.ink,
+  }));
+}
+
+function drawMissionCardsPage(
+  document: PDFDocument,
+  fonts: Fonts,
+  booklet: GeneratedBookletData,
+  pack: FamilyPackContext,
+  pageNumber: number,
+  totalPages: number,
+) {
+  const page = drawPageBase(document, fonts, "Mission cards", pageNumber, totalPages, colors.blue);
+  page.drawText("CUT-OUT MISSION CARDS", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.blue });
+  drawWrappedText(page, "Pick one when the day needs a spark", fonts, { x: MARGIN, y: 733, size: 26, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 29 });
+  drawWrappedText(page, "Keep the cards together or cut along the lines. The goal is to notice, connect, and enjoy the place, not to finish everything.", fonts, { x: MARGIN, y: 665, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
+  const cards = Array.from({ length: 4 }, (_, index) => {
+    const dayIndex = index % Math.max(1, booklet.dayPlans.length);
+    const day = booklet.dayPlans[dayIndex];
+    const plan = pack.mechanicsByDay[dayIndex]?.mechanics || ["spot"];
+    const mechanic = plan[index % plan.length] || "spot";
+    return { day, mechanic };
+  });
+  const gap = 16;
+  const width = (PAGE_WIDTH - MARGIN * 2 - gap) / 2;
+  const height = 210;
+  cards.forEach(({ day, mechanic }, index) => {
+    const x = MARGIN + (index % 2) * (width + gap);
+    const y = 430 - Math.floor(index / 2) * (height + gap);
+    page.drawRectangle({ x, y, width, height, color: colors.white, borderColor: colors.ink, borderWidth: 1.2 });
+    page.drawRectangle({ x, y: y + height - 34, width, height: 34, color: index % 2 ? colors.blueSoft : colors.yellowSoft });
+    page.drawText(`DAY ${day.day} / ${mechanicLabel(mechanic).toUpperCase()}`, { x: x + 12, y: y + height - 22, size: 8, font: fonts.bold, color: colors.ink });
+    drawWrappedText(page, day.theme, fonts, { x: x + 12, y: y + height - 58, size: 12, font: fonts.bold, maxWidth: width - 24, maxLines: 2, lineHeight: 14 });
+    drawWrappedText(page, mechanicPrompt(mechanic, day.theme), fonts, { x: x + 12, y: y + height - 105, size: 9, maxWidth: width - 24, maxLines: 5, lineHeight: 12, color: colors.muted });
+    drawDottedLine(page, x + 12, x + width - 12, y + 24, colors.line, 4, 4);
+  });
+}
+
+function drawBadgeTrackerPage(
+  document: PDFDocument,
+  fonts: Fonts,
+  booklet: GeneratedBookletData,
+  pageNumber: number,
+  totalPages: number,
+) {
+  const page = drawPageBase(document, fonts, "Badge tracker", pageNumber, totalPages, colors.coral);
+  page.drawText("BADGE TRACKER", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.coral });
+  drawWrappedText(page, "Collect the way you traveled", fonts, { x: MARGIN, y: 733, size: 27, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 30 });
+  drawWrappedText(page, "Give a tick, sticker, or tiny drawing to each badge when someone in the family earns it.", fonts, { x: MARGIN, y: 665, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
+  const badges = ["Keen Observer", "Kind Traveler", "Brave Taster", "Pattern Finder", "Route Helper", "Story Keeper", "Team Player", "Local Detail"];
+  const gap = 14;
+  const width = (PAGE_WIDTH - MARGIN * 2 - gap) / 2;
+  badges.forEach((badge, index) => {
+    const x = MARGIN + (index % 2) * (width + gap);
+    const y = 425 - Math.floor(index / 2) * 75;
+    page.drawRectangle({ x, y, width, height: 57, color: index % 2 ? colors.greenSoft : colors.coralSoft, borderColor: colors.softLine, borderWidth: 0.8 });
+    page.drawCircle({ x: x + 25, y: y + 28, size: 14, color: index % 2 ? colors.green : colors.coral });
+    page.drawText("OK", { x: x + 17, y: y + 23, size: 8, font: fonts.bold, color: colors.white });
+    page.drawText(badge, { x: x + 49, y: y + 34, size: 9, font: fonts.bold, color: colors.ink });
+    page.drawText("earned on", { x: x + 49, y: y + 19, size: 7, font: fonts.regular, color: colors.muted });
+    drawDottedLine(page, x + 96, x + width - 12, y + 19, colors.line, 3, 4);
+  });
+  page.drawText("FAMILY REWARD", { x: MARGIN, y: 100, size: 9, font: fonts.bold, color: colors.blue });
+  drawWrappedText(page, `When the family collects ${Math.min(8, Math.max(3, booklet.days + 1))} badges, choose a shared reward: a favorite snack, a sunset story, or one extra page in the ${pdfText(booklet.destination)} memory museum.`, fonts, { x: MARGIN, y: 76, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 3, lineHeight: 12, color: colors.muted });
+}
+
+export function bookletPdfPageCount(booklet: GeneratedBookletData, includeFamilyPack = false) {
+  return booklet.dayPlans.length * 2 + 5 + (includeFamilyPack ? 3 : 0);
 }
 
 export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
@@ -1348,7 +1485,11 @@ export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destinat
   return `tripquest-${destination}-age-${booklet.age}.pdf`;
 }
 
-export async function createBookletPdf(inputBooklet: GeneratedBookletData) {
+export function familyPackPdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
+  return bookletPdfFilename(booklet).replace(/\.pdf$/i, "-family-pack.pdf");
+}
+
+export async function createBookletPdf(inputBooklet: GeneratedBookletData, familyPack?: FamilyPackContext) {
   const booklet: GeneratedBookletData = {
     ...inputBooklet,
     ...validateBookletDraft(inputBooklet, inputBooklet.days, inputBooklet.age),
@@ -1360,7 +1501,7 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData) {
     mono: await document.embedFont(StandardFonts.Courier),
     monoBold: await document.embedFont(StandardFonts.CourierBold),
   };
-  const totalPages = bookletPdfPageCount(booklet);
+  const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));
   document.setTitle(`${pdfText(booklet.destination)} Explorer - Age ${booklet.age}`);
   document.setAuthor("TripQuest");
   document.setSubject("Printable family travel activity booklet");
@@ -1393,6 +1534,14 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData) {
   drawMemoryPage(document, fonts, booklet, pageNumber, totalPages);
   pageNumber += 1;
   drawCertificate(document, fonts, booklet, pageNumber, totalPages);
+  if (familyPack) {
+    pageNumber += 1;
+    drawFamilyMissionPage(document, fonts, booklet, familyPack, pageNumber, totalPages);
+    pageNumber += 1;
+    drawMissionCardsPage(document, fonts, booklet, familyPack, pageNumber, totalPages);
+    pageNumber += 1;
+    drawBadgeTrackerPage(document, fonts, booklet, pageNumber, totalPages);
+  }
 
   return document.save();
 }

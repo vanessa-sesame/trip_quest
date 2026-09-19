@@ -37,3 +37,9 @@ export const generationRateLimits = sqliteTable("generation_rate_limits", {
   requestCount: integer("request_count").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const familyWorkspaces = sqliteTable("family_workspaces", {
+  familyId: text("family_id").primaryKey(),
+  workspaceJson: text("workspace_json").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});

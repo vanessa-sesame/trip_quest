@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   BookOpenCheck,
@@ -42,6 +42,18 @@ import {
   FULL_PREVIEW_FOR_TESTERS,
   isBookletPageLocked,
 } from "./booklet-preview";
+import {
+  defaultFamilyWorkspace,
+  eventsToDailyPlans,
+  eventTypeLabel,
+  mechanicLabel,
+  normalizeFamilyChildren,
+  parseItineraryText,
+  QUEST_MECHANICS,
+  readingLevelForAge,
+  type FamilyChild,
+  type ItineraryEvent,
+} from "./family";
 
 type SampleAge = 5 | 7;
 
@@ -111,6 +123,10 @@ function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
 }
 
+function splitTagInput(value: string) {
+  return [...new Set(value.split(",").map((item) => item.trim().toLocaleLowerCase()).filter(Boolean))].slice(0, 8);
+}
+
 export default function Home() {
   const [age, setAge] = useState(5);
   const [destination, setDestination] = useState("Singapore");
@@ -139,6 +155,42 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState(
     "Singapore preview ready for age 5.",
   );
+  const [children, setChildren] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
+  const [familyDraft, setFamilyDraft] = useState<FamilyChild[]>(defaultFamilyWorkspace().children);
+  const [familyPanelOpen, setFamilyPanelOpen] = useState(false);
+  const [familyStatus, setFamilyStatus] = useState("");
+  const [familyLoading, setFamilyLoading] = useState(true);
+  const [itineraryText, setItineraryText] = useState("");
+  const [structuredEvents, setStructuredEvents] = useState<ItineraryEvent[]>([]);
+  const [pdfReadyUrl, setPdfReadyUrl] = useState("");
+  const [pdfReadyFilename, setPdfReadyFilename] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/family", { headers: { Accept: "application/json" } })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("Family profiles are unavailable.")))
+      .then((payload: unknown) => {
+        if (!active) return;
+        const record = payload && typeof payload === "object" ? payload as { workspace?: unknown } : {};
+        const loaded = normalizeFamilyChildren((record.workspace as { children?: unknown } | undefined)?.children);
+        setChildren(loaded);
+        setFamilyDraft(loaded);
+        setAge(loaded[0]?.age || 5);
+      })
+      .catch(() => {
+        if (active) setFamilyStatus("Using this device's temporary family profile until it reconnects.");
+      })
+      .finally(() => {
+        if (active) setFamilyLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pdfReadyUrl) URL.revokeObjectURL(pdfReadyUrl);
+    };
+  }, [pdfReadyUrl]);
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
@@ -185,13 +237,54 @@ export default function Home() {
   const currentPage = clampPage(page, pageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);
 
+  function updateLeadAge(value: number) {
+    const nextAge = sanitizeAge(value);
+    setAge(nextAge);
+    setChildren((current) => current.map((child, index) => index === 0
+      ? { ...child, age: nextAge, readingLevel: readingLevelForAge(nextAge) }
+      : child));
+  }
+
+  function openFamilyPanel() {
+    setFamilyDraft(children.map((child) => ({
+      ...child,
+      interests: [...child.interests],
+      avoid: [...child.avoid],
+      preferredMechanics: [...child.preferredMechanics],
+    })));
+    setFamilyPanelOpen(true);
+  }
+
+  async function saveFamilyProfiles() {
+    const normalized = normalizeFamilyChildren(familyDraft);
+    setChildren(normalized);
+    setAge(normalized[0]?.age || age);
+    setFamilyStatus("Saving family profiles…");
+    try {
+      const response = await fetch("/api/family", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ workspace: { children: normalized } }),
+      });
+      if (!response.ok) throw new Error("Family profiles could not be saved.");
+      setFamilyStatus("Family profiles saved for this browser.");
+      setFamilyPanelOpen(false);
+    } catch (error) {
+      setFamilyStatus(error instanceof Error ? error.message : "Family profiles could not be saved.");
+    }
+  }
+
   async function handleGenerate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextTrip = {
       age: sanitizeAge(age),
       destination: destination.trim(),
       days: sanitizeDays(days),
-      itinerary: itinerary.slice(0, sanitizeDays(days)),
+      itinerary: itinerary.slice(0, sanitizeDays(days)).map((plan, index) => {
+        const imported = eventsToDailyPlans(structuredEvents, sanitizeDays(days))[index];
+        return [plan.trim(), imported].filter(Boolean).join("; ").slice(0, 140);
+      }),
+      family: children,
     };
 
     if (!nextTrip.destination) {
@@ -287,6 +380,7 @@ export default function Home() {
 
     setPdfState("generating");
     setCheckoutNote("Preparing the print-quality pages…");
+    const pdfWindow = window.open("about:blank", "_blank");
     try {
       const response = await fetch("/api/pdf", {
         method: "POST",
@@ -296,6 +390,8 @@ export default function Home() {
           days: generatedBooklet.days,
           destination: generatedBooklet.destination,
           itinerary: generatedBooklet.itinerary,
+          family: children,
+          events: structuredEvents,
         }),
       });
       if (!response.ok) {
@@ -308,6 +404,14 @@ export default function Home() {
       const filename = disposition.match(/filename="([^"]+)"/i)?.[1]
         || `tripquest-${generatedBooklet.destination.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-age-${generatedBooklet.age}.pdf`;
       const url = URL.createObjectURL(blob);
+      setPdfReadyUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return url;
+      });
+      setPdfReadyFilename(filename);
+      if (pdfWindow) {
+        pdfWindow.location.href = url;
+      }
       const link = document.createElement("a");
       link.href = url;
       link.download = filename;
@@ -317,9 +421,10 @@ export default function Home() {
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
       setCheckoutNote(
-        "Your PDF is ready. Choose the TripQuest Library folder if your browser asks where to save it.",
+        "Your family pack is ready. Open the PDF tab, then use the browser share or download button to save it.",
       );
     } catch (error) {
+      pdfWindow?.close();
       setCheckoutNote(
         error instanceof Error
           ? error.message
@@ -345,8 +450,8 @@ export default function Home() {
         </a>
         <div className="topbar-meta">
           <span>Family travel studio</span>
-          <button className="icon-button" type="button" aria-label="Saved booklets">
-            <BookOpenCheck size={19} />
+          <button className="icon-button" type="button" aria-label="Family profiles" onClick={openFamilyPanel}>
+            <UserRound size={19} />
           </button>
         </div>
       </header>
@@ -395,7 +500,7 @@ export default function Home() {
                   type="button"
                   aria-label="Reduce age by one year"
                   disabled={age <= 3 || generationState === "generating"}
-                  onClick={() => setAge((value) => Math.max(3, value - 1))}
+                  onClick={() => updateLeadAge(age - 1)}
                 >
                   <Minus size={17} />
                 </button>
@@ -409,7 +514,7 @@ export default function Home() {
                   disabled={generationState === "generating"}
                   onChange={(event) => {
                     const value = event.target.valueAsNumber;
-                    if (Number.isFinite(value)) setAge(sanitizeAge(value));
+                    if (Number.isFinite(value)) updateLeadAge(value);
                   }}
                 />
                 <span>years</span>
@@ -418,7 +523,7 @@ export default function Home() {
                   type="button"
                   aria-label="Increase age by one year"
                   disabled={age >= 14 || generationState === "generating"}
-                  onClick={() => setAge((value) => Math.min(14, value + 1))}
+                  onClick={() => updateLeadAge(age + 1)}
                 >
                   <Plus size={17} />
                 </button>
@@ -453,6 +558,19 @@ export default function Home() {
               </div>
             </div>
 
+            <div className="family-summary">
+              <div>
+                <span className="field-label">Family explorers</span>
+                <p>
+                  {familyLoading ? "Loading saved profiles…" : children.map((child) => `${child.name}, ${child.age}`).join(" · ")}
+                </p>
+              </div>
+              <button className="text-button" type="button" onClick={openFamilyPanel} disabled={generationState === "generating"}>
+                <UserRound size={16} />
+                Edit family
+              </button>
+            </div>
+
             <div className="itinerary-editor">
               <button
                 className="itinerary-toggle"
@@ -479,6 +597,40 @@ export default function Home() {
               </button>
               {itineraryOpen ? (
                 <div id="daily-plans" className="daily-plans">
+                  <div className="itinerary-import">
+                    <label className="field-label" htmlFor="itinerary-paste">Paste a booking or trip outline</label>
+                    <textarea
+                      id="itinerary-paste"
+                      value={itineraryText}
+                      maxLength={4_000}
+                      disabled={generationState === "generating"}
+                      onChange={(event) => setItineraryText(event.target.value)}
+                      placeholder="Day 1: airport and hotel\nDay 2: museum, lunch, river walk"
+                    />
+                    <button
+                      className="secondary-button import-button"
+                      type="button"
+                      disabled={!itineraryText.trim() || generationState === "generating"}
+                      onClick={() => {
+                        const events = parseItineraryText(itineraryText, days);
+                        setStructuredEvents(events);
+                        const importedPlans = eventsToDailyPlans(events, days);
+                        setItinerary((current) => Array.from({ length: 14 }, (_, index) =>
+                          [current[index] || "", importedPlans[index] || ""].filter(Boolean).join("; ").slice(0, 140),
+                        ));
+                      }}
+                    >
+                      <CalendarDays size={16} />
+                      Build trip timeline
+                    </button>
+                    {structuredEvents.length ? (
+                      <div className="event-list" aria-label="Imported itinerary events">
+                        {structuredEvents.slice(0, 12).map((event) => (
+                          <span className="event-chip" key={event.id}>Day {event.day} · {eventTypeLabel(event.type)} · {event.title}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   {itinerary.slice(0, days).map((plan, index) => (
                     <label key={index}>
                       <span>Day {index + 1}</span>
@@ -557,8 +709,11 @@ export default function Home() {
               <h2 id="preview-title">{destinationName} Explorer</h2>
               <p>
                 Age {trip.age} <span aria-hidden="true">•</span> {trip.days} days{" "}
-                <span aria-hidden="true">•</span> {pageTitles.length} pages
+                <span aria-hidden="true">•</span> {pageTitles.length} preview pages
               </p>
+              <small className="pack-summary">
+                {children.length} explorer{children.length === 1 ? "" : "s"} · family mission map · cards · badge tracker
+              </small>
             </div>
             <button
               className="icon-button"
@@ -740,11 +895,12 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 5 : pageTitles.length + 1} high-resolution A4 pages</li>
+              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 8 : pageTitles.length + 1} high-resolution A4 pages</li>
               <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
               <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
               <li><Check size={17} /> Grown-up answer notes</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
+              <li><Check size={17} /> Family mission map, cards, badge tracker, and reward page</li>
               <li><Check size={17} /> Print again for your own family</li>
             </ul>
             <div className="price-row">
@@ -765,9 +921,88 @@ export default function Home() {
               )}
               {pdfState === "generating"
                 ? "Preparing printable PDF…"
-                : "Continue to secure checkout"}
+                : "Prepare family pack"}
             </button>
             {checkoutNote ? <p className="checkout-note">{checkoutNote}</p> : null}
+            {pdfReadyUrl ? (
+              <a className="secondary-button pdf-open-button" href={pdfReadyUrl} target="_blank" rel="noreferrer">
+                <Download size={17} />
+                Open {pdfReadyFilename || "printable PDF"}
+              </a>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
+      {familyPanelOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="family-modal" role="dialog" aria-modal="true" aria-labelledby="family-title">
+            <button className="icon-button modal-close" type="button" aria-label="Close family profiles" onClick={() => setFamilyPanelOpen(false)}>
+              <X size={19} />
+            </button>
+            <p className="eyebrow">Saved family</p>
+            <h2 id="family-title">Make every explorer count</h2>
+            <p className="modal-subtitle">Profiles are saved to this browser. Names help the printable pack; only ages and play preferences guide the AI.</p>
+            <div className="family-profile-list">
+              {familyDraft.map((child, index) => (
+                <article className="family-profile-card" key={child.id}>
+                  <div className="profile-card-heading">
+                    <strong>Explorer {index + 1}</strong>
+                    {familyDraft.length > 1 ? (
+                      <button className="text-button danger-button" type="button" onClick={() => setFamilyDraft((current) => current.filter((item) => item.id !== child.id))}>Remove</button>
+                    ) : null}
+                  </div>
+                  <div className="profile-grid">
+                    <label>
+                      <span>Name or nickname</span>
+                      <input value={child.name} maxLength={40} onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, name: event.target.value } : item))} />
+                    </label>
+                    <label>
+                      <span>Age</span>
+                      <input type="number" min="3" max="14" value={child.age} onChange={(event) => {
+                        const nextAge = sanitizeAge(event.target.valueAsNumber);
+                        setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, age: nextAge, readingLevel: readingLevelForAge(nextAge) } : item));
+                      }} />
+                    </label>
+                  </div>
+                  <label>
+                    <span>Reading level</span>
+                    <select value={child.readingLevel} onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, readingLevel: event.target.value as FamilyChild["readingLevel"] } : item))}>
+                      <option value="pre-reader">Pre-reader / read aloud</option>
+                      <option value="early-reader">Early reader</option>
+                      <option value="independent-reader">Independent reader</option>
+                      <option value="confident-reader">Confident reader</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Interests</span>
+                    <input value={child.interests.join(", ")} placeholder="dinosaurs, drawing, trains" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, interests: splitTagInput(event.target.value) } : item))} />
+                  </label>
+                  <label>
+                    <span>Things to avoid</span>
+                    <input value={child.avoid.join(", ")} placeholder="writing, loud places" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, avoid: splitTagInput(event.target.value) } : item))} />
+                  </label>
+                  <div>
+                    <span className="profile-label">Favorite quest moves</span>
+                    <div className="mechanic-picker">
+                      {QUEST_MECHANICS.map((mechanic) => {
+                        const selected = child.preferredMechanics.includes(mechanic);
+                        return <button className={`mechanic-chip${selected ? " selected" : ""}`} type="button" key={mechanic} onClick={() => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, preferredMechanics: selected ? item.preferredMechanics.filter((value) => value !== mechanic) : [...item.preferredMechanics, mechanic].slice(0, 4) } : item))}>{mechanicLabel(mechanic)}</button>;
+                      })}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <div className="family-modal-actions">
+              <button className="secondary-button" type="button" disabled={familyDraft.length >= 6} onClick={() => setFamilyDraft((current) => [...current, { id: `child-${Date.now()}`, name: `Explorer ${current.length + 1}`, age: 7, readingLevel: "early-reader", interests: [], avoid: [], preferredMechanics: [] }])}>
+                <Plus size={17} /> Add explorer
+              </button>
+              <button className="primary-button" type="button" onClick={() => void saveFamilyProfiles()}>
+                <Check size={17} /> Save family
+              </button>
+            </div>
+            {familyStatus ? <p className="checkout-note">{familyStatus}</p> : null}
           </section>
         </div>
       ) : null}

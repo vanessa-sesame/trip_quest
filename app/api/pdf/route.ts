@@ -1,8 +1,15 @@
 import { normalizeItinerary } from "../../booklet-ai";
 import {
-  bookletPdfFilename,
+  familyPackPdfFilename,
   createBookletPdf,
+  type FamilyPackContext,
 } from "../../booklet-pdf";
+import {
+  familyPromptSummary,
+  mechanicPlanForTrip,
+  normalizeFamilyChildren,
+  normalizeItineraryEvents,
+} from "../../family";
 import {
   type BookletCacheIdentity,
   type BookletDatabase,
@@ -27,6 +34,7 @@ type RuntimeEnvironment = {
   KIMI_COMPOSER_MODEL?: string;
   KIMI_RESEARCH_MODEL?: string;
   TRIPQUEST_OWNER_EMAIL?: string;
+  TRIPQUEST_PDF_TEST_MODE?: string;
 };
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
@@ -61,6 +69,10 @@ function isOwnerRequest(request: Request, runtime: RuntimeEnvironment) {
   return Boolean(owner && visitor && owner === visitor);
 }
 
+function canPreparePdf(request: Request, runtime: RuntimeEnvironment) {
+  return isOwnerRequest(request, runtime) || runtime.TRIPQUEST_PDF_TEST_MODE === "true";
+}
+
 function pdfResponse(bytes: ArrayBuffer | Uint8Array, filename: string, cache: string) {
   const body = bytes instanceof Uint8Array
     ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
@@ -81,7 +93,7 @@ export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
     const runtime = await getRuntimeEnvironment();
-    if (!isOwnerRequest(request, runtime)) {
+    if (!canPreparePdf(request, runtime)) {
       return Response.json(
         {
           error:
@@ -102,6 +114,10 @@ export async function POST(request: Request) {
     const age = requireInteger(body.age, 3, 14, "Age");
     const days = requireInteger(body.days, 1, 14, "Trip length");
     const itinerary = normalizeItinerary(body.itinerary, days);
+    const family = normalizeFamilyChildren(body.family);
+    const events = normalizeItineraryEvents(body.events, days);
+    const familyContext = familyPromptSummary(family);
+    const mechanicsByDay = mechanicPlanForTrip(family, days);
     const identity: BookletCacheIdentity = {
       destination,
       age,
@@ -109,6 +125,7 @@ export async function POST(request: Request) {
       itinerary,
       researchModel: runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3",
       composerModel: runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6",
+      familyContext,
     };
     const cacheKey = await createBookletCacheKey(identity);
     const booklet = await readStoredBooklet(
@@ -124,7 +141,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const filename = bookletPdfFilename(booklet);
+    const filename = familyPackPdfFilename(booklet);
     const stored = await readStoredBookletPdf(
       runtime.DB,
       runtime.BOOKLET_FILES,
@@ -134,7 +151,8 @@ export async function POST(request: Request) {
 
     let job = pdfJobs.get(cacheKey);
     if (!job) {
-      job = createBookletPdf(booklet);
+      const familyPack: FamilyPackContext = { children: family, events, mechanicsByDay };
+      job = createBookletPdf(booklet, familyPack);
       pdfJobs.set(cacheKey, job);
       void job.finally(() => pdfJobs.delete(cacheKey)).catch(() => undefined);
     }

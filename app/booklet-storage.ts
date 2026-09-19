@@ -61,6 +61,7 @@ export type BookletCacheIdentity = {
   itinerary: string[];
   researchModel: string;
   composerModel: string;
+  familyContext?: string;
 };
 
 const encoder = new TextEncoder();
@@ -97,6 +98,7 @@ export async function createBookletCacheKey(identity: BookletCacheIdentity) {
     itinerary: identity.itinerary.map(normalizedText),
     researchModel: identity.researchModel,
     composerModel: identity.composerModel,
+    familyContext: identity.familyContext || "",
   });
 }
 

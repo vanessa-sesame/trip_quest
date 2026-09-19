@@ -31,6 +31,11 @@ import {
 } from "../../request-security";
 import { createBookletPreview } from "../../booklet-preview";
 import {
+  familyPromptSummary,
+  mechanicPlanForTrip,
+  normalizeFamilyChildren,
+} from "../../family";
+import {
   type GenerationTask,
   createGenerationStreamResponse,
   createGenerationTask,
@@ -700,6 +705,8 @@ async function composeBookletBatch(
   research: ResearchResult,
   apiKey: string,
   model: string,
+  familyContext: string,
+  balancePlan: string,
 ) {
   const days = itinerary.length;
   const ageBand = getAgeBand(age);
@@ -730,6 +737,14 @@ AGE DIRECTION
 Edition: ${ageBand.label}. Typical session: ${ageBand.minutes} minutes.
 ${exactAgeGuidance[age]}
 The wording and mechanics must feel designed for exactly age ${age}, not for a broad generic child audience.
+
+FAMILY BRIEF
+${familyContext}
+Use the lead child's exact age for the main booklet. When there are siblings, make the instructions naturally shareable but include a short adaptation cue so a younger child can point, draw, or count while an older child can read, infer, compare, or explain. Never include child names in the booklet.
+
+BALANCED QUEST PLAN
+${balancePlan}
+Use the listed mechanics as the intended mix. Do not use the same mechanic as the only meaningful action on consecutive days.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
@@ -827,6 +842,8 @@ async function composeBooklet(
   research: ResearchResult,
   apiKey: string,
   model: string,
+  familyContext: string,
+  balancePlan: string,
 ) {
   const batchSize = days > 6 ? 4 : days;
   const batches = Array.from(
@@ -846,6 +863,8 @@ async function composeBooklet(
       research,
       apiKey,
       model,
+      familyContext,
+      balancePlan,
     )),
   );
   const combined = makeActivityTitlesUnique({
@@ -891,6 +910,11 @@ export async function POST(request: Request) {
     const age = requireInteger(body.age, 3, 14, "Age");
     const days = requireInteger(body.days, 1, 14, "Trip length");
     const itinerary = normalizeItinerary(body.itinerary, days);
+    const family = normalizeFamilyChildren(body.family);
+    const familyContext = familyPromptSummary(family);
+    const balancePlan = mechanicPlanForTrip(family, days)
+      .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
+      .join("\n");
     const runtime = await getRuntimeEnvironment();
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
     const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
@@ -901,6 +925,7 @@ export async function POST(request: Request) {
       itinerary,
       researchModel,
       composerModel,
+      familyContext,
     };
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
@@ -1053,6 +1078,8 @@ export async function POST(request: Request) {
               research,
               apiKey,
               composerModel,
+              familyContext,
+              balancePlan,
             ).catch((error) => {
               throw new GenerationStageError("composition", error);
             });

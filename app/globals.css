@@ -44,7 +44,9 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
@@ -53,7 +55,9 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   outline: 3px solid var(--sun);
   outline-offset: 2px;
 }
@@ -316,6 +320,44 @@ p {
   font-size: 0.8rem;
 }
 
+.family-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 4px 0 13px;
+}
+
+.family-summary p {
+  max-width: 205px;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 5px 0;
+}
+
+.text-button:hover:not(:disabled) {
+  color: var(--coral);
+  text-decoration: underline;
+}
+
 .itinerary-editor {
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
@@ -365,10 +407,72 @@ p {
 
 .daily-plans {
   display: grid;
-  max-height: 252px;
+  max-height: 420px;
   gap: 8px;
   overflow-y: auto;
   padding: 5px 4px 1px 0;
+}
+
+.itinerary-import {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.itinerary-import textarea {
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 0.77rem;
+  line-height: 1.4;
+  padding: 9px 10px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0 12px;
+  text-decoration: none;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--pale-yellow);
+}
+
+.import-button {
+  justify-self: start;
+  min-height: 36px;
+}
+
+.event-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.event-chip {
+  border: 1px solid #b9ccce;
+  border-radius: 4px;
+  background: var(--pale-blue);
+  color: var(--teal-dark);
+  font-size: 0.67rem;
+  line-height: 1.3;
+  padding: 5px 6px;
 }
 
 .daily-plans label {
@@ -549,6 +653,14 @@ p {
   margin-bottom: 0;
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.pack-summary {
+  display: block;
+  margin-top: 5px;
+  color: var(--teal-dark);
+  font-size: 0.7rem;
+  font-weight: 800;
 }
 
 .document-stage {
@@ -916,6 +1028,117 @@ p {
   font-size: 0.8rem;
   line-height: 1.4;
   padding: 10px;
+}
+
+.pdf-open-button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.family-modal {
+  position: relative;
+  width: min(700px, 100%);
+  max-height: min(88vh, 820px);
+  overflow: auto;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 9px 9px 0 var(--ink);
+  padding: 30px;
+}
+
+.family-modal h2 {
+  max-width: 480px;
+  margin-bottom: 9px;
+  font-size: 1.75rem;
+}
+
+.family-profile-list {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.family-profile-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  padding: 15px;
+}
+
+.profile-card-heading,
+.family-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-card-heading {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 9px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  gap: 10px;
+}
+
+.family-profile-card label,
+.profile-label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.family-profile-card input,
+.family-profile-card select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8rem;
+  padding: 0 9px;
+}
+
+.mechanic-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.mechanic-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.mechanic-chip.selected {
+  border-color: var(--teal);
+  background: var(--pale-blue);
+  color: var(--teal-dark);
+}
+
+.danger-button {
+  color: var(--coral);
+}
+
+.family-modal-actions {
+  justify-content: flex-end;
 }
 
 .generated-sheet {
@@ -2183,6 +2406,24 @@ p {
 
   .checkout-modal {
     padding: 24px 20px;
+  }
+
+  .family-modal {
+    max-height: 92vh;
+    padding: 24px 20px;
+  }
+
+  .family-modal-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .family-modal-actions > button {
+    width: 100%;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
   }
 }
 

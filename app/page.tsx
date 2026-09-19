@@ -224,6 +224,9 @@ export default function Home() {
         "Memory Museum",
         "Certificate",
       ];
+  const familyPageTitles = ["Family mission map", "Mission cards", "Badge tracker"];
+  const familyPageStart = pageTitles.length;
+  const reportPageTitles = [...pageTitles, ...familyPageTitles];
   const outlineItems = (isSingaporeSample && sampleTitles
     ? sampleTitles.slice(2, 7)
     : generatedDays.map((day) => day.theme)
@@ -234,7 +237,7 @@ export default function Home() {
         : title,
     locked: !FULL_PREVIEW_FOR_TESTERS && index > 0,
   }));
-  const currentPage = clampPage(page, pageTitles.length);
+  const currentPage = clampPage(page, reportPageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);
 
   function updateLeadAge(value: number) {
@@ -436,7 +439,7 @@ export default function Home() {
   }
 
   function changePage(direction: number) {
-    setPage((value) => clampPage(value + direction, pageTitles.length));
+    setPage((value) => clampPage(value + direction, reportPageTitles.length));
   }
 
   return (
@@ -709,7 +712,7 @@ export default function Home() {
               <h2 id="preview-title">{destinationName} Explorer</h2>
               <p>
                 Age {trip.age} <span aria-hidden="true">•</span> {trip.days} days{" "}
-                <span aria-hidden="true">•</span> {pageTitles.length} preview pages
+                <span aria-hidden="true">•</span> {reportPageTitles.length} report pages
               </p>
               <small className="pack-summary">
                 {children.length} explorer{children.length === 1 ? "" : "s"} · family mission map · cards · badge tracker
@@ -745,10 +748,17 @@ export default function Home() {
                     setCheckoutOpen(true);
                   }}
                 />
+              ) : currentPage >= familyPageStart ? (
+                <FamilyPackPreviewPage
+                  destination={destinationName}
+                  page={currentPage - familyPageStart}
+                  explorers={children}
+                  days={trip.days}
+                />
               ) : isSingaporeSample ? (
                 <Image
                   src={`/booklets/singapore-age-${trip.age}-page-${currentPage + 1}.png`}
-                  alt={`${pageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
+                  alt={`${reportPageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
                   fill
                   priority={currentPage === 0}
                   sizes="(max-width: 760px) 300px, 330px"
@@ -769,7 +779,7 @@ export default function Home() {
               className="page-arrow next"
               type="button"
               aria-label="Next page"
-              disabled={currentPage === pageTitles.length - 1}
+              disabled={currentPage === reportPageTitles.length - 1}
               onClick={() => changePage(1)}
             >
               <ChevronRight size={22} />
@@ -778,15 +788,15 @@ export default function Home() {
 
           <div className="page-status">
             <strong>
-              {currentPageLocked ? "Locked printable page" : pageTitles[currentPage]}
+              {currentPageLocked ? "Locked printable page" : reportPageTitles[currentPage]}
             </strong>
             <span>
-              {currentPage + 1} / {pageTitles.length}
+              {currentPage + 1} / {reportPageTitles.length}
             </span>
           </div>
 
           <div className="thumbnail-strip" aria-label="Booklet pages">
-            {pageTitles.map((pageTitle, index) => {
+            {reportPageTitles.map((pageTitle, index) => {
               const locked = isBookletPageLocked(index);
               return (
                 <button
@@ -797,7 +807,7 @@ export default function Home() {
                   aria-current={index === currentPage ? "page" : undefined}
                   onClick={() => setPage(index)}
                 >
-                  {isSingaporeSample && !locked ? (
+                  {isSingaporeSample && index < familyPageStart && !locked ? (
                     <Image
                       src={`/booklets/singapore-age-${trip.age}-page-${index + 1}.png`}
                       alt=""
@@ -895,7 +905,7 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 8 : pageTitles.length + 1} high-resolution A4 pages</li>
+              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 8 : reportPageTitles.length + 1} high-resolution A4 pages</li>
               <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
               <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
               <li><Check size={17} /> Grown-up answer notes</li>
@@ -1027,6 +1037,67 @@ function LockedPreviewPage({
         <Download size={14} aria-hidden="true" />
         Unlock PDF
       </button>
+    </article>
+  );
+}
+
+function FamilyPackPreviewPage({
+  destination,
+  page,
+  explorers,
+  days,
+}: {
+  destination: string;
+  page: number;
+  explorers: FamilyChild[];
+  days: number;
+}) {
+  if (page === 0) {
+    return (
+      <article className="generated-sheet family-preview-sheet family-map-preview">
+        <span>Family mission map</span>
+        <h3>{destination} family explorers</h3>
+        <p>Same place, different ways to notice it. Each explorer gets a role that matches their age and reading level.</p>
+        <div className="family-preview-roles">
+          {explorers.map((child) => (
+            <div key={child.id}>
+              <strong>{child.name} · age {child.age}</strong>
+              <span>{child.age <= 5 ? "Point, find, count, or draw" : child.age <= 8 ? "Read clues and spot patterns" : "Compare, solve, and explain"}</span>
+            </div>
+          ))}
+        </div>
+        <small>{days} adventure days · share the place, not every answer</small>
+      </article>
+    );
+  }
+
+  if (page === 1) {
+    const cards = [
+      "Spot one tiny local detail.",
+      "Draw a shape, texture, or pattern.",
+      "Solve a clue, then find the real evidence.",
+      "Work together to tell one trip story.",
+    ];
+    return (
+      <article className="generated-sheet family-preview-sheet family-cards-preview">
+        <span>Mission cards</span>
+        <h3>Pick a family spark</h3>
+        <p>Use one card when the day needs a small, screen-free challenge.</p>
+        <div className="family-preview-card-grid">
+          {cards.map((card, index) => <div key={card}><strong>MISSION {index + 1}</strong><span>{card}</span></div>)}
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="generated-sheet family-preview-sheet family-badges-preview">
+      <span>Badge tracker</span>
+      <h3>Collect the way you traveled</h3>
+      <p>Give each explorer a tick, sticker, or tiny drawing when the family earns a badge.</p>
+      <div className="family-preview-badges">
+        {["Keen observer", "Kind traveler", "Pattern finder", "Team player", "Story keeper", "Route helper"].map((badge) => <div key={badge}><b>OK</b><span>{badge}</span></div>)}
+      </div>
     </article>
   );
 }

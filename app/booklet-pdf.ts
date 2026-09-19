@@ -280,6 +280,7 @@ function drawCover(
   fonts: Fonts,
   booklet: GeneratedBookletData,
   totalPages: number,
+  familyPack?: FamilyPackContext,
 ) {
   const page = drawPageBase(document, fonts, "Cover", 1, totalPages, colors.coral);
   page.drawRectangle({
@@ -342,6 +343,25 @@ function drawCover(
     446,
     colors.greenSoft,
   );
+  if (familyPack?.children.length) {
+    page.drawText("FAMILY EXPLORERS", {
+      x: MARGIN,
+      y: 414,
+      size: 8,
+      font: fonts.bold,
+      color: colors.blue,
+    });
+    drawWrappedText(page, familyPack.children.map((child) => `${pdfText(child.name)} (age ${child.age})`).join(" / "), fonts, {
+      x: MARGIN,
+      y: 395,
+      size: 9,
+      font: fonts.bold,
+      maxWidth: 245,
+      maxLines: 2,
+      lineHeight: 12,
+      color: colors.ink,
+    });
+  }
 
   page.drawRectangle({
     x: 318,
@@ -435,6 +455,7 @@ function drawGuide(
   fonts: Fonts,
   booklet: GeneratedBookletData,
   totalPages: number,
+  familyPack?: FamilyPackContext,
 ) {
   const page = drawPageBase(document, fonts, "Grown-up guide", 2, totalPages, colors.green);
   page.drawText("GROWN-UP GUIDE", {
@@ -540,10 +561,12 @@ function drawGuide(
     borderWidth: 1,
     color: colors.white,
   });
-  page.drawText("PACK", { x: MARGIN + 15, y: 122, size: 8, font: fonts.bold, color: colors.coral });
+  page.drawText(familyPack?.children.length ? "FAMILY EXPLORERS" : "PACK", { x: MARGIN + 15, y: 122, size: 8, font: fonts.bold, color: colors.coral });
   drawWrappedText(
     page,
-    `Pencil / colored pencils / a grown-up / ${getAgeBand(booklet.age).minutes}-minute pockets of curious time`,
+    familyPack?.children.length
+      ? `${familyPack.children.map((child) => `${pdfText(child.name)} (age ${child.age})`).join(" / ")} / same place, different ways to play`
+      : `Pencil / colored pencils / a grown-up / ${getAgeBand(booklet.age).minutes}-minute pockets of curious time`,
     fonts,
     {
       x: MARGIN + 15,
@@ -1511,8 +1534,8 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData, famil
   document.setCreationDate(new Date(booklet.generatedAt));
   document.setModificationDate(new Date());
 
-  drawCover(document, fonts, booklet, totalPages);
-  drawGuide(document, fonts, booklet, totalPages);
+  drawCover(document, fonts, booklet, totalPages, familyPack);
+  drawGuide(document, fonts, booklet, totalPages, familyPack);
   let pageNumber = 3;
   booklet.dayPlans.forEach((day, dayIndex) => {
     day.activities.forEach((activity, activityIndex) => {

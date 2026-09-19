@@ -15,8 +15,8 @@ trip length, optional family profiles, interests, and an optional itinerary.
 
 Live site: https://tripquestkids.com
 
-Current public release: Sites version 22, commit
-`28fa31aa4a1711403c5ef0162e357b69b34903f2` on `main`.
+Current public release: Sites version 23, commit
+`239472186ed1ea033a5361001630772b01bd2779` on `main`.
 
 ## Current User Experience
 
@@ -33,7 +33,11 @@ Current public release: Sites version 22, commit
   prompt-only data.
 - Every generated day includes a concrete family relay; siblings get different
   roles, a role swap, and a shared result rather than appearing only in the
-  final family pages.
+  final family pages. Repeated model copy is replaced by a rotating set of
+  scout, sketcher, counter, route, question, and collector roles.
+- Daily interest and family-role information appears once per day, on the
+  first activity only. The browser preview uses a light briefing strip and
+  the PDF uses a compact text cue so the actual game keeps its working space.
 - Common branded interests are treated as generic inspiration in the
   deterministic fallback and the composer prompt; official characters, logos,
   slogans, and artwork are not generated.
@@ -82,8 +86,9 @@ charging customers:
 - Research uses web search and asks for source-backed landmarks, culture,
   transport, food, nature, etiquette, and itinerary verification.
 - Composition returns structured JSON and is validated before storage.
-- Composition returns a per-day `interestHook` and `siblingMission`, both shown
-  in the web preview and on the first printable activity page of each day.
+- Composition returns an `interestHook` only on scheduled interest days and a
+  `siblingMission` for each day. Both appear in the web preview and on the
+  first printable activity page of each day.
 - The application, not the model, renders puzzles and PDF layouts.
 - Booklets over six days are composed in four-day batches.
 - Exact age rules, interest assignments, allowed game types, title uniqueness,
@@ -119,6 +124,16 @@ keys.
 - PDF requests reuse the stored booklet and reuse a stored PDF when available.
 - Family profiles use an anonymous browser-scoped family identifier and D1; a
   child name is not sent in the Kimi family prompt.
+- The current family workspace is one D1 JSON record keyed by the secure
+  `tripquest_family_id` cookie. It stores child profile fields only; it does
+  not yet store child photos or a persistent trip roadmap.
+- The planned photo/roadmap model is: D1 rows for family, children, trips, and
+  normalized itinerary events; private R2 objects for original photos and
+  generated PDFs; D1 stores only object keys, metadata, hashes, and retention
+  timestamps. Photos must be served through short-lived signed access, never a
+  public R2 URL, and excluded from shared booklet cache keys except for a photo
+  version/hash. Without email, the family can be recovered only on the same
+  browser/device unless a parent downloads an optional recovery code.
 
 ## Reliability And Safety
 
@@ -197,6 +212,9 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 - Child photo uploads and photo-in-booklet placement are intentionally not
   implemented yet; see the product plan in the development handoff for the
   required consent, private storage, moderation, deletion, and PDF design work.
+- `scripts/create-photo-sample.py` creates a one-page sample cover with a
+  fictional illustrated child; it is a design proof, not a production upload
+  path.
 - Daily feedback and next-day adaptation are not implemented.
 - A native iOS shell, App Store purchase flow, privacy disclosures, and App
   Store submission assets are not implemented.

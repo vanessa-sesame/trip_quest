@@ -49,6 +49,7 @@ import {
   familyChildDisplayName,
   mechanicLabel,
   normalizeFamilyChildren,
+  parseFamilyTags,
   parseItineraryText,
   QUEST_MECHANICS,
   readingLevelForAge,
@@ -122,10 +123,6 @@ function isSampleAge(value: number): value is SampleAge {
 
 function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
-}
-
-function splitTagInput(value: string) {
-  return [...new Set(value.split(",").map((item) => item.trim().toLocaleLowerCase()).filter(Boolean))].slice(0, 8);
 }
 
 export default function Home() {
@@ -1006,11 +1003,11 @@ export default function Home() {
                   </label>
                   <label>
                     <span>Mission interests</span>
-                    <input value={child.interests.join(", ")} placeholder="dinosaurs, drawing, trains" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, interests: splitTagInput(event.target.value) } : item))} />
+                    <input value={child.interests.join(", ")} placeholder="dinosaurs, drawing, trains" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, interests: parseFamilyTags(event.target.value) } : item))} />
                   </label>
                   <label>
                     <span>Things to avoid</span>
-                    <input value={child.avoid.join(", ")} placeholder="writing, loud places" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, avoid: splitTagInput(event.target.value) } : item))} />
+                    <input value={child.avoid.join(", ")} placeholder="writing, loud places" onChange={(event) => setFamilyDraft((current) => current.map((item) => item.id === child.id ? { ...item, avoid: parseFamilyTags(event.target.value) } : item))} />
                   </label>
                   <div>
                     <span className="profile-label">Favorite quest moves</span>

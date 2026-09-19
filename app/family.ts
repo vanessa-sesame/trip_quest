@@ -103,11 +103,18 @@ function cleanText(value: unknown, maximum: number) {
     : "";
 }
 
+export function parseFamilyTags(value: string, maximum = 8) {
+  return [...new Set(value
+    .split(/[,;\n]+/)
+    .map((item) => cleanText(item, 32).toLocaleLowerCase())
+    .filter(Boolean))].slice(0, maximum);
+}
+
 function cleanTags(value: unknown, maximum = 8) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value
     .filter((item): item is string => typeof item === "string")
-    .map((item) => cleanText(item, 32).toLocaleLowerCase())
+    .flatMap((item) => parseFamilyTags(item, maximum))
     .filter(Boolean))].slice(0, maximum);
 }
 

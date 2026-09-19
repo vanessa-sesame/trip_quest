@@ -8,6 +8,7 @@ import {
   interestPlanForTrip,
   mechanicPlanForTrip,
   normalizeFamilyChildren,
+  parseFamilyTags,
   parseItineraryText,
 } from "../app/family.ts";
 import {
@@ -20,17 +21,23 @@ import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
 
 test("family profiles normalize ages, reading levels, and bounded tags", () => {
   const children = normalizeFamilyChildren([
-    { id: "a", name: "Mia", age: 5, interests: ["drawing", "drawing"], avoid: ["writing"] },
+    { id: "a", name: "Mia", age: 5, interests: ["drawing; trains", "drawing"], avoid: ["writing"] },
     { id: "b", name: "Leo", age: 10, readingLevel: "independent-reader", interests: ["maps"] },
   ]);
   assert.equal(children[0].readingLevel, "pre-reader");
-  assert.deepEqual(children[0].interests, ["drawing"]);
+  assert.deepEqual(children[0].interests, ["drawing", "trains"]);
   assert.equal(children[1].readingLevel, "independent-reader");
   assert.match(familyPromptSummary(children), /Lead child: age 5/);
   assert.doesNotMatch(familyPromptSummary(children), /Mia|Leo/);
   assert.equal(defaultFamilyWorkspace().children.length, 1);
   assert.equal(defaultFamilyWorkspace().children[0].name, "Your child");
   assert.equal(familyChildDisplayName({ ...children[0], name: "Explorer" }, 0), "Your child");
+  assert.deepEqual(parseFamilyTags("dinosaurs; Pokemon\ntrains, drawing"), [
+    "dinosaurs",
+    "pokemon",
+    "trains",
+    "drawing",
+  ]);
 });
 
 test("interests are spread across the trip and tied to a specific child", () => {

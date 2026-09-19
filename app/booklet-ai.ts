@@ -1,4 +1,5 @@
 import type { DayPlan, GameType } from "./booklet";
+import type { InterestPlanItem } from "./family";
 import { createCrossword } from "./puzzles.ts";
 
 const supportedGameTypes: GameType[] = [
@@ -159,6 +160,50 @@ export type BookletDraft = {
   profile: GeneratedBookletProfile;
   dayPlans: DayPlan[];
 };
+
+function dayUsesInterest(day: DayPlan, interest: string) {
+  const visibleText = [
+    day.mission,
+    ...day.activities.flatMap((activity) => [
+      activity.title,
+      ...(activity.items || []).flatMap((item) => [item.label, item.clue]),
+    ]),
+  ].join(" ").toLocaleLowerCase();
+  return visibleText.includes(interest.toLocaleLowerCase());
+}
+
+function addInterestLens(mission: string, interest: string) {
+  const lens = `Find one shape, sound, or movement that reminds you of ${interest}.`;
+  const maximumBaseLength = Math.max(20, 360 - lens.length - 1);
+  const base = mission
+    .slice(0, maximumBaseLength)
+    .trim()
+    .replace(/[\s,;:-]+$/g, "")
+    .replace(/[.!?]+$/g, "");
+  return `${base}. ${lens}`;
+}
+
+export function applyInterestPlan(
+  draft: BookletDraft,
+  interestPlan: InterestPlanItem[],
+  dayOffset = 0,
+): BookletDraft {
+  return {
+    ...draft,
+    dayPlans: draft.dayPlans.map((day, localDayIndex) => {
+      const globalDay = dayOffset + localDayIndex + 1;
+      const interests = interestPlan.filter((item) => item.day === globalDay);
+      let mission = day.mission;
+      for (const item of interests) {
+        const candidate = { ...day, mission };
+        if (!dayUsesInterest(candidate, item.interest)) {
+          mission = addInterestLens(mission, item.interest);
+        }
+      }
+      return mission === day.mission ? day : { ...day, mission };
+    }),
+  };
+}
 
 export type GeneratedBookletData = BookletDraft & {
   destination: string;

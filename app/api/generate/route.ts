@@ -5,6 +5,7 @@ import {
   type BookletSource,
   type GameTypePlanItem,
   type GeneratedBookletData,
+  applyInterestPlan,
   allowedGameTypesForAge,
   balancedGameTypePlanForTrip,
   normalizeItinerary,
@@ -839,8 +840,7 @@ ${research.notes}`,
         age,
         localGameTypePlan,
       );
-      assertInterestPlan(draft, assignedInterests, dayOffset);
-      return draft;
+      return applyInterestPlan(draft, assignedInterests, dayOffset);
     } catch (error) {
       lastError = error;
       correction = `The previous booklet could not be accepted: ${error instanceof Error ? error.message : "invalid output"} Return a complete replacement JSON booklet. Keep every item label non-empty; word-puzzle labels must be unique 3-to-9-letter local words.`;
@@ -848,31 +848,6 @@ ${research.notes}`,
   }
 
   throw lastError instanceof Error ? lastError : new Error("Kimi returned no valid booklet content.");
-}
-
-function assertInterestPlan(
-  draft: BookletDraft,
-  interestPlan: InterestPlanItem[],
-  dayOffset: number,
-) {
-  for (const item of interestPlan) {
-    const localDayIndex = item.day - dayOffset - 1;
-    const day = draft.dayPlans[localDayIndex];
-    const visibleText = day
-      ? [
-          day.mission,
-          ...day.activities.flatMap((activity) => [
-            activity.title,
-            ...(activity.items || []).flatMap((gameItem) => [gameItem.label, gameItem.clue]),
-          ]),
-        ].join(" ").toLocaleLowerCase()
-      : "";
-    if (!visibleText.includes(item.interest.toLocaleLowerCase())) {
-      throw new Error(
-        `Day ${item.day} must visibly use the assigned interest phrase "${item.interest}".`,
-      );
-    }
-  }
 }
 
 function makeActivityTitlesUnique(draft: BookletDraft) {
@@ -941,8 +916,7 @@ async function composeBooklet(
     }))),
   });
   const validated = validateBookletDraft(combined, days, age, gameTypePlan);
-  assertInterestPlan(validated, interestPlan, 0);
-  return validated;
+  return applyInterestPlan(validated, interestPlan);
 }
 
 function generationErrorMessage(error: unknown) {
@@ -960,7 +934,7 @@ function generationErrorMessage(error: unknown) {
     console.error(`[TripQuest ${error.stage}]`, error.message);
     return error.stage === "research"
       ? "Destination research could not be completed after two attempts. Please try again shortly."
-      : "The destination research succeeded, but the printable games could not be completed after two attempts. Please try again.";
+      : "The destination research succeeded, but one or more printable games did not pass the quality checks. Please try again.";
   }
 
   const message = error instanceof Error

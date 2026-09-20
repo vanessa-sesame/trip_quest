@@ -917,6 +917,7 @@ export default function Home() {
             <div className={`paper-frame${previewZoom > 1 ? " zoomed" : ""}`}>
               {currentPageLocked ? (
                 <LockedPreviewPage
+                  key={`locked-${currentPage}`}
                   pageNumber={currentPage + 1}
                   onUnlock={() => {
                     setCheckoutNote("");
@@ -925,6 +926,7 @@ export default function Home() {
                 />
               ) : currentPage >= familyPageStart ? (
                 <FamilyPackPreviewPage
+                  key={`family-${currentPage - familyPageStart}`}
                   destination={destinationName}
                   page={currentPage - familyPageStart}
                   explorers={editionChildren}
@@ -933,6 +935,7 @@ export default function Home() {
                 />
               ) : isSingaporeSample ? (
                 <Image
+                  key={`sample-${currentPage}`}
                   src={`/booklets/singapore-age-${trip.age}-page-${currentPage + 1}.png`}
                   alt={`${reportPageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
                   fill
@@ -942,6 +945,7 @@ export default function Home() {
                 />
               ) : (
                 <GeneratedPage
+                  key={`generated-${currentPage}`}
                   age={trip.age}
                   destination={destinationName}
                   page={currentPage}
@@ -1369,7 +1373,7 @@ function FamilyPackPreviewPage({
 }) {
   if (page === 0) {
     return (
-      <article className="generated-sheet family-preview-sheet family-preview-relay">
+      <article className="generated-sheet family-preview-sheet family-preview-relay" data-preview-page="family-relay">
         <span>Family relay &amp; interest lens</span>
         <h3>Every day gets a handoff</h3>
         <p>Interests and sibling roles appear on the day they matter, then move to a different child the next day.</p>
@@ -1389,7 +1393,7 @@ function FamilyPackPreviewPage({
 
   if (page === 1) {
     return (
-      <article className="generated-sheet family-preview-sheet family-map-preview">
+      <article className="generated-sheet family-preview-sheet family-map-preview" data-preview-page="family-map">
         <span>Family mission map</span>
         <h3>{destination} family explorers</h3>
         <p>Same place, different ways to notice it. Each explorer gets a role that matches their age and reading level.</p>
@@ -1420,7 +1424,7 @@ function FamilyPackPreviewPage({
       };
     });
     return (
-      <article className="generated-sheet family-preview-sheet family-cards-preview">
+      <article className="generated-sheet family-preview-sheet family-cards-preview" data-preview-page="mission-cards">
         <span>Mission cards</span>
         <h3>Pick a family spark</h3>
         <p>Use one card when the day needs a small, screen-free challenge.</p>
@@ -1432,7 +1436,7 @@ function FamilyPackPreviewPage({
   }
 
   return page === 3 ? (
-    <article className="generated-sheet family-preview-sheet family-badges-preview">
+    <article className="generated-sheet family-preview-sheet family-badges-preview" data-preview-page="badge-tracker">
       <span>Badge tracker</span>
       <h3>Collect the way you traveled</h3>
       <p>Give each explorer a tick, sticker, or tiny drawing when the family earns a badge.</p>

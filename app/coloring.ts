@@ -22,6 +22,8 @@ export const coloringScenes = [
 
 export type ColoringScene = (typeof coloringScenes)[number];
 
+export type ColoringVariant = 0 | 1 | 2;
+
 export const coloringSceneLabels: Record<ColoringScene, string> = {
   skyline: "city landmark skyline",
   supertree: "Supertree Grove",
@@ -42,8 +44,41 @@ export const coloringSceneLabels: Record<ColoringScene, string> = {
   shophouse: "historic shophouses",
 };
 
+type ColoringActivity = Pick<Activity, "title" | "items"> & Partial<Pick<Activity, "body" | "prompt">>;
+
+function coloringText(activity: ColoringActivity, context: string) {
+  return [
+    activity.title,
+    activity.body || "",
+    activity.prompt || "",
+    ...activity.items.map((item) => `${item.label} ${item.clue}`),
+    context,
+  ].join("|");
+}
+
+function stableHash(value: string) {
+  let hash = 17;
+  for (const character of value) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return hash;
+}
+
+export function coloringVariantFor(
+  activity: ColoringActivity,
+  context = "",
+): ColoringVariant {
+  const position = context.match(/\bday\s+(\d+)\b[\s\S]*?\bgame\s+(\d+)\b/i);
+  if (position) {
+    const day = Number(position[1]);
+    const game = Number(position[2]);
+    if (Number.isInteger(day) && Number.isInteger(game) && day > 0 && game > 0) {
+      return ((day + game - 2) % 3) as ColoringVariant;
+    }
+  }
+  return (stableHash(coloringText(activity, context)) % 3) as ColoringVariant;
+}
+
 export function coloringSceneFor(
-  activity: Pick<Activity, "title" | "items">,
+  activity: ColoringActivity,
   context = "",
 ): ColoringScene {
   const sceneFromText = (text: string): ColoringScene | undefined => {
@@ -68,7 +103,7 @@ export function coloringSceneFor(
     return undefined;
   };
 
-  const titleScene = sceneFromText(activity.title);
+  const titleScene = sceneFromText(`${activity.title} ${activity.body || ""} ${activity.prompt || ""}`);
   if (titleScene && titleScene !== "skyline") return titleScene;
 
   const itemScene = sceneFromText(activity.items.map((item) => `${item.label} ${item.clue}`).join(" "));

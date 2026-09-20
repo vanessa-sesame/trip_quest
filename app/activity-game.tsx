@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Activity, GameItem, GameType } from "./booklet";
-import { coloringSceneFor, coloringSceneLabels } from "./coloring";
+import { coloringSceneFor, coloringSceneLabels, coloringVariantFor } from "./coloring";
 import {
   createCrossword,
   createMaze,
@@ -33,7 +33,148 @@ const fallbackItems: GameItem[] = [
   { label: "Share", clue: "Tell your family what surprised you." },
 ];
 
-function DestinationLineArt({ scene }: { scene: ReturnType<typeof coloringSceneFor> }) {
+function VariantLineDetails({
+  scene,
+  variant,
+}: {
+  scene: ReturnType<typeof coloringSceneFor>;
+  variant: ReturnType<typeof coloringVariantFor>;
+}) {
+  if (variant === 0) return null;
+  switch (scene) {
+    case "supertree":
+      return variant === 1 ? (
+        <>
+          <path className="art-fine" d="M39 124 Q64 108 90 124 M208 124 Q235 108 266 124" />
+          <path className="art-stroke" d="M42 121 Q54 102 69 121 M221 121 Q234 99 250 121" />
+          <ellipse className="art-accent" cx="150" cy="113" rx="42" ry="11" />
+        </>
+      ) : (
+        <>
+          <path className="art-fine" d="M24 124 Q61 111 99 124 T174 124 T276 124" />
+          <path className="art-stroke" d="M32 118 Q50 101 68 118 M233 118 Q250 99 269 118" />
+          <path className="art-accent" d="M102 96 Q149 78 198 96" />
+        </>
+      );
+    case "garden":
+      return variant === 1 ? (
+        <>
+          <path className="art-stroke" d="M112 124 V74 H190 V124 M102 74 H200 L190 60 H112 Z" />
+          <path className="art-fine" d="M128 74 V124 M150 74 V124 M172 74 V124 M121 88 H181 M121 103 H181" />
+          <path className="art-accent" d="M127 59 Q150 40 176 59" />
+        </>
+      ) : (
+        <>
+          <path className="art-stroke" d="M92 124 Q150 95 211 124" />
+          <path className="art-fine" d="M103 111 Q113 101 123 111 M133 105 Q143 95 153 105 M166 108 Q176 98 186 108" />
+          <circle className="art-accent" cx="119" cy="92" r="5" />
+          <circle className="art-accent" cx="186" cy="88" r="5" />
+        </>
+      );
+    case "skyline":
+      return variant === 1 ? (
+        <>
+          <circle className="art-stroke" cx="231" cy="82" r="29" />
+          <path className="art-fine" d="M231 53 V111 M202 82 H260 M211 62 L251 102 M251 62 L211 102" />
+          <path className="art-accent" d="M215 116 H247 M231 111 V124" />
+        </>
+      ) : (
+        <>
+          <path className="art-stroke" d="M208 124 V54 H263 V124 M202 54 H269 L255 39 H216 Z" />
+          <circle className="art-accent" cx="235" cy="77" r="15" />
+          <path className="art-fine" d="M235 77 L235 66 M235 77 L244 82" />
+        </>
+      );
+    case "market":
+      return variant === 1 ? (
+        <>
+          <path className="art-accent" d="M40 53 L75 35 L110 53 L145 35 L180 53 L215 35 L250 53" />
+          <path className="art-fine" d="M63 75 V114 M99 75 V114 M135 75 V114 M171 75 V114 M207 75 V114" />
+          <circle className="art-fill" cx="80" cy="101" r="8" /><circle className="art-fill" cx="100" cy="101" r="8" />
+          <circle className="art-fill" cx="210" cy="101" r="8" /><circle className="art-fill" cx="230" cy="101" r="8" />
+        </>
+      ) : (
+        <>
+          <path className="art-stroke" d="M52 124 Q57 88 82 88 Q107 88 112 124 M188 124 Q193 88 218 88 Q243 88 248 124" />
+          <path className="art-fine" d="M58 99 Q82 78 106 99 M194 99 Q218 78 242 99" />
+          <path className="art-accent" d="M69 79 Q82 66 95 79 M205 79 Q218 66 231 79" />
+        </>
+      );
+    case "dinosaur":
+      return variant === 1 ? (
+        <>
+          <path className="art-stroke" d="M222 124 Q230 96 240 124 M250 124 Q258 98 268 124" />
+          <path className="art-fine" d="M228 105 Q242 93 256 105 M235 96 Q249 84 263 96" />
+          <path className="art-accent" d="M35 124 Q47 108 59 124 M54 124 Q66 105 78 124" />
+        </>
+      ) : (
+        <>
+          <path className="art-accent" d="M30 124 C58 111 86 111 114 124 M200 124 C228 111 256 111 284 124" />
+          <circle className="art-fine" cx="56" cy="106" r="4" /><circle className="art-fine" cx="76" cy="101" r="4" />
+          <circle className="art-fine" cx="238" cy="105" r="4" /><circle className="art-fine" cx="258" cy="100" r="4" />
+        </>
+      );
+    case "shophouse":
+      return variant === 1 ? (
+        <>
+          <path className="art-accent" d="M37 55 H79 M113 47 H157 M191 59 H263" />
+          <path className="art-stroke" d="M42 55 V41 H76 V55 M118 47 V32 H153 V47 M196 59 V44 H258 V59" />
+          <path className="art-fine" d="M48 41 Q59 30 70 41 M124 32 Q136 20 148 32 M204 44 Q227 25 250 44" />
+        </>
+      ) : (
+        <>
+          <path className="art-stroke" d="M19 118 H281 M51 118 V101 H89 V118 M110 118 V96 H148 V118 M170 118 V101 H208 V118" />
+          <path className="art-accent" d="M37 96 H103 M116 91 H164 M176 96 H244" />
+          <path className="art-fine" d="M64 76 V95 M127 65 V90 M207 78 V96" />
+        </>
+      );
+    case "coast":
+      return variant === 1 ? (
+        <>
+          <path className="art-stroke" d="M164 106 L198 83 L232 106 Z M198 83 V120" />
+          <path className="art-accent" d="M198 84 L218 92 L198 99" />
+          <path className="art-fine" d="M148 115 Q198 101 248 115" />
+        </>
+      ) : (
+        <>
+          <path className="art-fine" d="M154 118 Q164 106 174 118 M178 118 Q188 102 198 118 M202 118 Q212 106 222 118" />
+          <circle className="art-accent" cx="170" cy="126" r="5" /><circle className="art-accent" cx="208" cy="128" r="4" />
+        </>
+      );
+    case "temple":
+    case "mosque":
+      return variant === 1 ? (
+        <>
+          <path className="art-accent" d="M40 116 Q48 105 56 116 M244 116 Q252 105 260 116" />
+          <path className="art-fine" d="M85 46 H215 M96 39 H204" />
+          <circle className="art-fill" cx="150" cy="29" r="6" />
+        </>
+      ) : (
+        <>
+          <path className="art-stroke" d="M28 124 V91 H46 V124 M254 124 V91 H272 V124" />
+          <path className="art-accent" d="M24 91 H50 M250 91 H276" />
+          <path className="art-fine" d="M37 91 V78 M263 91 V78" />
+        </>
+      );
+    default:
+      return variant === 1 ? (
+        <path className="art-fine" d="M25 113 Q73 91 121 113 T217 113 T289 113" />
+      ) : (
+        <>
+          <path className="art-accent" d="M36 119 Q45 103 54 119 M246 119 Q255 103 264 119" />
+          <circle className="art-fill" cx="151" cy="28" r="7" />
+        </>
+      );
+  }
+}
+
+function DestinationLineArt({
+  scene,
+  variant,
+}: {
+  scene: ReturnType<typeof coloringSceneFor>;
+  variant: ReturnType<typeof coloringVariantFor>;
+}) {
   const common = <path className="art-fine" d="M8 124 Q76 116 148 125 T292 123" />;
   let details;
   switch (scene) {
@@ -242,25 +383,32 @@ function DestinationLineArt({ scene }: { scene: ReturnType<typeof coloringSceneF
       details = (
         <>
           <path className="art-stroke" d="M24 124 V45 H92 V124 M100 124 V32 H170 V124 M178 124 V50 H276 V124" />
-          <path className="art-accent" d="M24 73 H92 M100 64 H170 M178 77 H276" />
-          <path className="art-fine" d="M36 58 H80 M112 48 H158 M192 64 H262 M36 90 H80 M112 80 H158 M192 95 H262" />
-          <path className="art-stroke" d="M49 124 V94 H68 V124 M126 124 V83 H145 V124 M218 124 V99 H238 V124" />
-          <path className="art-accent" d="M32 20 q7 -10 14 0 q7 -10 14 0 M120 17 q7 -10 14 0 q7 -10 14 0 M218 24 q7 -10 14 0 q7 -10 14 0" />
+          <path className="art-stroke" d="M20 45 L58 25 L96 45 M96 32 L135 10 L174 32 M174 50 L226 28 L280 50" />
+          <path className="art-fine" d="M27 41 L58 24 L90 41 M103 28 L135 9 L168 28 M181 46 L226 27 L274 46" />
+          <path className="art-accent" d="M24 73 H92 M100 64 H170 M178 77 H276 M24 78 q8 8 16 0 q8 8 16 0 q8 8 16 0 q8 8 16 0 M100 69 q8 8 16 0 q8 8 16 0 q8 8 16 0 q8 8 16 0 M178 82 q8 8 16 0 q8 8 16 0 q8 8 16 0 q8 8 16 0 q8 8 16 0" />
+          <path className="art-fine" d="M32 56 H84 M108 45 H162 M188 61 H266 M32 91 H84 M108 82 H162 M188 96 H266" />
+          <path className="art-stroke" d="M38 56 V68 M48 56 V68 M58 56 V68 M68 56 V68 M78 56 V68 M114 45 V57 M124 45 V57 M134 45 V57 M144 45 V57 M154 45 V57 M194 61 V73 M204 61 V73 M214 61 V73 M224 61 V73 M234 61 V73 M244 61 V73 M254 61 V73" />
+          <path className="art-stroke" d="M45 124 V94 Q58 82 71 94 V124 M124 124 V83 Q135 71 146 83 V124 M216 124 V99 Q228 87 240 99 V124" />
+          <path className="art-fine" d="M58 93 V124 M135 83 V124 M228 99 V124 M50 109 H66 M127 102 H143 M220 112 H236" />
+          <path className="art-accent" d="M36 20 q7 -10 14 0 q7 -10 14 0 M120 17 q7 -10 14 0 q7 -10 14 0 M218 24 q7 -10 14 0 q7 -10 14 0" />
+          <path className="art-stroke" d="M42 104 q-10 8 -10 20 M75 104 q10 8 10 20 M111 105 q-10 8 -10 19 M159 105 q10 8 10 19 M194 108 q-10 7 -10 16 M260 108 q10 7 10 16" />
+          <circle className="art-fill" cx="31" cy="119" r="3" /><circle className="art-fill" cx="85" cy="119" r="3" /><circle className="art-fill" cx="100" cy="119" r="3" /><circle className="art-fill" cx="170" cy="119" r="3" />
         </>
       );
       break;
   }
-  return <svg className={`line-art scene-${scene}`} viewBox="0 0 300 150" role="img" aria-label={`${coloringSceneLabels[scene]} line drawing`}>{common}{details}</svg>;
+  return <svg className={`line-art scene-${scene} variant-${variant}`} viewBox="0 0 300 150" role="img" aria-label={`${coloringSceneLabels[scene]} line drawing`}>{common}{details}<VariantLineDetails scene={scene} variant={variant} /></svg>;
 }
 
 function DrawingBoard({ activity, coloring, context }: { activity: Activity; coloring: boolean; context?: string }) {
   const items = activity.items;
   const scene = coloringSceneFor(activity, context);
+  const variant = coloringVariantFor(activity, context);
   return (
     <div className={coloring ? "draw-board coloring-board" : "draw-board"}>
-      <DestinationLineArt scene={scene} />
-      <strong>{items[0].label}</strong>
-      <small>{coloring ? "Add local colors and patterns" : items[0].clue}</small>
+      <DestinationLineArt scene={scene} variant={variant} />
+      <strong>{coloring ? `Color the ${coloringSceneLabels[scene]}` : items[0].label}</strong>
+      <small>{coloring ? `Find: ${items.slice(0, 3).map((item) => item.label).join(" · ")}` : items[0].clue}</small>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coloringSceneFor } from "../app/coloring.ts";
+import { coloringSceneFor, coloringVariantFor } from "../app/coloring.ts";
 
 const activity = (title: string, label = "DETAIL", clue = "A local detail to notice.") => ({
   title,
@@ -29,4 +29,25 @@ test("activity subjects take precedence over mixed day context", () => {
   assert.equal(coloringSceneFor(activity("Market Observation Drawing"), "railway station and market"), "market");
   assert.equal(coloringSceneFor(activity("Mountain Observation Drawing"), "historic temple and mountain trail"), "mountain");
   assert.equal(coloringSceneFor(activity("Skyline Observation Drawing"), "Gardens by the Bay Supertrees"), "supertree");
+});
+
+test("same subject can use distinct stable picture compositions", () => {
+  const variants = new Set([
+    coloringVariantFor(activity("Supertree coloring page", "TREE"), "Gardens by the Bay"),
+    coloringVariantFor(activity("Supertree detail hunt", "CANOPY"), "Gardens by the Bay"),
+    coloringVariantFor(activity("Supertree skyway sketch", "SKYWAY"), "Gardens by the Bay"),
+  ]);
+  assert.ok(variants.size >= 2);
+  assert.equal(
+    coloringVariantFor(activity("Supertree coloring page", "TREE"), "Gardens by the Bay"),
+    coloringVariantFor(activity("Supertree coloring page", "TREE"), "Gardens by the Bay"),
+  );
+});
+
+test("same landmark cycles picture compositions across repeated trip days", () => {
+  const subject = activity("Supertree coloring page", "TREE");
+  assert.deepEqual(
+    [1, 2, 3].map((day) => coloringVariantFor(subject, `Gardens by the Bay - day ${day} - game 1`)),
+    [0, 1, 2],
+  );
 });

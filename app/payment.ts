@@ -28,7 +28,7 @@ type StripeSession = {
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
-const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-1";
+const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-2";
 const encoder = new TextEncoder();
 
 function secret(runtime: PaymentRuntime) {

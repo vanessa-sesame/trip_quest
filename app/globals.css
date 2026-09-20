@@ -1860,7 +1860,7 @@ p {
 
 .coloring-board .line-art {
   border-width: 2px;
-  background: repeating-linear-gradient(45deg, transparent 0 7px, rgba(23, 49, 46, 0.08) 7px 8px);
+  background: var(--paper);
 }
 
 .word-search-layout,

@@ -1,6 +1,12 @@
 import type { CSSProperties } from "react";
 import type { Activity, GameItem, GameType } from "./booklet";
-import { coloringSceneFor, coloringSceneLabels, coloringVariantFor } from "./coloring";
+import {
+  coloringIllustrationSpecs,
+  coloringPageSpec,
+  coloringSceneFor,
+  coloringSceneLabels,
+  coloringVariantFor,
+} from "./coloring";
 import {
   createCrossword,
   createMaze,
@@ -33,6 +39,52 @@ const fallbackItems: GameItem[] = [
   { label: "Share", clue: "Tell your family what surprised you." },
 ];
 
+const coloringPageCss = `
+.coloring-page-board{display:grid;min-height:0;height:100%;grid-template-rows:auto minmax(0,1fr) auto auto;gap:6px;color:var(--ink)}
+.coloring-page-topline{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.coloring-page-kicker{color:var(--coral);font-size:.35rem;font-weight:900;letter-spacing:.04em}
+.coloring-how-to{display:grid;max-width:52%;gap:2px;border:1px solid var(--line);border-radius:4px;padding:4px 6px}
+.coloring-how-to b,.coloring-mini-heading span,.coloring-cell-badge,.coloring-trace-strip span,.coloring-note-grid b{font-size:.34rem;font-weight:900;letter-spacing:.03em;text-transform:uppercase}
+.coloring-how-to span{font-size:.38rem;line-height:1.2}
+.coloring-page-main{display:grid;min-height:0;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:8px}
+.coloring-scene-panel{display:grid;min-width:0;min-height:0;grid-template-rows:auto minmax(0,1fr);gap:3px;border:1px solid var(--line);border-radius:6px;background:var(--paper);padding:6px}
+.coloring-scene-panel>b,.coloring-mini-heading>b{font-size:.45rem;line-height:1.15}
+.coloring-hero-art{position:static;width:100%;height:100%;min-height:0;border:0;border-radius:3px;background:var(--paper)}
+.coloring-mini-panel{display:grid;min-width:0;min-height:0;grid-template-rows:auto minmax(0,1fr);gap:4px}
+.coloring-mini-heading{display:flex;align-items:baseline;justify-content:space-between;gap:4px}
+.coloring-mini-heading span{color:var(--teal-dark);white-space:nowrap}
+.coloring-mini-grid{display:grid;min-height:0;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:4px}
+.coloring-mini-cell{display:grid;min-width:0;min-height:0;grid-template-rows:auto auto minmax(0,1fr);gap:2px;overflow:hidden;border:1px solid var(--line);border-radius:5px;background:var(--white);padding:4px}
+.coloring-mini-cell.cell-reusable{background:var(--pale-yellow)}
+.coloring-mini-cell.cell-free{place-items:center;background:var(--coral);border-color:var(--coral);color:var(--white);text-align:center}
+.coloring-cell-badge{color:var(--teal-dark);font-size:.28rem}
+.cell-reusable .coloring-cell-badge{color:var(--coral)}
+.cell-free .coloring-cell-badge{color:var(--white)}
+.coloring-mini-cell strong{overflow-wrap:anywhere;font-size:.38rem;line-height:1.1}
+.coloring-mini-cell small{display:-webkit-box;overflow:hidden;color:var(--muted);font-size:.31rem;line-height:1.15;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.cell-free strong,.cell-free small{color:var(--white)}
+.coloring-trace-strip{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;border-radius:5px;background:var(--pale-blue);padding:6px 8px}
+.coloring-trace-strip span,.coloring-note-grid b{color:var(--teal-dark)}
+.coloring-trace-strip strong{overflow-wrap:anywhere;border-bottom:1px dotted var(--line);color:var(--line);font-size:.8rem;letter-spacing:.03em}
+.coloring-trace-strip small{max-width:30%;color:var(--muted);font-size:.32rem;text-align:right}
+.coloring-note-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.coloring-local-note,.coloring-field-note{min-width:0;min-height:30px;border-radius:5px;padding:6px 8px}
+.coloring-local-note{background:var(--pale-yellow)}
+.coloring-field-note{display:grid;gap:3px;background:var(--pale-coral)}
+.coloring-note-grid p,.coloring-note-grid small{margin:2px 0 0;color:var(--ink);font-size:.36rem;line-height:1.2}
+.coloring-field-note i{display:block;border-bottom:1px dashed var(--line)}
+.generated-game-page .coloring-page-board{flex:1;gap:3%;padding-top:4%}
+.generated-game-page .coloring-page-main{gap:4%}
+.generated-game-page .coloring-page-kicker,.generated-game-page .coloring-how-to b,.generated-game-page .coloring-mini-heading span,.generated-game-page .coloring-cell-badge,.generated-game-page .coloring-trace-strip span,.generated-game-page .coloring-note-grid b{font-size:.4rem}
+.generated-game-page .coloring-how-to span{font-size:.43rem}
+.generated-game-page .coloring-scene-panel>b,.generated-game-page .coloring-mini-heading>b{font-size:.56rem}
+.generated-game-page .coloring-mini-cell strong{font-size:.48rem}
+.generated-game-page .coloring-mini-cell small{font-size:.37rem}
+.generated-game-page .coloring-trace-strip strong{font-size:1.15rem}
+.generated-game-page .coloring-trace-strip small{font-size:.39rem}
+.generated-game-page .coloring-note-grid p,.generated-game-page .coloring-note-grid small{font-size:.43rem}
+`;
+
 function VariantLineDetails({
   scene,
   variant,
@@ -42,6 +94,48 @@ function VariantLineDetails({
 }) {
   if (variant === 0) return null;
   switch (scene) {
+    case "merlion":
+      return variant === 1 ? (
+        <>
+          <path className="art-fine" d="M93 123 Q118 110 143 123 M158 123 Q190 107 223 123" />
+          <path className="art-accent" d="M98 71 Q113 58 128 71 M105 78 Q120 65 135 78 M165 95 Q194 82 223 95" />
+          <path className="art-fine" d="M184 38 Q192 50 200 38 M202 38 Q210 50 218 38" />
+        </>
+      ) : (
+        <>
+          <path className="art-fine" d="M30 126 Q75 112 120 126 T210 126 T286 124" />
+          <path className="art-accent" d="M58 110 Q70 95 82 110 M228 110 Q240 95 252 110" />
+          <circle className="art-fill" cx="48" cy="35" r="5" /><circle className="art-fill" cx="265" cy="45" r="4" />
+        </>
+      );
+    case "guardian":
+      return variant === 1 ? (
+        <>
+          <path className="art-accent" d="M103 39 H197 M110 32 H190" />
+          <path className="art-fine" d="M94 89 Q76 106 88 122 M206 89 Q224 106 212 122" />
+          <path className="art-stroke" d="M65 124 H235 M77 116 H223" />
+        </>
+      ) : (
+        <>
+          <path className="art-fine" d="M26 124 H274 M44 116 H256" />
+          <path className="art-accent" d="M38 110 Q50 95 62 110 M238 110 Q250 95 262 110" />
+          <circle className="art-fill" cx="45" cy="39" r="5" /><circle className="art-fill" cx="255" cy="39" r="5" />
+        </>
+      );
+    case "tile":
+      return variant === 1 ? (
+        <>
+          <path className="art-accent" d="M31 33 H269 M31 117 H269" />
+          <path className="art-fine" d="M44 42 L59 27 L74 42 L59 57 Z M226 42 L241 27 L256 42 L241 57 Z" />
+          <path className="art-stroke" d="M124 124 L150 98 L176 124 M124 34 L150 60 L176 34" />
+        </>
+      ) : (
+        <>
+          <path className="art-accent" d="M31 28 H269 M31 122 H269" />
+          <path className="art-fine" d="M35 75 H265 M55 36 V114 M245 36 V114" />
+          <circle className="art-fill" cx="38" cy="75" r="4" /><circle className="art-fill" cx="262" cy="75" r="4" />
+        </>
+      );
     case "supertree":
       return variant === 1 ? (
         <>
@@ -171,13 +265,72 @@ function VariantLineDetails({
 function DestinationLineArt({
   scene,
   variant,
+  className = "line-art",
 }: {
   scene: ReturnType<typeof coloringSceneFor>;
   variant: ReturnType<typeof coloringVariantFor>;
+  className?: string;
 }) {
   const common = <path className="art-fine" d="M8 124 Q76 116 148 125 T292 123" />;
   let details;
   switch (scene) {
+    case "tile":
+      details = (
+        <>
+          <rect className="art-stroke" x="28" y="18" width="244" height="114" rx="2" />
+          {Array.from({ length: 12 }, (_, index) => {
+            const column = index % 4;
+            const row = Math.floor(index / 4);
+            const x = 58 + column * 62;
+            const y = 47 + row * 30;
+            return (
+              <g key={`${row}-${column}`} transform={`translate(${x} ${y})`}>
+                <path className="art-stroke" d="M0 -13 L13 0 L0 13 L-13 0 Z" />
+                <path className="art-accent" d="M0 -13 Q6 -7 0 0 Q-6 -7 0 -13 M13 0 Q7 6 0 0 Q7 -6 13 0 M0 13 Q-6 7 0 0 Q6 7 0 13 M-13 0 Q-7 -6 0 0 Q-7 6 -13 0" />
+                <circle className="art-fill" cx="0" cy="0" r="3" />
+              </g>
+            );
+          })}
+          <path className="art-fine" d="M28 32 H272 M28 102 H272" />
+        </>
+      );
+      break;
+    case "merlion":
+      details = (
+        <>
+          <path className="art-stroke" d="M78 130 H190 M88 122 H180 M99 116 Q104 99 101 84 Q98 69 108 58 Q118 48 132 48 Q150 48 160 60 Q169 72 164 91 Q160 105 169 116" />
+          <path className="art-stroke" d="M101 85 Q77 93 65 111 Q58 124 69 132 Q83 139 96 126 Q83 126 78 119 Q84 105 105 101" />
+          <path className="art-stroke" d="M98 56 L86 49 L94 39 L83 31 L99 30 L103 17 L115 26 L126 13 L134 27 L148 17 L151 32 L166 31 L160 43 L171 51 L160 59" />
+          <path className="art-stroke" d="M103 55 Q101 39 113 30 Q126 21 142 29 Q156 36 157 53 Q158 70 145 79 Q132 86 116 78 Q105 72 103 55 Z" />
+          <path className="art-fine" d="M111 43 Q117 38 123 43 M139 43 Q145 38 151 43 M129 47 L126 55 L133 55 M119 64 Q132 72 145 64" />
+          <circle className="art-fill" cx="118" cy="46" r="2.4" /><circle className="art-fill" cx="145" cy="46" r="2.4" />
+          <path className="art-accent" d="M151 57 Q166 53 178 59 M157 63 Q169 67 178 59 M178 59 Q205 57 230 69 Q249 78 267 73 M178 63 Q204 66 226 79 Q244 89 263 86 M178 67 Q201 75 219 89 Q235 101 253 99" />
+          <path className="art-fine" d="M111 92 l8 -7 l8 7 l-8 7 Z M132 92 l8 -7 l8 7 l-8 7 Z M121 108 l8 -7 l8 7 l-8 7 Z M145 108 l8 -7 l8 7 l-8 7 Z" />
+          <path className="art-accent" d="M94 83 Q80 81 72 69 Q87 68 102 74 M162 86 Q177 83 185 72 Q171 71 160 77" />
+          <path className="art-fine" d="M198 112 q10 -8 20 0 q10 -8 20 0 q10 -8 20 0 M205 121 q10 -8 20 0 q10 -8 20 0" />
+          <circle className="art-sun" cx="267" cy="25" r="10" />
+        </>
+      );
+      break;
+    case "guardian":
+      details = (
+        <>
+          <path className="art-stroke" d="M92 131 H208 M104 123 H196 M118 121 L112 101 L121 79 Q130 70 150 70 Q170 70 179 79 L188 101 L182 121 Z" />
+          <path className="art-stroke" d="M126 121 V99 L139 82 M174 121 V99 L161 82 M119 99 H181 M124 108 H176" />
+          <path className="art-accent" d="M124 82 L112 75 L119 65 L131 72 M176 82 L188 75 L181 65 L169 72 M132 80 Q150 93 168 80" />
+          <path className="art-stroke" d="M123 63 Q113 51 119 37 Q125 24 138 21 L150 12 L162 21 Q175 24 181 37 Q187 51 177 63 Q166 74 150 74 Q134 74 123 63 Z" />
+          <path className="art-stroke" d="M119 37 L108 27 L124 27 L121 14 L137 22 L143 7 L150 19 L158 7 L164 22 L180 14 L177 28 L193 27 L181 38" />
+          <path className="art-fine" d="M130 40 Q136 34 142 40 M158 40 Q164 34 170 40 M149 43 L145 51 L152 52 M137 59 Q150 67 163 59" />
+          <circle className="art-fill" cx="137" cy="42" r="2.4" /><circle className="art-fill" cx="164" cy="42" r="2.4" />
+          <path className="art-accent" d="M130 31 Q150 23 170 31 M135 68 Q150 77 165 68 M137 86 L150 96 L163 86" />
+          <path className="art-stroke" d="M119 77 Q98 75 86 88 Q75 100 77 116 M181 77 Q201 76 211 88 Q220 99 217 116" />
+          <path className="art-stroke" d="M75 82 L48 88 L43 108 Q53 126 75 121 Q88 111 85 94 Z M218 84 L248 78 L260 96 L253 116 Q235 126 219 116 Z" />
+          <path className="art-fine" d="M51 95 H78 M48 104 H78 M227 91 H250 M224 101 H254" />
+          <path className="art-stroke" d="M205 32 V122 M199 32 H211 M198 122 H212" />
+          <path className="art-accent" d="M205 19 L195 33 H215 Z M109 129 H191" />
+        </>
+      );
+      break;
     case "supertree":
       details = (
         <>
@@ -397,18 +550,60 @@ function DestinationLineArt({
       );
       break;
   }
-  return <svg className={`line-art scene-${scene} variant-${variant}`} viewBox="0 0 300 150" role="img" aria-label={`${coloringSceneLabels[scene]} line drawing`}>{common}{details}<VariantLineDetails scene={scene} variant={variant} /></svg>;
+  return <svg className={`${className} scene-${scene} variant-${variant}`} viewBox="0 0 300 150" role="img" aria-label={`${coloringSceneLabels[scene]} line drawing`}>{common}{details}<VariantLineDetails scene={scene} variant={variant} /></svg>;
+}
+
+function ColoringPageBoard({ activity, context }: { activity: Activity; context?: string }) {
+  const spec = coloringPageSpec(activity, context);
+  const variant = coloringVariantFor(activity, context);
+  return (
+    <div className="coloring-page-board">
+      <div className="coloring-page-topline">
+        <span className="coloring-page-kicker">SPOT · COLOR · TRACE</span>
+        <div className="coloring-how-to"><b>HOW TO PLAY</b><span>{spec.howToPlay}</span></div>
+      </div>
+      <div className="coloring-page-main">
+        <div className="coloring-scene-panel">
+          <b>Color the {spec.illustration.label}</b>
+          <DestinationLineArt scene={spec.scene} variant={variant} className="line-art coloring-hero-art" />
+        </div>
+        <div className="coloring-mini-panel">
+          <div className="coloring-mini-heading"><b>Can you spot...</b><span>B · I · N · G · O</span></div>
+          <div className="coloring-mini-grid">
+            {spec.cells.map((cell, index) => (
+              <div className={`coloring-mini-cell cell-${cell.kind}`} key={`${cell.kind}-${cell.label}-${index}`}>
+                <span className="coloring-cell-badge">{cell.kind === "item" ? "SPOT" : cell.kind === "free" ? "FREE" : "REUSE"}</span>
+                <strong>{cell.label}</strong>
+                <small>{cell.clue}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="coloring-trace-strip">
+        <span>TRACE THE NAME</span>
+        <strong>{spec.traceWord}</strong>
+        <small>{spec.illustration.subject}</small>
+      </div>
+      <div className="coloring-note-grid">
+        <div className="coloring-local-note"><b>LOCAL CLUE</b><p>{spec.localClue}</p></div>
+        <div className="coloring-field-note"><b>MY FIELD NOTE</b><small>{spec.fieldNote}</small><i /><i /></div>
+      </div>
+    </div>
+  );
 }
 
 function DrawingBoard({ activity, coloring, context }: { activity: Activity; coloring: boolean; context?: string }) {
-  const items = activity.items;
+  const items = activity.items?.length ? activity.items : fallbackItems;
+  if (coloring) return <ColoringPageBoard activity={activity} context={context} />;
   const scene = coloringSceneFor(activity, context);
   const variant = coloringVariantFor(activity, context);
+  const illustration = coloringIllustrationSpecs[scene];
   return (
-    <div className={coloring ? "draw-board coloring-board" : "draw-board"}>
+    <div className="draw-board">
       <DestinationLineArt scene={scene} variant={variant} />
-      <strong>{coloring ? `Color the ${coloringSceneLabels[scene]}` : items[0].label}</strong>
-      <small>{coloring ? `Find: ${items.slice(0, 3).map((item) => item.label).join(" · ")}` : items[0].clue}</small>
+      <strong>{items[0].label}</strong>
+      <small>{items[0].clue || illustration.subject}</small>
     </div>
   );
 }
@@ -669,6 +864,7 @@ export function ActivityGame({ activity, age, context }: { activity: Activity; a
 
   return (
     <section className={`activity-game game-${gameType}`} aria-label={gameNames[gameType]}>
+      {gameType === "coloring" ? <style>{coloringPageCss}</style> : null}
       <b>{gameNames[gameType]}</b>
       {board}
     </section>

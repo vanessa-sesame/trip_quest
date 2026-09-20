@@ -1,5 +1,10 @@
 import type { DayPlan, GameType } from "./booklet";
-import { familyChildDisplayName, type FamilyChild, type InterestPlanItem } from "./family.ts";
+import {
+  familyChildDisplayName,
+  type FamilyChild,
+  type InterestPlanItem,
+  type ItineraryEvent,
+} from "./family.ts";
 import { createCrossword } from "./puzzles.ts";
 
 const supportedGameTypes: GameType[] = [
@@ -460,6 +465,9 @@ export type GeneratedBookletData = BookletDraft & {
   itinerary: string[];
   sources: BookletSource[];
   generatedAt: string;
+  editionFingerprint?: string;
+  family?: FamilyChild[];
+  events?: ItineraryEvent[];
 };
 
 export function normalizeItinerary(value: unknown, expectedDays: number) {
@@ -822,6 +830,7 @@ export function isGeneratedBookletData(
     typeof candidate.generatedAt === "string" &&
     Array.isArray(candidate.sources) &&
     Array.isArray(candidate.dayPlans) &&
+    (candidate.editionFingerprint === undefined || /^[a-f0-9]{64}$/i.test(candidate.editionFingerprint)) &&
     Boolean(candidate.profile)
   );
 }

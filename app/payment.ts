@@ -1,4 +1,8 @@
-import type { BookletDatabase, BookletObjectStorage } from "./booklet-storage";
+import {
+  isBookletArtifactKey,
+  type BookletDatabase,
+  type BookletObjectStorage,
+} from "./booklet-storage.ts";
 
 export type PaymentRuntime = {
   STRIPE_SECRET_KEY?: string;
@@ -17,6 +21,12 @@ export type PurchaseRecord = {
   requestJson: string;
   status: "pending" | "paid" | "failed";
   pdfKey: string | null;
+  edition: PurchaseEdition | null;
+};
+
+export type PurchaseEdition = {
+  artifactKey: string;
+  fingerprint: string;
 };
 
 type StripeSession = {
@@ -28,7 +38,11 @@ type StripeSession = {
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
-const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-2";
+const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-3";
+const LEGACY_PURCHASE_PDF_CACHE_VERSIONS = [
+  "purchase-pdf-2026-09-20-2",
+  "purchase-pdf-2026-09-20-1",
+];
 const encoder = new TextEncoder();
 
 function secret(runtime: PaymentRuntime) {
@@ -88,7 +102,7 @@ async function stripeRequest<T>(runtime: PaymentRuntime, path: string, init: Req
 export async function createCheckoutSession(
   runtime: PaymentRuntime,
   request: Request,
-  input: { purchaseId: string; cacheKey: string; familyId: string },
+  input: { purchaseId: string; cacheKey: string; familyId: string; edition: PurchaseEdition },
 ) {
   if (!paymentIsConfigured(runtime)) {
     throw new Error("Secure payment is not connected yet. Add the Stripe keys before accepting purchases.");
@@ -110,11 +124,25 @@ export async function createCheckoutSession(
   form.set("metadata[purchase_id]", input.purchaseId);
   form.set("metadata[cache_key]", input.cacheKey);
   form.set("metadata[family_id]", input.familyId);
+  form.set("metadata[edition_fingerprint]", input.edition.fingerprint);
+  form.set("metadata[artifact_key]", input.edition.artifactKey);
   return stripeRequest<StripeSession>(runtime, "/checkout/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString(),
   });
+}
+
+export function purchaseEditionFromRequestJson(requestJson: string): PurchaseEdition | null {
+  try {
+    const value = JSON.parse(requestJson) as Record<string, unknown>;
+    const artifactKey = typeof value.editionArtifactKey === "string" ? value.editionArtifactKey : "";
+    const fingerprint = typeof value.editionFingerprint === "string" ? value.editionFingerprint : "";
+    if (!isBookletArtifactKey(artifactKey) || !/^[a-f0-9]{64}$/i.test(fingerprint)) return null;
+    return { artifactKey, fingerprint: fingerprint.toLocaleLowerCase() };
+  } catch {
+    return null;
+  }
 }
 
 export async function readPurchaseBySession(database: BookletDatabase, sessionId: string) {
@@ -134,7 +162,23 @@ export async function readPurchaseBySession(database: BookletDatabase, sessionId
     requestJson: row.requestJson,
     status: row.status,
     pdfKey: row.pdfKey,
+    edition: purchaseEditionFromRequestJson(row.requestJson),
   } satisfies PurchaseRecord;
+}
+
+function stripeMetadataMatchesPurchase(session: StripeSession, purchase: PurchaseRecord) {
+  const metadata = session.metadata || {};
+  if (
+    session.id !== purchase.checkoutSessionId ||
+    metadata.purchase_id !== purchase.purchaseId ||
+    metadata.cache_key !== purchase.cacheKey ||
+    metadata.family_id !== purchase.familyId
+  ) return false;
+  if (!purchase.edition) return true;
+  return (
+    metadata.edition_fingerprint === purchase.edition.fingerprint &&
+    metadata.artifact_key === purchase.edition.artifactKey
+  );
 }
 
 export async function writePendingPurchase(
@@ -180,16 +224,20 @@ export async function readVerifiedPaidPurchase(
   } catch {
     return null;
   }
-  const metadata = session.metadata || {};
-  if (
-    session.id !== purchase.checkoutSessionId ||
-    metadata.purchase_id !== purchase.purchaseId ||
-    metadata.cache_key !== purchase.cacheKey ||
-    metadata.family_id !== purchase.familyId ||
-    session.payment_status !== "paid"
-  ) return null;
+  if (!stripeMetadataMatchesPurchase(session, purchase) || session.payment_status !== "paid") return null;
   await markPurchasePaid(database, purchase.purchaseId, session.id);
   return { ...purchase, status: "paid" as const };
+}
+
+export async function markPurchasePaidFromStripeSession(
+  database: BookletDatabase,
+  session: StripeSession,
+) {
+  if (!session.id || !session.metadata?.purchase_id || session.payment_status !== "paid") return false;
+  const purchase = await readPurchaseBySession(database, session.id);
+  if (!purchase || !stripeMetadataMatchesPurchase(session, purchase)) return false;
+  await markPurchasePaid(database, purchase.purchaseId, session.id);
+  return true;
 }
 
 function hex(bytes: ArrayBuffer) {
@@ -216,10 +264,16 @@ export function purchasePdfKey(purchaseId: string) {
   return `purchases/${PURCHASE_PDF_CACHE_VERSION}/${purchaseId}/booklet.pdf`;
 }
 
-export async function readPurchasePdf(artifacts: BookletObjectStorage, key: string) {
-  if (!key.startsWith(`purchases/${PURCHASE_PDF_CACHE_VERSION}/`) || !key.endsWith("/booklet.pdf")) return null;
+export async function readPurchasePdf(
+  artifacts: BookletObjectStorage,
+  key: string,
+  expectedFingerprint?: string,
+) {
+  const acceptedVersions = [PURCHASE_PDF_CACHE_VERSION, ...LEGACY_PURCHASE_PDF_CACHE_VERSIONS];
+  if (!acceptedVersions.some((version) => key.startsWith(`purchases/${version}/`)) || !key.endsWith("/booklet.pdf")) return null;
   const object = await artifacts.get(key);
   if (!object?.arrayBuffer) return null;
+  if (expectedFingerprint && object.customMetadata?.editionFingerprint !== expectedFingerprint) return null;
   return object.arrayBuffer();
 }
 
@@ -228,6 +282,7 @@ export async function writePurchasePdf(
   purchaseId: string,
   filename: string,
   pdf: ArrayBuffer | ArrayBufferView,
+  editionFingerprint?: string,
 ) {
   const key = purchasePdfKey(purchaseId);
   await artifacts.put(key, pdf, {
@@ -236,7 +291,11 @@ export async function writePurchasePdf(
       contentDisposition: `attachment; filename="${filename}"`,
       contentType: "application/pdf",
     },
-    customMetadata: { filename, purpose: "paid-purchase-pdf" },
+    customMetadata: {
+      filename,
+      purpose: "paid-purchase-pdf",
+      editionFingerprint: editionFingerprint || "",
+    },
   });
   return key;
 }

@@ -20,6 +20,7 @@ import {
   consumeGenerationRateLimit,
   createBookletCacheKey,
   createResearchCacheKey,
+  bookletSnapshotFingerprint,
   readStoredBooklet,
   readStoredResearch,
   releaseGenerationLock,
@@ -36,10 +37,12 @@ import {
 import { createBookletPreview } from "../../booklet-preview";
 import {
   type InterestPlanItem,
+  familyEditionContext,
   familyPromptSummary,
   interestPlanForTrip,
   mechanicPlanForTrip,
   normalizeFamilyChildren,
+  normalizeItineraryEvents,
 } from "../../family";
 import {
   type GenerationTask,
@@ -66,6 +69,13 @@ type CachedValue<T> = {
   expiresAt: number;
   value: T;
 };
+
+type EditionBooklet = GeneratedBookletData & { editionFingerprint: string };
+
+async function withEditionFingerprint(booklet: GeneratedBookletData): Promise<EditionBooklet> {
+  const editionFingerprint = await bookletSnapshotFingerprint(booklet);
+  return { ...booklet, editionFingerprint };
+}
 
 const researchCache = new Map<string, CachedValue<ResearchResult>>();
 const bookletCache = new Map<string, CachedValue<GeneratedBookletData>>();
@@ -969,6 +979,7 @@ export async function POST(request: Request) {
     const days = requireInteger(body.days, 1, 14, "Trip length");
     const itinerary = normalizeItinerary(body.itinerary, days);
     const family = normalizeFamilyChildren(body.family);
+    const events = normalizeItineraryEvents(body.events, days);
     const familyContext = familyPromptSummary(family);
     const hasSiblings = family.length > 1;
     const balancePlan = mechanicPlanForTrip(family, days)
@@ -988,11 +999,13 @@ export async function POST(request: Request) {
       composerModel,
       familyContext,
       familySize: family.length,
+      editionContext: familyEditionContext(family, events),
     };
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);
     if (cached) {
-      return Response.json(createBookletPreview(applySiblingPlan(cached, family)), {
+      const edition = await withEditionFingerprint(cached);
+      return Response.json(createBookletPreview(applySiblingPlan(edition, family)), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "memory",
@@ -1002,11 +1015,12 @@ export async function POST(request: Request) {
 
     const stored = await readDurableBooklet(runtime, cacheKey, identity);
     if (stored) {
+      const edition = await withEditionFingerprint(stored);
       setCached(bookletCache, cacheKey, {
         expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
-        value: stored,
+        value: edition,
       }, MAX_MEMORY_BOOKLET_ENTRIES);
-      return Response.json(createBookletPreview(applySiblingPlan(stored, family)), {
+      return Response.json(createBookletPreview(applySiblingPlan(edition, family)), {
         headers: {
           "Cache-Control": "private, no-store",
           "X-TripQuest-Cache": "durable",
@@ -1096,11 +1110,12 @@ export async function POST(request: Request) {
               publish,
             );
             if (shared.booklet) {
+              const edition = await withEditionFingerprint(shared.booklet);
               setCached(bookletCache, cacheKey, {
                 expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
-                value: shared.booklet,
+                value: edition,
               }, MAX_MEMORY_BOOKLET_ENTRIES);
-              return shared.booklet;
+              return edition;
             }
             ownsLock = shared.ownsLock;
           }
@@ -1115,7 +1130,7 @@ export async function POST(request: Request) {
 
           try {
             const rechecked = await readDurableBooklet(runtime, cacheKey, identity);
-            if (rechecked) return rechecked;
+            if (rechecked) return withEditionFingerprint(rechecked);
 
             publish("Researching real landmarks, culture, and local details…");
             const research = await researchDestination(
@@ -1157,10 +1172,13 @@ export async function POST(request: Request) {
               ...applySiblingPlan(draft, family),
               sources: research.sources,
               generatedAt: new Date().toISOString(),
+              family,
+              events,
             };
+            const edition = await withEditionFingerprint(result);
             setCached(bookletCache, cacheKey, {
               expiresAt: Date.now() + MEMORY_BOOKLET_TTL,
-              value: result,
+              value: edition,
             }, MAX_MEMORY_BOOKLET_ENTRIES);
 
             if (runtime.DB && runtime.BOOKLET_FILES) {
@@ -1168,7 +1186,7 @@ export async function POST(request: Request) {
               try {
                 await writeStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, {
                   cacheKey,
-                  booklet: result,
+                  booklet: edition,
                   researchModel,
                   composerModel,
                   expiresAt: Date.now() + DURABLE_BOOKLET_TTL,
@@ -1178,7 +1196,7 @@ export async function POST(request: Request) {
               }
             }
 
-            return result;
+            return edition;
           } finally {
             await lockLease?.stop();
             if (ownsLock && runtime.DB) {

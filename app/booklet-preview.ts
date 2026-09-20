@@ -2,7 +2,7 @@ import type { Activity } from "./booklet";
 import type { GeneratedBookletData } from "./booklet-ai";
 
 export const FREE_PREVIEW_PAGE_COUNT = 3;
-export const FULL_PREVIEW_FOR_TESTERS = false;
+export const FULL_PREVIEW_FOR_TESTERS = true;
 
 const lockedItems = [
   { label: "Locked", clue: "Included in the printable booklet." },

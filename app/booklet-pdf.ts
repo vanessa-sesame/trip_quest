@@ -1,6 +1,9 @@
 import {
   PDFDocument,
   StandardFonts,
+  concatTransformationMatrix,
+  popGraphicsState,
+  pushGraphicsState,
   rgb,
   type PDFFont,
   type PDFPage,
@@ -8,8 +11,9 @@ import {
 } from "pdf-lib";
 import type { Activity, GameItem } from "./booklet.ts";
 import {
+  coloringIllustrationSpecs,
+  coloringPageSpec,
   coloringSceneFor,
-  coloringSceneLabels,
   coloringVariantFor,
   type ColoringScene,
 } from "./coloring.ts";
@@ -27,8 +31,11 @@ import {
   normalizePuzzleWord,
 } from "./puzzles.ts";
 import {
+  FAMILY_BADGES,
   familyChildDisplayName,
+  familyRoleDescription,
   mechanicLabel,
+  mechanicMissionPrompt,
   type FamilyChild,
   type ItineraryEvent,
   type QuestMechanic,
@@ -775,6 +782,22 @@ function drawColoringScene(page: PDFPage, scene: Box, variant: ColoringScene, va
     page.drawRectangle({ x: lanternX - 8, y: lanternY, width: 16, height: 18, borderColor: colors.coral, borderWidth: 1.2 });
     page.drawLine({ start: { x: lanternX - 5, y: lanternY + 5 }, end: { x: lanternX + 5, y: lanternY + 5 }, color: colors.coral, thickness: 1 });
   };
+  const drawPolyline = (
+    points: Array<[number, number]>,
+    color = colors.ink,
+    thickness = 1.4,
+    closed = false,
+  ) => {
+    const linePoints = closed && points.length > 1 ? [...points, points[0]] : points;
+    for (let index = 1; index < linePoints.length; index += 1) {
+      page.drawLine({
+        start: { x: x + linePoints[index - 1][0], y: ground + linePoints[index - 1][1] },
+        end: { x: x + linePoints[index][0], y: ground + linePoints[index][1] },
+        color,
+        thickness,
+      });
+    }
+  };
   const drawSupertree = (treeX: number, baseY: number, scale = 1) => {
     const crownY = baseY + 92 * scale;
     page.drawLine({ start: { x: treeX - 7 * scale, y: baseY }, end: { x: treeX - 2 * scale, y: crownY - 23 * scale }, color: colors.ink, thickness: 1.8 });
@@ -799,6 +822,86 @@ function drawColoringScene(page: PDFPage, scene: Box, variant: ColoringScene, va
     });
   };
   switch (variant) {
+    case "tile": {
+      const tileLeft = x + 32;
+      const tileBottom = ground + 12;
+      const tileWidth = width - 64;
+      const tileHeight = 126;
+      page.drawRectangle({ x: tileLeft, y: tileBottom, width: tileWidth, height: tileHeight, borderColor: colors.ink, borderWidth: 1.7 });
+      page.drawLine({ start: { x: tileLeft, y: tileBottom + 42 }, end: { x: tileLeft + tileWidth, y: tileBottom + 42 }, color: colors.muted, thickness: 1 });
+      page.drawLine({ start: { x: tileLeft, y: tileBottom + 84 }, end: { x: tileLeft + tileWidth, y: tileBottom + 84 }, color: colors.muted, thickness: 1 });
+      page.drawLine({ start: { x: tileLeft + tileWidth / 4, y: tileBottom }, end: { x: tileLeft + tileWidth / 4, y: tileBottom + tileHeight }, color: colors.muted, thickness: 1 });
+      page.drawLine({ start: { x: tileLeft + tileWidth / 2, y: tileBottom }, end: { x: tileLeft + tileWidth / 2, y: tileBottom + tileHeight }, color: colors.muted, thickness: 1 });
+      page.drawLine({ start: { x: tileLeft + tileWidth * 0.75, y: tileBottom }, end: { x: tileLeft + tileWidth * 0.75, y: tileBottom + tileHeight }, color: colors.muted, thickness: 1 });
+      for (let row = 0; row < 3; row += 1) {
+        for (let column = 0; column < 4; column += 1) {
+          const centerX = tileLeft + tileWidth * (column + 0.5) / 4;
+          const centerY = tileBottom + tileHeight * (row + 0.5) / 3;
+          page.drawLine({ start: { x: centerX, y: centerY + 15 }, end: { x: centerX + 15, y: centerY }, color: colors.ink, thickness: 1.3 });
+          page.drawLine({ start: { x: centerX + 15, y: centerY }, end: { x: centerX, y: centerY - 15 }, color: colors.ink, thickness: 1.3 });
+          page.drawLine({ start: { x: centerX, y: centerY - 15 }, end: { x: centerX - 15, y: centerY }, color: colors.ink, thickness: 1.3 });
+          page.drawLine({ start: { x: centerX - 15, y: centerY }, end: { x: centerX, y: centerY + 15 }, color: colors.ink, thickness: 1.3 });
+          page.drawLine({ start: { x: centerX, y: centerY + 12 }, end: { x: centerX + 7, y: centerY + 4 }, color: colors.coral, thickness: 1 });
+          page.drawLine({ start: { x: centerX + 12, y: centerY }, end: { x: centerX + 4, y: centerY - 7 }, color: colors.coral, thickness: 1 });
+          page.drawLine({ start: { x: centerX, y: centerY - 12 }, end: { x: centerX - 7, y: centerY - 4 }, color: colors.coral, thickness: 1 });
+          page.drawLine({ start: { x: centerX - 12, y: centerY }, end: { x: centerX - 4, y: centerY + 7 }, color: colors.coral, thickness: 1 });
+          page.drawCircle({ x: centerX, y: centerY, size: 2.5, color: colors.yellow });
+        }
+      }
+      page.drawLine({ start: { x: x + 38, y: tileBottom + tileHeight + 8 }, end: { x: x + width - 38, y: tileBottom + tileHeight + 8 }, color: colors.coral, thickness: 1.4 });
+      page.drawLine({ start: { x: x + 38, y: tileBottom - 8 }, end: { x: x + width - 38, y: tileBottom - 8 }, color: colors.coral, thickness: 1.4 });
+      break;
+    }
+    case "merlion": {
+      page.drawRectangle({ x: x + 78, y: ground, width: 116, height: 11, borderColor: colors.ink, borderWidth: 1.6 });
+      page.drawEllipse({ x: x + 136, y: ground + 12, xScale: 52, yScale: 8, borderColor: colors.coral, borderWidth: 1.3 });
+      page.drawEllipse({ x: x + 136, y: ground + 64, xScale: 34, yScale: 50, borderColor: colors.ink, borderWidth: 1.8 });
+      drawPolyline([[108, 50], [86, 42], [65, 49], [49, 66], [61, 79], [82, 76], [101, 65]], colors.ink, 1.8, true);
+      drawPolyline([[62, 66], [82, 62], [101, 65]], colors.coral, 1.2);
+      page.drawEllipse({ x: x + 136, y: ground + 126, xScale: 43, yScale: 34, borderColor: colors.ink, borderWidth: 1.8 });
+      drawPolyline([[101, 118], [89, 128], [100, 135], [92, 148], [109, 147], [115, 162], [128, 151], [139, 166], [150, 151], [167, 158], [164, 143], [180, 143], [171, 130]], colors.coral, 1.7);
+      drawPolyline([[108, 135], [101, 148], [117, 145]], colors.ink, 1.4);
+      drawPolyline([[157, 145], [173, 148], [166, 135]], colors.ink, 1.4);
+      page.drawEllipse({ x: x + 158, y: ground + 117, xScale: 22, yScale: 14, borderColor: colors.ink, borderWidth: 1.4 });
+      page.drawCircle({ x: x + 125, y: ground + 134, size: 2.8, color: colors.ink });
+      page.drawCircle({ x: x + 148, y: ground + 134, size: 2.8, color: colors.ink });
+      drawPolyline([[137, 129], [133, 122], [141, 122]], colors.ink, 1.1);
+      drawPolyline([[145, 113], [158, 109], [171, 115]], colors.coral, 1.3);
+      [[121, 84], [141, 84], [131, 67], [151, 67]].forEach(([scaleX, scaleY]) => {
+        drawPolyline([[scaleX, scaleY + 7], [scaleX + 7, scaleY], [scaleX, scaleY - 7], [scaleX - 7, scaleY]], colors.green, 1, true);
+      });
+      drawPolyline([[104, 93], [89, 100], [100, 107]], colors.blue, 1.3);
+      drawPolyline([[168, 116], [190, 112], [214, 101], [240, 86], [273, 82]], colors.blue, 1.5);
+      drawPolyline([[169, 112], [195, 104], [220, 90], [246, 75], [274, 72]], colors.blue, 1.3);
+      drawPolyline([[169, 108], [194, 96], [215, 80], [238, 65], [265, 61]], colors.blue, 1.1);
+      drawWaves(ground + 35, 3);
+      page.drawCircle({ x: x + width - 32, y: y + height - 27, size: 14, borderColor: colors.yellow, borderWidth: 1.5 });
+      break;
+    }
+    case "guardian": {
+      page.drawRectangle({ x: x + 92, y: ground, width: 116, height: 11, borderColor: colors.ink, borderWidth: 1.6 });
+      page.drawRectangle({ x: x + 104, y: ground + 11, width: 92, height: 8, borderColor: colors.coral, borderWidth: 1.2 });
+      drawPolyline([[119, 19], [113, 46], [123, 84], [137, 95], [163, 95], [177, 84], [187, 46], [181, 19]], colors.ink, 1.8, true);
+      drawPolyline([[125, 20], [129, 48], [140, 78], [150, 88], [160, 78], [171, 48], [175, 20]], colors.coral, 1.2);
+      drawPolyline([[120, 82], [108, 94], [116, 105], [130, 96]], colors.ink, 1.4, true);
+      drawPolyline([[180, 82], [192, 94], [184, 105], [170, 96]], colors.ink, 1.4, true);
+      page.drawEllipse({ x: x + 150, y: ground + 125, xScale: 31, yScale: 28, borderColor: colors.ink, borderWidth: 1.8 });
+      drawPolyline([[119, 132], [108, 143], [122, 145], [117, 159], [135, 153], [143, 171], [151, 155], [160, 171], [167, 153], [185, 159], [180, 145], [193, 143], [181, 132]], colors.coral, 1.7);
+      drawPolyline([[124, 139], [136, 145], [150, 141], [164, 145], [176, 139]], colors.ink, 1.2);
+      page.drawCircle({ x: x + 138, y: ground + 130, size: 2.8, color: colors.ink });
+      page.drawCircle({ x: x + 163, y: ground + 130, size: 2.8, color: colors.ink });
+      drawPolyline([[151, 126], [146, 118], [154, 118]], colors.ink, 1.1);
+      drawPolyline([[137, 109], [150, 103], [163, 109]], colors.coral, 1.3);
+      drawPolyline([[130, 98], [150, 88], [170, 98]], colors.blue, 1.2);
+      drawPolyline([[121, 87], [96, 82], [77, 65], [69, 42]], colors.ink, 1.8);
+      drawPolyline([[179, 87], [198, 80], [211, 62], [216, 41]], colors.ink, 1.8);
+      drawPolyline([[71, 39], [43, 46], [37, 69], [52, 86], [77, 79], [82, 58]], colors.ink, 1.7, true);
+      drawPolyline([[45, 55], [73, 50], [42, 66], [76, 62], [48, 76], [76, 72]], colors.coral, 1);
+      page.drawLine({ start: { x: x + 218, y: ground + 18 }, end: { x: x + 218, y: ground + 144 }, color: colors.ink, thickness: 1.8 });
+      page.drawLine({ start: { x: x + 210, y: ground + 18 }, end: { x: x + 226, y: ground + 18 }, color: colors.ink, thickness: 1.2 });
+      drawPolyline([[218, 144], [207, 158], [229, 158]], colors.coral, 1.5, true);
+      break;
+    }
     case "skyline":
       page.drawCircle({ x: x + width - 42, y: y + height - 36, size: 20, borderColor: colors.yellow, borderWidth: 2 });
       drawCloud(x + 34, y + height - 46);
@@ -1092,6 +1195,10 @@ function drawTraceBoard(
   coloring: boolean,
   context: string,
 ) {
+  if (coloring) {
+    drawColoringActivityBoard(page, fonts, activity, box, context);
+    return;
+  }
   const label = pdfText(activity.items[0]?.label || "LOCAL DETAIL").toUpperCase();
   const variant = coloringSceneFor(activity, context);
   const variation = coloringVariantFor(activity, context);
@@ -1111,7 +1218,7 @@ function drawTraceBoard(
     font: fonts.bold,
     color: colors.coral,
   });
-  const sceneLabel = pdfText(coloringSceneLabels[variant]).toUpperCase();
+  const sceneLabel = pdfText(coloringIllustrationSpecs[variant].label).toUpperCase();
   const sceneLabelSize = fitTextSize(sceneLabel, fonts.bold, box.width - 170, 7, 5.5);
   page.drawText(sceneLabel, {
     x: box.x + box.width - fonts.bold.widthOfTextAtSize(sceneLabel, sceneLabelSize),
@@ -1146,6 +1253,191 @@ function drawTraceBoard(
     opacity: 0.55,
   });
   drawDottedLine(page, box.x + 58, box.x + box.width, box.y + 14, colors.line, 2, 3);
+}
+
+function drawColoringActivityBoard(
+  page: PDFPage,
+  fonts: Fonts,
+  activity: Activity,
+  box: Box,
+  context: string,
+) {
+  const spec = coloringPageSpec(activity, context);
+  const variation = coloringVariantFor(activity, context);
+  const gap = 6;
+  const howHeight = 23;
+  const sceneHeight = 200;
+  const traceHeight = 30;
+  const notesHeight = 60;
+  const top = box.y + box.height;
+
+  const howY = top - howHeight;
+  page.drawRectangle({ x: box.x, y: howY, width: box.width, height: howHeight, color: colors.blueSoft });
+  page.drawText("SPOT / COLOR / TRACE", {
+    x: box.x + 10,
+    y: howY + 13,
+    size: 7,
+    font: fonts.bold,
+    color: colors.coral,
+  });
+  page.drawText("HOW TO PLAY", {
+    x: box.x + box.width - 158,
+    y: howY + 14,
+    size: 6,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  drawWrappedText(page, spec.howToPlay, fonts, {
+    x: box.x + box.width - 158,
+    y: howY + 5,
+    size: 6,
+    maxWidth: 148,
+    maxLines: 1,
+    color: colors.ink,
+  });
+
+  const sceneY = howY - gap - sceneHeight;
+  const sceneWidth = box.width * 0.52;
+  const sceneBox = { x: box.x, y: sceneY, width: sceneWidth, height: sceneHeight };
+  page.drawRectangle({ ...sceneBox, color: colors.paper, borderColor: colors.line, borderWidth: 1 });
+  page.drawText(`COLOR THE ${pdfText(spec.illustration.label).toUpperCase()}`, {
+    x: sceneBox.x + 9,
+    y: sceneBox.y + sceneBox.height - 15,
+    size: 7,
+    font: fonts.bold,
+    color: colors.ink,
+  });
+  const artWidth = 320;
+  const artHeight = 200;
+  const artScale = Math.min(sceneBox.width / artWidth, (sceneBox.height - 22) / artHeight);
+  page.pushOperators(
+    pushGraphicsState(),
+    concatTransformationMatrix(artScale, 0, 0, artScale, sceneBox.x, sceneBox.y),
+  );
+  drawColoringScene(page, { x: 0, y: 0, width: artWidth, height: artHeight }, spec.scene, variation);
+  page.pushOperators(popGraphicsState());
+
+  const gridX = box.x + sceneWidth + gap;
+  const gridWidth = box.width - sceneWidth - gap;
+  page.drawText("CAN YOU SPOT...", {
+    x: gridX,
+    y: sceneY + sceneHeight - 11,
+    size: 8,
+    font: fonts.bold,
+    color: colors.ink,
+  });
+  page.drawText("B · I · N · G · O", {
+    x: gridX + gridWidth - fonts.bold.widthOfTextAtSize("B · I · N · G · O", 5.5),
+    y: sceneY + sceneHeight - 10,
+    size: 5.5,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  const gridTop = sceneY + sceneHeight - 18;
+  const cellGap = 4;
+  const cellWidth = (gridWidth - cellGap * 2) / 3;
+  const cellHeight = (sceneHeight - 18 - cellGap * 2) / 3;
+  spec.cells.forEach((cell, index) => {
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    const cellX = gridX + column * (cellWidth + cellGap);
+    const cellY = gridTop - (row + 1) * cellHeight - row * cellGap;
+    const isFree = cell.kind === "free";
+    const isReusable = cell.kind === "reusable";
+    page.drawRectangle({
+      x: cellX,
+      y: cellY,
+      width: cellWidth,
+      height: cellHeight,
+      color: isFree ? colors.coral : isReusable ? colors.yellowSoft : colors.white,
+      borderColor: isFree ? colors.coral : colors.line,
+      borderWidth: 0.8,
+    });
+    const cellColor = isFree ? colors.white : isReusable ? colors.coral : colors.blue;
+    page.drawText(isFree ? "FREE" : isReusable ? "REUSE" : "SPOT", {
+      x: cellX + 5,
+      y: cellY + cellHeight - 9,
+      size: 4.5,
+      font: fonts.bold,
+      color: cellColor,
+    });
+    drawWrappedText(page, pdfText(cell.label), fonts, {
+      x: cellX + 5,
+      y: cellY + cellHeight - 19,
+      size: 6.3,
+      font: fonts.bold,
+      maxWidth: cellWidth - 10,
+      maxLines: 1,
+      color: isFree ? colors.white : colors.ink,
+    });
+    drawWrappedText(page, pdfText(cell.clue), fonts, {
+      x: cellX + 5,
+      y: cellY + 10,
+      size: 4.8,
+      maxWidth: cellWidth - 10,
+      maxLines: 2,
+      lineHeight: 5.5,
+      color: isFree ? colors.white : colors.muted,
+    });
+  });
+
+  const traceY = sceneY - gap - traceHeight;
+  page.drawRectangle({ x: box.x, y: traceY, width: box.width, height: traceHeight, color: colors.blueSoft });
+  page.drawText("TRACE THE NAME", {
+    x: box.x + 10,
+    y: traceY + 17,
+    size: 6,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  const traceWord = pdfText(spec.traceWord);
+  const traceSize = fitTextSize(traceWord, fonts.bold, box.width - 180, 18, 11);
+  page.drawText(traceWord, {
+    x: box.x + 88,
+    y: traceY + 9,
+    size: traceSize,
+    font: fonts.bold,
+    color: colors.line,
+    opacity: 0.75,
+  });
+  drawDottedLine(page, box.x + 88, box.x + box.width - 125, traceY + 7, colors.line, 2, 3);
+  drawWrappedText(page, pdfText(spec.illustration.subject), fonts, {
+    x: box.x + box.width - 115,
+    y: traceY + 14,
+    size: 5.5,
+    maxWidth: 105,
+    maxLines: 2,
+    color: colors.muted,
+  });
+
+  const notesY = traceY - gap - notesHeight;
+  const noteGap = 8;
+  const noteWidth = (box.width - noteGap) / 2;
+  page.drawRectangle({ x: box.x, y: notesY, width: noteWidth, height: notesHeight, color: colors.yellowSoft });
+  page.drawRectangle({ x: box.x + noteWidth + noteGap, y: notesY, width: noteWidth, height: notesHeight, color: colors.coralSoft });
+  page.drawText("LOCAL CLUE", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
+  drawWrappedText(page, pdfText(spec.localClue), fonts, {
+    x: box.x + 10,
+    y: notesY + notesHeight - 29,
+    size: 7,
+    maxWidth: noteWidth - 20,
+    maxLines: 3,
+    lineHeight: 9,
+    color: colors.ink,
+  });
+  const fieldX = box.x + noteWidth + noteGap;
+  page.drawText("MY FIELD NOTE", { x: fieldX + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.coral });
+  drawWrappedText(page, pdfText(spec.fieldNote), fonts, {
+    x: fieldX + 10,
+    y: notesY + notesHeight - 29,
+    size: 7,
+    maxWidth: noteWidth - 20,
+    maxLines: 2,
+    lineHeight: 9,
+    color: colors.ink,
+  });
+  drawDottedLine(page, fieldX + 10, fieldX + noteWidth - 10, notesY + 17, colors.line, 2, 3);
+  drawDottedLine(page, fieldX + 10, fieldX + noteWidth - 10, notesY + 8, colors.line, 2, 3);
 }
 
 function drawWordSearch(page: PDFPage, fonts: Fonts, activity: Activity, age: number, box: Box) {
@@ -1644,7 +1936,15 @@ function drawActivityPage(
     maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 2,
   });
-  drawPill(page, activity.kind, fonts, MARGIN, 623, colors.yellowSoft, colors.ink);
+  drawPill(
+    page,
+    activity.gameType === "coloring" ? "SPOT · COLOR · TRACE" : activity.kind,
+    fonts,
+    MARGIN,
+    623,
+    colors.yellowSoft,
+    colors.ink,
+  );
   drawWrappedText(page, activity.body, fonts, {
     x: MARGIN,
     y: 599,
@@ -1655,36 +1955,36 @@ function drawActivityPage(
     color: colors.muted,
   });
 
-  drawGame(page, fonts, activity, booklet.age, {
-    x: MARGIN,
-    y: 154,
-    width: PAGE_WIDTH - MARGIN * 2,
-    height: 388,
-  }, `${day.theme} - day ${day.day} - game ${activityIndex + 1}`);
+  const gameFrame = activity.gameType === "coloring"
+    ? { x: MARGIN, y: 120, width: PAGE_WIDTH - MARGIN * 2, height: 440 }
+    : { x: MARGIN, y: 154, width: PAGE_WIDTH - MARGIN * 2, height: 388 };
+  drawGame(page, fonts, activity, booklet.age, gameFrame, `${day.theme} - day ${day.day} - game ${activityIndex + 1}`);
 
-  page.drawRectangle({
-    x: MARGIN,
-    y: 61,
-    width: PAGE_WIDTH - MARGIN * 2,
-    height: 72,
-    color: activityIndex === 0 ? colors.coralSoft : colors.greenSoft,
-  });
-  page.drawText("MY FIELD NOTE", {
-    x: MARGIN + 14,
-    y: 111,
-    size: 7,
-    font: fonts.bold,
-    color: accent,
-  });
-  drawWrappedText(page, activity.prompt, fonts, {
-    x: MARGIN + 14,
-    y: 90,
-    size: 9,
-    font: fonts.bold,
-    maxWidth: PAGE_WIDTH - MARGIN * 2 - 28,
-    maxLines: 2,
-    lineHeight: 12,
-  });
+  if (activity.gameType !== "coloring") {
+    page.drawRectangle({
+      x: MARGIN,
+      y: 61,
+      width: PAGE_WIDTH - MARGIN * 2,
+      height: 72,
+      color: activityIndex === 0 ? colors.coralSoft : colors.greenSoft,
+    });
+    page.drawText("MY FIELD NOTE", {
+      x: MARGIN + 14,
+      y: 111,
+      size: 7,
+      font: fonts.bold,
+      color: accent,
+    });
+    drawWrappedText(page, activity.prompt, fonts, {
+      x: MARGIN + 14,
+      y: 90,
+      size: 9,
+      font: fonts.bold,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 28,
+      maxLines: 2,
+      lineHeight: 12,
+    });
+  }
 }
 
 function answerFor(activity: Activity, age: number) {
@@ -1919,37 +2219,6 @@ function drawFamilyRelayPage(
   });
 }
 
-function familyRole(child: FamilyChild, index: number) {
-  const role = child.interests.some((interest) => /draw|art|paint|craft|sketch/i.test(interest))
-    ? "Sketcher: turn one local shape into an original line"
-    : [
-        "Scout: spot one local detail and point it out",
-        "Storyteller: explain what one clue might mean",
-        "Evidence keeper: record the proof for the family",
-        "Route keeper: choose the next safe stop with a grown-up",
-        "Question maker: ask one curious why-or-how question",
-        "Presenter: share the family answer",
-      ][index % 6];
-  const interests = child.interests.slice(0, 2).map(pdfText).join(", ");
-  return interests ? `${role}. Interest missions: ${interests}.` : role;
-}
-
-function mechanicPrompt(mechanic: QuestMechanic, theme: string) {
-  const subject = pdfText(theme);
-  switch (mechanic) {
-    case "spot": return `Spot one tiny detail at ${subject} that most visitors might miss.`;
-    case "draw": return `Draw the shape, texture, or pattern that best remembers ${subject}.`;
-    case "count": return `Count four examples near ${subject}; compare which one is biggest or brightest.`;
-    case "talk": return `Tell a grown-up one respectful question about what you notice at ${subject}.`;
-    case "imagine": return `Imagine a local object at ${subject} could speak. Give it one helpful sentence.`;
-    case "navigate": return `Choose the safest family route around ${subject}; mark one useful landmark.`;
-    case "photograph": return `With permission, frame one photo of a pattern or detail connected to ${subject}.`;
-    case "solve": return `Solve the clue, then point to the real evidence at ${subject}.`;
-    case "move": return `Make a quiet three-step movement inspired by the shapes or rhythm at ${subject}.`;
-    default: return `Combine your clues and make one family answer about ${subject}.`;
-  }
-}
-
 function drawFamilyMissionPage(
   document: PDFDocument,
   fonts: Fonts,
@@ -1978,7 +2247,7 @@ function drawFamilyMissionPage(
     const label = `${index === 0 ? "LEAD / " : ""}${pdfText(familyChildDisplayName(child, index))} / AGE ${child.age}`;
     const labelSize = fitTextSize(label, fonts.bold, 134, 8.5, 6.5);
     page.drawText(label, { x: MARGIN + 40, y: y + 2, size: labelSize, font: fonts.bold, color: colors.ink });
-    drawWrappedText(page, familyRole(child, index), fonts, { x: MARGIN + 188, y: y + 5, size: 7.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 200, maxLines: 3, lineHeight: 8.5, color: colors.muted });
+    drawWrappedText(page, pdfText(familyRoleDescription(child, index)), fonts, { x: MARGIN + 188, y: y + 5, size: 7.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 200, maxLines: 3, lineHeight: 8.5, color: colors.muted });
   });
 
   const timelineY = 560 - childRows * roleRowHeight - 22;
@@ -2036,7 +2305,7 @@ function drawMissionCardsPage(
     page.drawRectangle({ x, y: y + height - 34, width, height: 34, color: index % 2 ? colors.blueSoft : colors.yellowSoft });
     page.drawText(`DAY ${day.day} / ${mechanicLabel(mechanic).toUpperCase()}`, { x: x + 12, y: y + height - 22, size: 8, font: fonts.bold, color: colors.ink });
     drawWrappedText(page, day.theme, fonts, { x: x + 12, y: y + height - 58, size: 12, font: fonts.bold, maxWidth: width - 24, maxLines: 2, lineHeight: 14 });
-    drawWrappedText(page, mechanicPrompt(mechanic, day.theme), fonts, { x: x + 12, y: y + height - 105, size: 9, maxWidth: width - 24, maxLines: 5, lineHeight: 12, color: colors.muted });
+    drawWrappedText(page, pdfText(mechanicMissionPrompt(mechanic, day.theme)), fonts, { x: x + 12, y: y + height - 105, size: 9, maxWidth: width - 24, maxLines: 5, lineHeight: 12, color: colors.muted });
     drawDottedLine(page, x + 12, x + width - 12, y + 24, colors.line, 4, 4);
   });
 }
@@ -2052,10 +2321,9 @@ function drawBadgeTrackerPage(
   page.drawText("BADGE TRACKER", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.coral });
   drawWrappedText(page, "Collect the way you traveled", fonts, { x: MARGIN, y: 733, size: 27, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 30 });
   drawWrappedText(page, "Give a tick, sticker, or tiny drawing to each badge when someone in the family earns it.", fonts, { x: MARGIN, y: 665, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
-  const badges = ["Keen Observer", "Kind Traveler", "Brave Taster", "Pattern Finder", "Route Helper", "Story Keeper", "Team Player", "Local Detail"];
   const gap = 14;
   const width = (PAGE_WIDTH - MARGIN * 2 - gap) / 2;
-  badges.forEach((badge, index) => {
+  FAMILY_BADGES.forEach((badge, index) => {
     const x = MARGIN + (index % 2) * (width + gap);
     const y = 425 - Math.floor(index / 2) * 75;
     page.drawRectangle({ x, y, width, height: 57, color: index % 2 ? colors.greenSoft : colors.coralSoft, borderColor: colors.softLine, borderWidth: 0.8 });

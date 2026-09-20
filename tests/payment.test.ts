@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyStripeSignature } from "../app/payment.ts";
+import { bookletArtifactKey } from "../app/booklet-storage.ts";
+import { purchaseEditionFromRequestJson, verifyStripeSignature } from "../app/payment.ts";
 
 test("Stripe webhook signatures accept a fresh HMAC and reject stale or altered payloads", async () => {
   const payload = JSON.stringify({ type: "checkout.session.completed" });
@@ -25,3 +26,30 @@ test("Stripe webhook signatures accept a fresh HMAC and reject stale or altered 
   assert.equal(await verifyStripeSignature(payload, header, secret, now + 301_000), false);
 });
 
+test("purchase requests preserve a validated edition artifact and fingerprint", () => {
+  const edition = {
+    editionArtifactKey: bookletArtifactKey("a".repeat(64), "b".repeat(64)),
+    editionFingerprint: "B".repeat(64),
+  };
+  assert.deepEqual(
+    purchaseEditionFromRequestJson(JSON.stringify(edition)),
+    {
+      artifactKey: edition.editionArtifactKey,
+      fingerprint: edition.editionFingerprint.toLocaleLowerCase(),
+    },
+  );
+  assert.equal(
+    purchaseEditionFromRequestJson(JSON.stringify({
+      ...edition,
+      editionFingerprint: "wrong",
+    })),
+    null,
+  );
+  assert.equal(
+    purchaseEditionFromRequestJson(JSON.stringify({
+      ...edition,
+      editionArtifactKey: "booklets/old-version/not-safe/booklet.json",
+    })),
+    null,
+  );
+});

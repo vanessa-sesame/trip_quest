@@ -4,6 +4,7 @@ import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
   familyChildDisplayName,
+  familyEditionContext,
   familyPromptSummary,
   interestPlanForTrip,
   mechanicPlanForTrip,
@@ -38,6 +39,34 @@ test("family profiles normalize ages, reading levels, and bounded tags", () => {
     "trains",
     "drawing",
   ]);
+});
+
+test("edition context freezes names and structured itinerary events without exposing them to Kimi", () => {
+  const children = normalizeFamilyChildren([
+    { name: "Mia", age: 5, interests: ["dinosaurs"] },
+    { name: "Leo", age: 9, interests: ["trains"] },
+  ]);
+  const events = parseItineraryText("Day 1: airport and hotel", 2);
+  const edition = familyEditionContext(children, events);
+
+  assert.match(edition, /Mia/);
+  assert.match(edition, /airport/);
+  assert.doesNotMatch(familyPromptSummary(children), /Mia|Leo/);
+  assert.notEqual(edition, familyEditionContext([{ ...children[0], name: "Nora" }, children[1]], events));
+
+  const detailedEvent = [{
+    id: "event-1",
+    day: 1,
+    type: "attraction" as const,
+    title: "Museum visit",
+    place: "National Museum",
+    details: "Dinosaur gallery at 10:00",
+  }];
+  assert.notEqual(
+    familyEditionContext(children, detailedEvent),
+    familyEditionContext(children, [{ ...detailedEvent[0], details: "Space gallery at 10:00" }]),
+  );
+  assert.match(familyEditionContext(children, detailedEvent), /National Museum/);
 });
 
 test("interests are spread across the trip and tied to a specific child", () => {

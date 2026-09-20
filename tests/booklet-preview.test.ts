@@ -42,8 +42,16 @@ test("full preview mode can still expose every page without changing the stored 
 
 test("public preview mode is locked after the first three pages", () => {
   const booklet = sampleGeneratedBooklet();
+  const preview = createBookletPreview(booklet, false);
+
+  assert.equal(isBookletPageLocked(3, false), true);
+  assert.equal(preview.dayPlans[0].activities[1].title, "Locked printable page");
+});
+
+test("tester mode exposes the same booklet data used for the printable edition", () => {
+  const booklet = sampleGeneratedBooklet();
   const preview = createBookletPreview(booklet);
 
-  assert.equal(isBookletPageLocked(3), true);
-  assert.equal(preview.dayPlans[0].activities[1].title, "Locked printable page");
+  assert.equal(isBookletPageLocked(12), false);
+  assert.equal(preview, booklet);
 });

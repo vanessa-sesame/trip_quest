@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coloringSceneFor, coloringVariantFor } from "../app/coloring.ts";
+import { coloringPageSpec, coloringSceneFor, coloringVariantFor } from "../app/coloring.ts";
 
 const activity = (title: string, label = "DETAIL", clue = "A local detail to notice.") => ({
   title,
@@ -13,6 +13,9 @@ const activity = (title: string, label = "DETAIL", clue = "A local detail to not
 });
 
 test("landmark-aware coloring scenes recognize distinctive subjects", () => {
+  assert.equal(coloringSceneFor(activity("Merlion Color Bingo", "TOWER", "A round tower shape."), "garden skyline"), "merlion");
+  assert.equal(coloringSceneFor(activity("Temple Guardian Coloring", "TOWER", "Color the tower guardians."), "temple tower"), "guardian");
+  assert.equal(coloringSceneFor(activity("Tile Pattern Drawing", "SHOPHOUSE", "Draw the repeating motif."), "Katong-Joo Chiat shophouses"), "tile");
   assert.equal(coloringSceneFor(activity("Observation drawing"), "Gardens by the Bay Supertrees"), "supertree");
   assert.equal(coloringSceneFor(activity("Golden Dome Drawing Lab"), "Kampong Gelam"), "mosque");
   assert.equal(coloringSceneFor(activity("Railway Window Hunt"), "Kyoto Station"), "train");
@@ -29,6 +32,21 @@ test("activity subjects take precedence over mixed day context", () => {
   assert.equal(coloringSceneFor(activity("Market Observation Drawing"), "railway station and market"), "market");
   assert.equal(coloringSceneFor(activity("Mountain Observation Drawing"), "historic temple and mountain trail"), "mountain");
   assert.equal(coloringSceneFor(activity("Skyline Observation Drawing"), "Gardens by the Bay Supertrees"), "supertree");
+});
+
+test("specific title subjects outrank generic item and context subjects", () => {
+  assert.equal(
+    coloringSceneFor(activity("Merlion Color Bingo", "GARDEN", "Find the tower."), "Singapore garden tower"),
+    "merlion",
+  );
+  assert.equal(
+    coloringSceneFor(activity("Temple Guardian Coloring", "TOWER", "Find the garden."), "tower garden"),
+    "guardian",
+  );
+  assert.equal(
+    coloringSceneFor(activity("Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."), "shophouse street"),
+    "tile",
+  );
 });
 
 test("same subject can use distinct stable picture compositions", () => {
@@ -50,4 +68,28 @@ test("same landmark cycles picture compositions across repeated trip days", () =
     [1, 2, 3].map((day) => coloringVariantFor(subject, `Gardens by the Bay - day ${day} - game 1`)),
     [0, 1, 2],
   );
+});
+
+test("coloring pages use four activity items plus reusable and free bingo cells", () => {
+  const page = coloringPageSpec(
+    activity("Merlion Color Bingo", "MANE", "Find the lion mane."),
+    "Merlion Park - day 1 - game 1",
+  );
+  assert.equal(page.scene, "merlion");
+  assert.equal(page.cells.length, 9);
+  assert.equal(page.cells[4].kind, "free");
+  assert.equal(page.cells.filter((cell) => cell.kind === "item").length, 4);
+  assert.equal(page.cells.filter((cell) => cell.kind === "reusable").length, 4);
+  assert.equal(page.traceWord, "MERLION");
+  assert.equal(page.localClue, "Find the lion mane.");
+});
+
+test("tile title wins over shophouse context in the shared page spec", () => {
+  const page = coloringPageSpec(
+    activity("Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."),
+    "Katong-Joo Chiat shophouses",
+  );
+  assert.equal(page.scene, "tile");
+  assert.equal(page.illustration.label, "Peranakan tile motif");
+  assert.match(page.illustration.subject, /repeating geometric tile pattern/i);
 });

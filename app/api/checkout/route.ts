@@ -1,6 +1,6 @@
 import {
   createBookletCacheKey,
-  readStoredBooklet,
+  readStoredBookletReference,
   type BookletDatabase,
   type BookletObjectStorage,
 } from "../../booklet-storage";
@@ -63,20 +63,42 @@ export async function POST(request: Request) {
       runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3",
       runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6",
     );
-    const booklet = await readStoredBooklet(
+    const cacheKey = await createBookletCacheKey(input.identity);
+    const edition = await readStoredBookletReference(
       runtime.DB,
       runtime.BOOKLET_FILES,
-      await createBookletCacheKey(input.identity),
+      cacheKey,
       input.identity,
     );
-    if (!booklet) {
+    if (!edition) {
       return response({ error: "Create this custom booklet before starting checkout." }, undefined, 404);
+    }
+    const requestedFingerprint = typeof body.editionFingerprint === "string"
+      ? body.editionFingerprint.trim().toLocaleLowerCase()
+      : "";
+    if (!/^[a-f0-9]{64}$/.test(requestedFingerprint)) {
+      return response(
+        { error: "Create this custom booklet again before checkout so its exact edition can be verified." },
+        undefined,
+        409,
+      );
+    }
+    if (requestedFingerprint !== edition.fingerprint) {
+      return response(
+        { error: "This preview has changed. Create the booklet again before checkout so the preview and PDF stay identical." },
+        undefined,
+        409,
+      );
     }
 
     const familyId = readFamilyId(request) || crypto.randomUUID();
-    const cacheKey = await createBookletCacheKey(input.identity);
     const purchaseId = crypto.randomUUID();
-    const session = await createCheckoutSession(runtime, request, { purchaseId, cacheKey, familyId });
+    const session = await createCheckoutSession(runtime, request, {
+      purchaseId,
+      cacheKey,
+      familyId,
+      edition: { artifactKey: edition.artifactKey, fingerprint: edition.fingerprint },
+    });
     if (!session.id || !session.url) throw new Error("Stripe did not return a checkout link.");
     const requestJson = JSON.stringify({
       destination: input.destination,
@@ -85,6 +107,8 @@ export async function POST(request: Request) {
       itinerary: input.itinerary,
       family: input.family,
       events: input.events,
+      editionArtifactKey: edition.artifactKey,
+      editionFingerprint: edition.fingerprint,
     });
     const amountCents = Number(runtime.STRIPE_PRICE_CENTS || "99");
     const currency = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "usd";
@@ -96,7 +120,7 @@ export async function POST(request: Request) {
       requestJson,
     }, Number.isInteger(amountCents) && amountCents > 0 ? amountCents : 99, currency);
 
-    return response({ url: session.url }, familyId);
+    return response({ url: session.url, editionFingerprint: edition.fingerprint }, familyId);
   } catch (error) {
     if (error instanceof HttpRequestError) return response({ error: error.message }, undefined, error.status);
     const message = error instanceof Error ? error.message : "Secure checkout could not be started.";

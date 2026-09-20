@@ -4,10 +4,14 @@ import {
   normalizeItinerary,
   validateBookletDraft,
 } from "./booklet-ai.ts";
+import {
+  normalizeFamilyChildren,
+  normalizeItineraryEvents,
+} from "./family.ts";
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-19-7";
-export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-20-2";
+export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-20-3";
 
 type D1Value = string | number | null;
 
@@ -30,6 +34,7 @@ export type BookletDatabase = {
 type StoredObject = {
   arrayBuffer?(): Promise<ArrayBuffer>;
   text(): Promise<string>;
+  customMetadata?: Record<string, string>;
 };
 
 type ObjectMetadata = {
@@ -64,6 +69,7 @@ export type BookletCacheIdentity = {
   composerModel: string;
   familyContext?: string;
   familySize?: number;
+  editionContext?: string;
 };
 
 const encoder = new TextEncoder();
@@ -102,16 +108,45 @@ export async function createBookletCacheKey(identity: BookletCacheIdentity) {
     composerModel: identity.composerModel,
     familyContext: identity.familyContext || "",
     familySize: identity.familySize || 1,
+    editionContext: identity.editionContext || "",
   });
 }
 
-export function bookletArtifactKey(cacheKey: string) {
+export function bookletArtifactKey(cacheKey: string, fingerprint: string) {
+  return `booklets/${BOOKLET_CACHE_VERSION}/${cacheKey}/${fingerprint}/booklet.json`;
+}
+
+function legacyBookletArtifactKey(cacheKey: string) {
   return `booklets/${BOOKLET_CACHE_VERSION}/${cacheKey}/booklet.json`;
+}
+
+export function isBookletArtifactKey(value: string) {
+  const parts = value.split("/");
+  return (
+    parts.length === 5 &&
+    parts[0] === "booklets" &&
+    parts[1] === BOOKLET_CACHE_VERSION &&
+    /^[a-f0-9]{64}$/i.test(parts[2]) &&
+    /^[a-f0-9]{64}$/i.test(parts[3]) &&
+    parts[4] === "booklet.json"
+  );
 }
 
 export function bookletPdfKey(cacheKey: string) {
   return `booklets/${BOOKLET_PDF_CACHE_VERSION}/${cacheKey}/booklet.pdf`;
 }
+
+export async function bookletSnapshotFingerprint(booklet: GeneratedBookletData) {
+  const snapshot = { ...(booklet as GeneratedBookletData & { editionFingerprint?: unknown }) };
+  delete snapshot.editionFingerprint;
+  return digest(snapshot);
+}
+
+export type StoredBookletReference = {
+  booklet: GeneratedBookletData;
+  artifactKey: string;
+  fingerprint: string;
+};
 
 function parseSources(value: unknown) {
   if (!Array.isArray(value)) return null;
@@ -169,6 +204,12 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
     const sources = parseSources(parsed.sources);
     if (!sources) return null;
     const draft = validateBookletDraft(parsed, parsed.days, parsed.age);
+    const family = Array.isArray(parsed.family)
+      ? normalizeFamilyChildren(parsed.family)
+      : undefined;
+    const events = Array.isArray(parsed.events)
+      ? normalizeItineraryEvents(parsed.events, parsed.days)
+      : undefined;
 
     return {
       destination: parsed.destination,
@@ -178,6 +219,8 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
       ...draft,
       sources,
       generatedAt: parsed.generatedAt,
+      ...(family ? { family } : {}),
+      ...(events ? { events } : {}),
     };
   } catch {
     return null;
@@ -253,18 +296,75 @@ export async function readStoredBooklet(
   identity: BookletCacheIdentity,
   now = Date.now(),
 ) {
+  const reference = await readStoredBookletReference(
+    database,
+    artifacts,
+    cacheKey,
+    identity,
+    now,
+  );
+  return reference?.booklet || null;
+}
+
+export async function readStoredBookletArtifact(
+  artifacts: BookletObjectStorage,
+  artifactKey: string,
+  identity: BookletCacheIdentity,
+  expectedFingerprint?: string,
+) {
+  if (!isBookletArtifactKey(artifactKey)) return null;
+  const artifact = await artifacts.get(artifactKey);
+  if (!artifact) return null;
+  const booklet = parseStoredBooklet(await artifact.text());
+  if (!booklet || !sameIdentity(booklet, identity)) return null;
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  if (expectedFingerprint && fingerprint !== expectedFingerprint) return null;
+  return { booklet, artifactKey, fingerprint } satisfies StoredBookletReference;
+}
+
+export async function readStoredBookletReference(
+  database: BookletDatabase,
+  artifacts: BookletObjectStorage,
+  cacheKey: string,
+  identity: BookletCacheIdentity,
+  now = Date.now(),
+) {
   const row = await database
     .prepare(
       "SELECT artifact_key AS artifactKey FROM booklet_cache WHERE cache_key = ? AND expires_at > ?",
     )
     .bind(cacheKey, now)
     .first<{ artifactKey: string }>();
-  if (!row) return null;
+  if (!row?.artifactKey) return null;
+  const current = await readStoredBookletArtifact(artifacts, row.artifactKey, identity);
+  if (current) return current;
 
-  const artifact = await artifacts.get(row.artifactKey);
-  if (!artifact) return null;
-  const booklet = parseStoredBooklet(await artifact.text());
-  return booklet && sameIdentity(booklet, identity) ? booklet : null;
+  // Releases before immutable snapshots used one mutable object per cache key.
+  // Promote that object in place so existing previews and unpaid checkouts remain usable.
+  if (row.artifactKey !== legacyBookletArtifactKey(cacheKey)) return null;
+  const legacyArtifact = await artifacts.get(row.artifactKey);
+  if (!legacyArtifact) return null;
+  const booklet = parseStoredBooklet(await legacyArtifact.text());
+  if (!booklet || !sameIdentity(booklet, identity)) return null;
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  const artifactKey = bookletArtifactKey(cacheKey, fingerprint);
+  await artifacts.put(artifactKey, JSON.stringify(booklet), {
+    httpMetadata: {
+      cacheControl: "private, no-store",
+      contentType: "application/json; charset=utf-8",
+    },
+    customMetadata: {
+      age: String(booklet.age),
+      days: String(booklet.days),
+      version: BOOKLET_CACHE_VERSION,
+      fingerprint,
+    },
+  });
+  await database
+    .prepare("UPDATE booklet_cache SET artifact_key = ? WHERE cache_key = ? AND artifact_key = ?")
+    .bind(artifactKey, cacheKey, row.artifactKey)
+    .run();
+  return { booklet, artifactKey, fingerprint };
 }
 
 export async function writeStoredBooklet(
@@ -278,7 +378,8 @@ export async function writeStoredBooklet(
     expiresAt: number;
   },
 ) {
-  const artifactKey = bookletArtifactKey(input.cacheKey);
+  const fingerprint = await bookletSnapshotFingerprint(input.booklet);
+  const artifactKey = bookletArtifactKey(input.cacheKey, fingerprint);
   await artifacts.put(artifactKey, JSON.stringify(input.booklet), {
     httpMetadata: {
       cacheControl: "private, no-store",
@@ -288,6 +389,7 @@ export async function writeStoredBooklet(
       age: String(input.booklet.age),
       days: String(input.booklet.days),
       version: BOOKLET_CACHE_VERSION,
+      fingerprint,
     },
   });
 
@@ -330,6 +432,7 @@ export async function readStoredBookletPdf(
   artifacts: BookletObjectStorage,
   cacheKey: string,
   now = Date.now(),
+  expectedFingerprint?: string,
 ) {
   const row = await database
     .prepare(
@@ -342,6 +445,7 @@ export async function readStoredBookletPdf(
 
   const artifact = await artifacts.get(row.pdfKey);
   if (!artifact?.arrayBuffer) return null;
+  if (expectedFingerprint && artifact.customMetadata?.editionFingerprint !== expectedFingerprint) return null;
   return {
     bytes: await artifact.arrayBuffer(),
     pdfKey: row.pdfKey,
@@ -355,6 +459,7 @@ export async function writeStoredBookletPdf(
     cacheKey: string;
     filename: string;
     pdf: ArrayBuffer | ArrayBufferView;
+    editionFingerprint?: string;
   },
 ) {
   const pdfKey = bookletPdfKey(input.cacheKey);
@@ -367,6 +472,7 @@ export async function writeStoredBookletPdf(
     customMetadata: {
       filename: input.filename,
       version: BOOKLET_PDF_CACHE_VERSION,
+      editionFingerprint: input.editionFingerprint || "",
     },
   });
   await database

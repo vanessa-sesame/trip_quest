@@ -48,8 +48,12 @@ import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
   eventTypeLabel,
+  FAMILY_BADGES,
   familyChildDisplayName,
+  familyRoleDescription,
   mechanicLabel,
+  mechanicMissionPrompt,
+  mechanicPlanForTrip,
   normalizeFamilyChildren,
   parseFamilyTags,
   parseItineraryText,
@@ -339,7 +343,10 @@ export default function Home() {
   const currentPage = clampPage(page, reportPageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);
   const leadChild = children[0] || defaultFamilyWorkspace().children[0];
-  const familyInterests = [...new Set(children.flatMap((child) => child.interests))];
+  const editionChildren = generatedBooklet?.family?.length
+    ? generatedBooklet.family
+    : children;
+  const familyInterests = [...new Set(editionChildren.flatMap((child) => child.interests))];
 
   function updateLeadAge(value: number) {
     const nextAge = sanitizeAge(value);
@@ -433,6 +440,7 @@ export default function Home() {
         return [plan.trim(), imported].filter(Boolean).join("; ").slice(0, 140);
       }),
       family: children,
+      events: structuredEvents,
     };
 
     if (!nextTrip.destination) {
@@ -535,8 +543,9 @@ export default function Home() {
         days: generatedBooklet.days,
         destination: generatedBooklet.destination,
         itinerary: generatedBooklet.itinerary,
-        family: children,
-        events: structuredEvents,
+        family: generatedBooklet.family || children,
+        events: generatedBooklet.events || structuredEvents,
+        editionFingerprint: generatedBooklet.editionFingerprint,
       });
       const response = await fetch("/api/checkout", {
         method: "POST",
@@ -869,15 +878,16 @@ export default function Home() {
         >
           <div className="preview-toolbar">
             <div>
-              <p className="eyebrow">Your preview</p>
+              <p className="eyebrow">{generatedBooklet ? "Your exact edition" : "Sample preview"}</p>
               <h2 id="preview-title">{destinationName} Explorer</h2>
               <p>
                 Age {trip.age} <span aria-hidden="true">•</span> {trip.days} days{" "}
                 <span aria-hidden="true">•</span> {reportPageTitles.length} report pages
               </p>
               <small className="pack-summary">
-                {children.length} explorer{children.length === 1 ? "" : "s"} · family mission map · cards · badge tracker
+                grown-up guide · {editionChildren.length} explorer{editionChildren.length === 1 ? "" : "s"} · family mission map · cards · badge tracker
                 {generatedBooklet && familyInterests.length ? ` · interests: ${familyInterests.slice(0, 2).join(", ")}` : ""}
+                {generatedBooklet?.editionFingerprint ? ` · edition ${generatedBooklet.editionFingerprint.slice(0, 8).toUpperCase()}` : ""}
               </small>
             </div>
             <button
@@ -917,7 +927,7 @@ export default function Home() {
                 <FamilyPackPreviewPage
                   destination={destinationName}
                   page={currentPage - familyPageStart}
-                  explorers={children}
+                  explorers={editionChildren}
                   days={trip.days}
                   dayPlans={generatedDays}
                 />
@@ -1387,7 +1397,7 @@ function FamilyPackPreviewPage({
           {explorers.map((child, index) => (
             <div key={child.id}>
               <strong>{index === 0 ? "Lead · " : ""}{familyChildDisplayName(child, index)} · age {child.age}</strong>
-              <span>{child.age <= 5 ? "Point, find, count, or draw" : child.age <= 8 ? "Read clues and spot patterns" : "Compare, solve, and explain"}</span>
+              <span>{familyRoleDescription(child, index)}</span>
               {child.interests.length ? <small>Interest missions: {child.interests.slice(0, 3).join(", ")}</small> : null}
             </div>
           ))}
@@ -1398,19 +1408,24 @@ function FamilyPackPreviewPage({
   }
 
   if (page === 2) {
-    const cards = [
-      "Spot one tiny local detail.",
-      "Draw a shape, texture, or pattern.",
-      "Solve a clue, then find the real evidence.",
-      "Work together to tell one trip story.",
-    ];
+    const mechanicsByDay = mechanicPlanForTrip(explorers, days);
+    const cards = Array.from({ length: 4 }, (_, index) => {
+      const dayIndex = index % Math.max(1, dayPlans.length);
+      const day = dayPlans[dayIndex] || { day: index + 1, theme: destination };
+      const plan = mechanicsByDay[dayIndex]?.mechanics || ["spot" as const];
+      const mechanic = plan[index % plan.length] || "spot";
+      return {
+        label: `DAY ${day.day} / ${mechanicLabel(mechanic).toUpperCase()}`,
+        prompt: mechanicMissionPrompt(mechanic, day.theme),
+      };
+    });
     return (
       <article className="generated-sheet family-preview-sheet family-cards-preview">
         <span>Mission cards</span>
         <h3>Pick a family spark</h3>
         <p>Use one card when the day needs a small, screen-free challenge.</p>
         <div className="family-preview-card-grid">
-          {cards.map((card, index) => <div key={card}><strong>MISSION {index + 1}</strong><span>{card}</span></div>)}
+          {cards.map((card) => <div key={card.label}><strong>{card.label}</strong><span>{card.prompt}</span></div>)}
         </div>
       </article>
     );
@@ -1422,7 +1437,7 @@ function FamilyPackPreviewPage({
       <h3>Collect the way you traveled</h3>
       <p>Give each explorer a tick, sticker, or tiny drawing when the family earns a badge.</p>
       <div className="family-preview-badges">
-        {["Keen observer", "Kind traveler", "Pattern finder", "Team player", "Story keeper", "Route helper"].map((badge) => <div key={badge}><b>OK</b><span>{badge}</span></div>)}
+        {FAMILY_BADGES.map((badge) => <div key={badge}><b>OK</b><span>{badge}</span></div>)}
       </div>
     </article>
   ) : (

@@ -52,19 +52,26 @@ Current public release: https://tripquestkids.com, source branch `main`.
 - Generated JSON and PDFs are saved for reuse.
 - Drawing and coloring pages use landmark-aware printable line art. The day
   theme, activity title, labels, and clues select recognizable scenes such as
+  the Merlion fountain, temple guardians, Peranakan-style tile patterns,
   Supertrees, mosques, trains, towers, castles, coasts, penguins, wildlife,
-  dinosaurs, caves, markets, gardens, and shophouses. Unknown subjects use a
-  stable city-landmark scene instead of a random unrelated illustration.
+  dinosaurs, caves, markets, gardens, and shophouses. The activity title takes
+  priority over generic words in the day context. Unknown subjects use a stable
+  city-landmark scene instead of a random unrelated illustration.
 - Drawing guidance sits in reserved space above the artwork, so it cannot cover
   a dome, sun, landmark, or other part of the printable scene.
+- Coloring pages now use a polished `spot / color / trace` format: one large
+  recognizable landmark illustration, a 3-by-3 observation game, a trace strip,
+  a local clue, and a field-note area. Browser preview and PDF share the same
+  semantic page specification so the activity and picture stay aligned.
 
 ## Important Launch State
 
 The paid flow is connected in Stripe sandbox mode and must be moved to live
 Stripe credentials before charging customers:
 
-- `FULL_PREVIEW_FOR_TESTERS` is `false` in `app/booklet-preview.ts`; only the
-  first three web preview pages are visible before purchase.
+- `FULL_PREVIEW_FOR_TESTERS` is temporarily `true` in `app/booklet-preview.ts`;
+  testers can inspect the complete generated edition before purchase. Restore
+  the three-page paywall before a public paid launch.
 - Hosted `TRIPQUEST_PDF_TEST_MODE` is `false`; the customer PDF button no longer
   falls back to a free download when checkout is unavailable.
 - Stripe Checkout, signed webhooks, D1 purchase entitlements, and paid PDF
@@ -130,7 +137,18 @@ keys.
 - Destination research is retained for 30 days.
 - Generated booklets are retained for 180 days.
 - The exact booklet cache key includes destination, age, days, itinerary,
-  models, family interests, avoidances, reading levels, and preferences.
+  models, the complete normalized family snapshot, and normalized itinerary
+  events. Names affect the frozen edition identity but remain excluded from the
+  Kimi prompt.
+- Every generated edition has a stable content fingerprint and an immutable R2
+  JSON snapshot. Checkout pins that artifact key and fingerprint in both D1 and
+  Stripe metadata, and paid PDF reuse verifies the fingerprint. A later cache
+  refresh therefore cannot change the edition a customer purchased. Legacy
+  mutable booklet objects are promoted to immutable snapshots when first read.
+- Checkout requires the generated edition fingerprint. PDF delivery rejects a
+  missing or mismatched modern artifact instead of silently substituting a
+  newly cached booklet; failed entitlement webhook matches return a retryable
+  response to Stripe.
 - Current cache versions are defined in `app/booklet-storage.ts`.
 - PDF requests reuse the stored booklet and reuse a stored PDF when available.
 - Family profiles use an anonymous browser-scoped family identifier and D1; a
@@ -171,10 +189,10 @@ git diff --check
 ```
 
 `npm test` performs a production build and runs the automated test suite. At
-this checkpoint there are 45 passing tests covering age behavior, destination
+this checkpoint there are 58 passing tests covering age behavior, destination
 variation, game validation, puzzles, landmark-aware illustration selection,
-family profiles, streaming, payments, security, D1/R2 storage, and PDF
-generation.
+family profiles, streaming, exact paid-edition delivery, legacy storage
+migration, payments, security, D1/R2 storage, and PDF generation.
 
 Other useful commands:
 

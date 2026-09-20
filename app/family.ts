@@ -191,6 +191,29 @@ export function familyPromptSummary(children: FamilyChild[]) {
   ].join("; ")).join("\n");
 }
 
+export function familyEditionContext(
+  children: FamilyChild[],
+  events: ItineraryEvent[] = [],
+) {
+  return JSON.stringify({
+    children: children.map((child) => ({
+      name: child.name.trim(),
+      age: child.age,
+      readingLevel: child.readingLevel,
+      interests: child.interests,
+      avoid: child.avoid,
+      preferredMechanics: child.preferredMechanics,
+    })),
+    events: events.map((event) => ({
+      day: event.day,
+      type: event.type,
+      title: event.title,
+      place: event.place,
+      details: event.details,
+    })),
+  });
+}
+
 export function familyChildDisplayName(child: FamilyChild, index: number) {
   const name = child.name.trim();
   if (index === 0 && /^(?:explorer|your child)(?:\s*1)?$/i.test(name)) return "Your child";
@@ -202,6 +225,47 @@ export function familyChildDisplayName(child: FamilyChild, index: number) {
 
 export function mechanicLabel(mechanic: QuestMechanic) {
   return MECHANIC_LABELS[mechanic];
+}
+
+export const FAMILY_BADGES = [
+  "Keen Observer",
+  "Kind Traveler",
+  "Brave Taster",
+  "Pattern Finder",
+  "Route Helper",
+  "Story Keeper",
+  "Team Player",
+  "Local Detail",
+] as const;
+
+export function familyRoleDescription(child: FamilyChild, index: number) {
+  const role = child.interests.some((interest) => /draw|art|paint|craft|sketch/i.test(interest))
+    ? "Sketcher: turn one local shape into an original line"
+    : [
+        "Scout: spot one local detail and point it out",
+        "Storyteller: explain what one clue might mean",
+        "Evidence keeper: record the proof for the family",
+        "Route keeper: choose the next safe stop with a grown-up",
+        "Question maker: ask one curious why-or-how question",
+        "Presenter: share the family answer",
+      ][index % 6];
+  const interests = child.interests.slice(0, 2).join(", ");
+  return interests ? `${role}. Interest missions: ${interests}.` : role;
+}
+
+export function mechanicMissionPrompt(mechanic: QuestMechanic, theme: string) {
+  switch (mechanic) {
+    case "spot": return `Spot one tiny detail at ${theme} that most visitors might miss.`;
+    case "draw": return `Draw the shape, texture, or pattern that best remembers ${theme}.`;
+    case "count": return `Count four examples near ${theme}; compare which one is biggest or brightest.`;
+    case "talk": return `Tell a grown-up one respectful question about what you notice at ${theme}.`;
+    case "imagine": return `Imagine a local object at ${theme} could speak. Give it one helpful sentence.`;
+    case "navigate": return `Choose the safest family route around ${theme}; mark one useful landmark.`;
+    case "photograph": return `With permission, frame one photo of a pattern or detail connected to ${theme}.`;
+    case "solve": return `Solve the clue, then point to the real evidence at ${theme}.`;
+    case "move": return `Make a quiet three-step movement inspired by the shapes or rhythm at ${theme}.`;
+    default: return `Combine your clues and make one family answer about ${theme}.`;
+  }
 }
 
 export function eventTypeLabel(type: ItineraryEventType) {

@@ -1,5 +1,6 @@
 import { normalizeItinerary } from "./booklet-ai";
 import {
+  familyEditionContext,
   familyPromptSummary,
   normalizeFamilyChildren,
   normalizeItineraryEvents,
@@ -59,7 +60,7 @@ export function normalizePdfRequest(
       composerModel,
       familyContext,
       familySize: family.length,
+      editionContext: familyEditionContext(family, events),
     },
   };
 }
-

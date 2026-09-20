@@ -1,6 +1,6 @@
 import type { BookletDatabase } from "../../../booklet-storage";
 import {
-  markPurchasePaid,
+  markPurchasePaidFromStripeSession,
   parseStripeEvent,
   verifyStripeSignature,
   type PaymentRuntime,
@@ -34,8 +34,12 @@ export async function POST(request: Request) {
     const event = parseStripeEvent(payload);
     if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
       const session = event.data?.object;
-      const purchaseId = session?.metadata?.purchase_id;
-      if (session?.id && purchaseId) await markPurchasePaid(runtime.DB, purchaseId, session.id);
+      if (session?.id) {
+        const marked = await markPurchasePaidFromStripeSession(runtime.DB, session);
+        if (!marked) {
+          return new Response("Purchase record is not ready for this paid session.", { status: 409 });
+        }
+      }
     }
     return new Response("ok", { status: 200 });
   } catch (error) {
@@ -43,4 +47,3 @@ export async function POST(request: Request) {
     return new Response("Webhook could not be processed.", { status: 500 });
   }
 }
-

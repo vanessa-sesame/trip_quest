@@ -6,14 +6,18 @@ import {
   type BookletCacheIdentity,
   type BookletDatabase,
   type BookletObjectStorage,
+  BOOKLET_CACHE_VERSION,
   acquireGenerationLock,
   bookletArtifactKey,
   bookletPdfKey,
+  bookletSnapshotFingerprint,
   consumeGenerationRateLimit,
   createBookletCacheKey,
   createResearchCacheKey,
   parseStoredResearch,
   readStoredBooklet,
+  readStoredBookletArtifact,
+  readStoredBookletReference,
   readStoredBookletPdf,
   readStoredResearch,
   releaseGenerationLock,
@@ -163,6 +167,8 @@ test("durable cache keys are stable but change with booklet inputs", async () =>
     itinerary: ["GARDENS BY THE BAY"],
   });
   const older = await createBookletCacheKey({ ...identity, age: 8 });
+  const namedEdition = await createBookletCacheKey({ ...identity, editionContext: "Mia" });
+  const scheduledEdition = await createBookletCacheKey({ ...identity, editionContext: "Mia|airport" });
   const research = await createResearchCacheKey(
     identity.destination,
     identity.itinerary,
@@ -171,8 +177,9 @@ test("durable cache keys are stable but change with booklet inputs", async () =>
 
   assert.equal(first, same);
   assert.notEqual(first, older);
+  assert.notEqual(first, namedEdition);
+  assert.notEqual(namedEdition, scheduledEdition);
   assert.notEqual(first, research);
-  assert.match(bookletArtifactKey(first), new RegExp(`${first}/booklet\\.json$`));
 });
 
 test("D1 metadata and the private R2 artifact restore a generated booklet", async () => {
@@ -197,7 +204,8 @@ test("D1 metadata and the private R2 artifact restore a generated booklet", asyn
     expiresAt: Date.now() + 60_000,
   });
 
-  assert.ok(objects.has(bookletArtifactKey(cacheKey)));
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  assert.ok(objects.has(bookletArtifactKey(cacheKey, fingerprint)));
   assert.deepEqual(
     await readStoredBooklet(database, storage, cacheKey, identity),
     booklet,
@@ -226,6 +234,150 @@ test("D1 metadata and the private R2 artifact restore a generated booklet", asyn
     .bind(`booklets/old-pdf-version/${cacheKey}/booklet.pdf`, cacheKey)
     .run();
   assert.equal(await readStoredBookletPdf(database, storage, cacheKey), null);
+});
+
+test("immutable booklet snapshots preserve the frozen family and itinerary events", async () => {
+  const database = createTestDatabase();
+  const { storage } = createTestArtifacts();
+  const booklet: GeneratedBookletData = {
+    ...generatedBooklet(),
+    family: [{
+      id: "child-1",
+      name: "Mia",
+      age: 7,
+      readingLevel: "early-reader",
+      interests: ["dinosaurs"],
+      avoid: ["long writing"],
+      preferredMechanics: ["spot"],
+    }],
+    events: [{
+      id: "event-1",
+      day: 1,
+      type: "attraction",
+      title: "Gardens by the Bay",
+      place: "Supertree Grove",
+      details: "Evening light show",
+    }],
+  };
+  const identity: BookletCacheIdentity = {
+    destination: booklet.destination,
+    age: booklet.age,
+    days: booklet.days,
+    itinerary: booklet.itinerary,
+    researchModel: "kimi-k3",
+    composerModel: "kimi-k2.6",
+  };
+  const cacheKey = await createBookletCacheKey(identity);
+  const artifactKey = await writeStoredBooklet(database, storage, {
+    cacheKey,
+    booklet,
+    researchModel: identity.researchModel,
+    composerModel: identity.composerModel,
+    expiresAt: Date.now() + 60_000,
+  });
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  const restored = await readStoredBookletArtifact(storage, artifactKey, identity, fingerprint);
+
+  assert.deepEqual(restored?.booklet.family, booklet.family);
+  assert.deepEqual(restored?.booklet.events, booklet.events);
+  assert.equal(restored?.fingerprint, fingerprint);
+});
+
+test("a purchase can keep reading its exact edition after the D1 cache row changes", async () => {
+  const database = createTestDatabase();
+  const { storage } = createTestArtifacts();
+  const booklet = generatedBooklet();
+  const identity: BookletCacheIdentity = {
+    destination: booklet.destination,
+    age: booklet.age,
+    days: booklet.days,
+    itinerary: booklet.itinerary,
+    researchModel: "kimi-k3",
+    composerModel: "kimi-k2.6",
+  };
+  const cacheKey = await createBookletCacheKey(identity);
+  const reference = await writeStoredBooklet(database, storage, {
+    cacheKey,
+    booklet,
+    researchModel: identity.researchModel,
+    composerModel: identity.composerModel,
+    expiresAt: Date.now() + 60_000,
+  });
+  const storedReference = await readStoredBookletReference(database, storage, cacheKey, identity);
+  assert.equal(storedReference?.artifactKey, reference);
+  assert.equal(storedReference?.fingerprint, await bookletSnapshotFingerprint(booklet));
+
+  const newerBooklet = { ...booklet, age: 8 };
+  const newerIdentity = { ...identity, age: 8 };
+  const newerCacheKey = await createBookletCacheKey(newerIdentity);
+  const newerArtifact = await writeStoredBooklet(database, storage, {
+    cacheKey: newerCacheKey,
+    booklet: newerBooklet,
+    researchModel: identity.researchModel,
+    composerModel: identity.composerModel,
+    expiresAt: Date.now() + 60_000,
+  });
+  assert.notEqual(newerArtifact, reference);
+  await database
+    .prepare("UPDATE booklet_cache SET artifact_key = ? WHERE cache_key = ?")
+    .bind(newerArtifact, cacheKey)
+    .run();
+
+  const pinned = await readStoredBookletArtifact(
+    storage,
+    reference,
+    identity,
+    storedReference?.fingerprint,
+  );
+  assert.deepEqual(pinned?.booklet, booklet);
+  assert.equal(await readStoredBookletReference(database, storage, cacheKey, identity), null);
+});
+
+test("edition fingerprints ignore transport metadata", async () => {
+  const booklet = generatedBooklet();
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  const decorated = { ...booklet, editionFingerprint: "f".repeat(64) } as typeof booklet & { editionFingerprint: string };
+  assert.equal(await bookletSnapshotFingerprint(decorated), fingerprint);
+});
+
+test("legacy mutable booklet objects are promoted to immutable snapshots", async () => {
+  const database = createTestDatabase();
+  const { objects, storage } = createTestArtifacts();
+  const booklet = generatedBooklet();
+  const identity: BookletCacheIdentity = {
+    destination: booklet.destination,
+    age: booklet.age,
+    days: booklet.days,
+    itinerary: booklet.itinerary,
+    researchModel: "kimi-k3",
+    composerModel: "kimi-k2.6",
+  };
+  const cacheKey = await createBookletCacheKey(identity);
+  const legacyKey = `booklets/${BOOKLET_CACHE_VERSION}/${cacheKey}/booklet.json`;
+  objects.set(legacyKey, JSON.stringify(booklet));
+  await database
+    .prepare(`INSERT INTO booklet_cache
+      (cache_key, destination, age, days, artifact_key, pdf_key, research_model, composer_model, cache_version, generated_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`)
+    .bind(
+      cacheKey,
+      booklet.destination,
+      booklet.age,
+      booklet.days,
+      legacyKey,
+      identity.researchModel,
+      identity.composerModel,
+      BOOKLET_CACHE_VERSION,
+      Date.now(),
+      Date.now() + 60_000,
+    )
+    .run();
+
+  const reference = await readStoredBookletReference(database, storage, cacheKey, identity);
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  assert.equal(reference?.artifactKey, bookletArtifactKey(cacheKey, fingerprint));
+  assert.ok(objects.has(bookletArtifactKey(cacheKey, fingerprint)));
+  assert.deepEqual(reference?.booklet, booklet);
 });
 
 test("destination research and generation locks persist in D1", async () => {

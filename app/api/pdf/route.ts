@@ -11,7 +11,9 @@ import {
 import {
   type BookletDatabase,
   type BookletObjectStorage,
+  bookletSnapshotFingerprint,
   createBookletCacheKey,
+  readStoredBookletArtifact,
   readStoredBooklet,
   readStoredBookletPdf,
   writeStoredBookletPdf,
@@ -63,7 +65,12 @@ function canPreparePdf(request: Request, runtime: RuntimeEnvironment) {
   return isOwnerRequest(request, runtime) || runtime.TRIPQUEST_PDF_TEST_MODE === "true";
 }
 
-function pdfResponse(bytes: ArrayBuffer | Uint8Array, filename: string, cache: string) {
+function pdfResponse(
+  bytes: ArrayBuffer | Uint8Array,
+  filename: string,
+  cache: string,
+  editionFingerprint?: string,
+) {
   const body = bytes instanceof Uint8Array
     ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
     : bytes;
@@ -75,6 +82,7 @@ function pdfResponse(bytes: ArrayBuffer | Uint8Array, filename: string, cache: s
       "Content-Type": "application/pdf",
       "X-Content-Type-Options": "nosniff",
       "X-TripQuest-Pdf-Cache": cache,
+      ...(editionFingerprint ? { "X-TripQuest-Edition": editionFingerprint } : {}),
     },
   });
 }
@@ -90,30 +98,68 @@ async function preparePdf(
   runtime: RuntimeEnvironment,
   input: NormalizedPdfRequest,
   purchase: PurchaseRecord | null,
+  requestedFingerprint = "",
 ) {
   if (!runtime.DB || !runtime.BOOKLET_FILES) {
     return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
   }
-  const cacheKey = await createBookletCacheKey(input.identity);
-  if (purchase && purchase.cacheKey !== cacheKey) {
+  const computedCacheKey = await createBookletCacheKey(input.identity);
+  if (purchase?.edition && purchase.cacheKey !== computedCacheKey) {
     return Response.json({ error: "This purchase does not match the requested booklet." }, { status: 403 });
   }
-  const booklet = await readStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, cacheKey, input.identity);
-  if (!booklet) {
-    return Response.json({ error: "Create this custom booklet before downloading its PDF." }, { status: 404 });
-  }
-
-  const personalizedBooklet = applySiblingPlan(booklet, input.family);
-  const filename = familyPackPdfFilename(personalizedBooklet);
-  const reusablePdf = input.family.length <= 1 && !hasPersonalFamilyNames(input);
+  const cacheKey = purchase?.cacheKey || computedCacheKey;
 
   if (purchase?.pdfKey) {
-    const storedPurchasePdf = await readPurchasePdf(runtime.BOOKLET_FILES, purchase.pdfKey);
-    if (storedPurchasePdf) return pdfResponse(storedPurchasePdf, filename, "purchase");
+    const storedPurchasePdf = await readPurchasePdf(
+      runtime.BOOKLET_FILES,
+      purchase.pdfKey,
+      purchase.edition?.fingerprint,
+    );
+    if (storedPurchasePdf) {
+      const editionFingerprint = purchase.edition?.fingerprint;
+      return pdfResponse(storedPurchasePdf, "tripquest-booklet.pdf", "purchase", editionFingerprint);
+    }
   }
+  if (purchase && !purchase.edition) {
+    return Response.json(
+      { error: "This earlier purchase has no preserved edition snapshot. Please contact TripQuest support rather than downloading a different booklet." },
+      { status: 409 },
+    );
+  }
+
+  const exactEdition = purchase?.edition
+    ? await readStoredBookletArtifact(
+        runtime.BOOKLET_FILES,
+        purchase.edition.artifactKey,
+        input.identity,
+        purchase.edition.fingerprint,
+      )
+    : null;
+  const storedBooklet = exactEdition?.booklet || await readStoredBooklet(
+    runtime.DB,
+    runtime.BOOKLET_FILES,
+    cacheKey,
+    input.identity,
+  );
+  if (!storedBooklet || purchase?.edition && !exactEdition) {
+    return Response.json(
+      { error: purchase ? "The purchased edition snapshot is no longer available." : "Create this custom booklet before downloading its PDF." },
+      { status: purchase ? 409 : 404 },
+    );
+  }
+  const editionFingerprint = exactEdition?.fingerprint || await bookletSnapshotFingerprint(storedBooklet);
+  if (requestedFingerprint && requestedFingerprint !== editionFingerprint) {
+    return Response.json(
+      { error: "This PDF does not match the booklet edition currently shown in the preview." },
+      { status: 409 },
+    );
+  }
+  const personalizedBooklet = applySiblingPlan(storedBooklet, input.family);
+  const filename = familyPackPdfFilename(personalizedBooklet);
+  const reusablePdf = input.family.length <= 1 && !hasPersonalFamilyNames(input);
   if (reusablePdf) {
-    const stored = await readStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, cacheKey);
-    if (stored) return pdfResponse(stored.bytes, filename, "durable");
+    const stored = await readStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, cacheKey, Date.now(), editionFingerprint);
+    if (stored) return pdfResponse(stored.bytes, filename, "durable", editionFingerprint);
   }
 
   const jobKey = `${purchase?.purchaseId || "test"}:${cacheKey}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
@@ -130,13 +176,18 @@ async function preparePdf(
   }
   const pdf = await job;
   if (reusablePdf) {
-    await writeStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, { cacheKey, filename, pdf });
+    await writeStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, { cacheKey, filename, pdf, editionFingerprint });
   }
   if (purchase && !reusablePdf) {
-    const pdfKey = await writePurchasePdf(runtime.BOOKLET_FILES, purchase.purchaseId, filename, pdf);
+    const pdfKey = await writePurchasePdf(runtime.BOOKLET_FILES, purchase.purchaseId, filename, pdf, editionFingerprint);
     await setPurchasePdfKey(runtime.DB, purchase.purchaseId, pdfKey);
   }
-  return pdfResponse(pdf, filename, purchase ? "purchase-generated" : reusablePdf ? "generated" : "family-generated");
+  return pdfResponse(
+    pdf,
+    filename,
+    purchase ? "purchase-generated" : reusablePdf ? "generated" : "family-generated",
+    editionFingerprint,
+  );
 }
 
 function errorResponse(error: unknown) {
@@ -174,7 +225,16 @@ export async function POST(request: Request) {
       purchase = await paidPurchaseForRequest(request, runtime, sessionId, input);
       if (!purchase) return Response.json({ error: "A completed purchase is required before downloading this PDF." }, { status: 402 });
     }
-    return preparePdf(runtime, input, purchase);
+    const requestedFingerprint = typeof body.editionFingerprint === "string"
+      ? body.editionFingerprint.trim().toLocaleLowerCase()
+      : "";
+    if (!/^[a-f0-9]{64}$/.test(requestedFingerprint)) {
+      return Response.json(
+        { error: "Create this custom booklet again so the PDF can be matched to the exact preview edition." },
+        { status: 409 },
+      );
+    }
+    return preparePdf(runtime, input, purchase, requestedFingerprint);
   } catch (error) {
     return errorResponse(error);
   }

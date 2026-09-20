@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import {
   BookOpenCheck,
@@ -67,6 +67,8 @@ type Trip = {
   days: number;
 };
 
+type PaidDownloadState = "idle" | "preparing" | "ready" | "error";
+
 const destinationSuggestions = [
   "Singapore",
   "Tokyo",
@@ -127,7 +129,42 @@ function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
 }
 
+function checkoutContext() {
+  if (typeof window === "undefined") {
+    return { state: "idle" as PaidDownloadState, sessionId: "", pdfUrl: "", note: "" };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const checkout = params.get("checkout");
+  if (checkout === "cancelled") {
+    return {
+      state: "idle" as PaidDownloadState,
+      sessionId: "",
+      pdfUrl: "",
+      note: "Payment was cancelled. Your booklet is still here whenever you are ready.",
+    };
+  }
+  if (checkout !== "success") {
+    return { state: "idle" as PaidDownloadState, sessionId: "", pdfUrl: "", note: "" };
+  }
+  const sessionId = params.get("session_id")?.trim() || "";
+  if (!sessionId) {
+    return {
+      state: "error" as PaidDownloadState,
+      sessionId: "",
+      pdfUrl: "",
+      note: "Payment returned without a checkout session. Please start checkout again or contact support.",
+    };
+  }
+  return {
+    state: "preparing" as PaidDownloadState,
+    sessionId,
+    pdfUrl: `/api/pdf?session_id=${encodeURIComponent(sessionId)}`,
+    note: "Payment received. Preparing your PDF…",
+  };
+}
+
 export default function Home() {
+  const initialCheckout = checkoutContext();
   const [age, setAge] = useState(5);
   const [destination, setDestination] = useState("Singapore");
   const [days, setDays] = useState(5);
@@ -141,12 +178,12 @@ export default function Home() {
   const [page, setPage] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [checkoutNote, setCheckoutNote] = useState(() =>
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("checkout") === "cancelled"
-      ? "Payment was cancelled. Your booklet is still here whenever you are ready."
-      : "",
-  );
+  const [checkoutNote, setCheckoutNote] = useState(initialCheckout.note);
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
+  const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>(initialCheckout.state);
+  const [paidPdfUrl] = useState(initialCheckout.pdfUrl);
+  const [checkoutSessionId] = useState(initialCheckout.sessionId);
+  const autoDownloadAttempted = useRef(false);
   const [generatedBooklet, setGeneratedBooklet] =
     useState<GeneratedBookletData | null>(null);
   const [generationState, setGenerationState] = useState<
@@ -191,6 +228,62 @@ export default function Home() {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const sessionId = checkoutSessionId;
+    const pdfUrl = paidPdfUrl;
+    if (!sessionId || !pdfUrl) return;
+    let active = true;
+
+    async function preparePaidDownload() {
+      let lastStatus = 0;
+      for (let attempt = 0; attempt < 8 && active; attempt += 1) {
+        try {
+          const response = await fetch(pdfUrl, {
+            headers: { Accept: "application/pdf" },
+            cache: "no-store",
+          });
+          lastStatus = response.status;
+          const contentType = response.headers.get("content-type") || "";
+          if (response.ok && contentType.includes("application/pdf")) {
+            await response.body?.cancel();
+            if (!active) return;
+            setPaidDownloadState("ready");
+            setCheckoutNote("Payment received. Your PDF is ready. If it does not download automatically, use the button below.");
+            if (!autoDownloadAttempted.current) {
+              autoDownloadAttempted.current = true;
+              window.setTimeout(() => {
+                if (!active) return;
+                const link = document.createElement("a");
+                link.href = pdfUrl;
+                link.download = "TripQuest-booklet.pdf";
+                link.rel = "noopener";
+                link.click();
+              }, 50);
+            }
+            return;
+          }
+          if (![402, 404, 409, 429, 500, 502, 503, 504].includes(response.status)) break;
+        } catch {
+          lastStatus = 0;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, attempt < 2 ? 1_000 : 2_000));
+      }
+
+      if (!active) return;
+      setPaidDownloadState("error");
+      setCheckoutNote(
+        lastStatus === 403
+          ? "Payment may have completed, but this browser did not retain the purchase session. Please return to checkout and try again in the same browser."
+          : "Payment was received, but the PDF is not ready yet. Use Try download again below in a moment; you will not be charged again.",
+      );
+    }
+
+    void preparePaidDownload();
+    return () => {
+      active = false;
+    };
+  }, [checkoutSessionId, paidPdfUrl]);
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
@@ -492,6 +585,31 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {paidDownloadState !== "idle" ? (
+        <section className={`payment-result payment-result-${paidDownloadState}`} role="status" aria-live="polite">
+          <div className="payment-result-copy">
+            <p className="eyebrow">Printable keepsake</p>
+            <h2>
+              {paidDownloadState === "preparing"
+                ? "Your payment went through."
+                : paidDownloadState === "ready"
+                  ? "Your booklet is ready."
+                  : "Your payment is safe."
+              }
+            </h2>
+            <p>{checkoutNote}</p>
+          </div>
+          {checkoutSessionId && paidPdfUrl && paidDownloadState !== "preparing" ? (
+            <a className="unlock-button paid-download-link" href={paidPdfUrl} download="TripQuest-booklet.pdf">
+              <Download size={18} />
+              {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
+            </a>
+          ) : (
+            <LoaderCircle className="payment-result-loader spin" size={24} aria-label="Preparing PDF" />
+          )}
+        </section>
+      ) : null}
 
       <section className="workspace" id="builder">
         <aside className="builder-panel" aria-labelledby="builder-title">
@@ -901,17 +1019,29 @@ export default function Home() {
               <span>Printable A4 PDF</span>
               <strong>S$0.99</strong>
             </div>
-            <button
-              className="unlock-button"
-              type="button"
-              onClick={() => {
-                setCheckoutNote("");
-                setCheckoutOpen(true);
-              }}
-            >
-              <Download size={18} />
-              Unlock download
-            </button>
+            {paidDownloadState === "preparing" ? (
+              <span className="payment-inline-status" role="status">
+                <LoaderCircle className="spin" size={17} />
+                Preparing PDF…
+              </span>
+            ) : paidDownloadState !== "idle" && paidPdfUrl ? (
+              <a className="unlock-button paid-download-link" href={paidPdfUrl} download="TripQuest-booklet.pdf">
+                <Download size={18} />
+                {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
+              </a>
+            ) : (
+              <button
+                className="unlock-button"
+                type="button"
+                onClick={() => {
+                  setCheckoutNote("");
+                  setCheckoutOpen(true);
+                }}
+              >
+                <Download size={18} />
+                Unlock download
+              </button>
+            )}
           </div>
         </section>
       </section>

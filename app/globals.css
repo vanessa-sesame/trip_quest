@@ -889,6 +889,60 @@ p {
   padding: 0 18px;
 }
 
+.paid-download-link {
+  text-decoration: none;
+}
+
+.payment-inline-status {
+  display: inline-flex;
+  min-height: 45px;
+  align-items: center;
+  gap: 8px;
+  color: var(--teal-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.payment-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 18px auto 0;
+  border: 1.5px solid var(--ink);
+  border-left: 6px solid var(--leaf);
+  border-radius: 8px;
+  background: #edf3e5;
+  padding: 18px 20px;
+}
+
+.payment-result-error {
+  border-left-color: var(--coral);
+  background: var(--pale-coral);
+}
+
+.payment-result-copy {
+  min-width: 0;
+}
+
+.payment-result-copy h2 {
+  margin: 3px 0 5px;
+  font-size: 1.12rem;
+}
+
+.payment-result-copy > p:last-child {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.payment-result-loader {
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
 .trip-outline {
   display: grid;
   grid-template-columns: 245px minmax(0, 1fr);
@@ -2864,6 +2918,16 @@ p {
   .purchase-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .payment-result {
+    align-items: stretch;
+    flex-direction: column;
+    margin-top: 14px;
+  }
+
+  .payment-result .paid-download-link {
+    width: 100%;
   }
 
   .purchase-bar > div {

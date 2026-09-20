@@ -103,7 +103,7 @@ export async function createCheckoutSession(
     form.set("line_items[0][price_data][unit_amount]", String(paymentAmount(runtime)));
     form.set("line_items[0][price_data][product_data][name]", "TripQuest printable family booklet");
   }
-  form.set("success_url", `${publicUrl(runtime, request)}/api/pdf?session_id={CHECKOUT_SESSION_ID}`);
+  form.set("success_url", `${publicUrl(runtime, request)}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`);
   form.set("cancel_url", `${publicUrl(runtime, request)}/?checkout=cancelled`);
   form.set("client_reference_id", input.purchaseId);
   form.set("metadata[purchase_id]", input.purchaseId);

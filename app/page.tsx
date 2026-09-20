@@ -1560,24 +1560,8 @@ function GeneratedPage({
       <h3>{activity.title}</h3>
       <small className="game-kind">{activity.kind}</small>
       <p className="game-instructions">{activity.body}</p>
-      {activityIndex === 0 && (day.interestHook || day.siblingMission) ? (
-        <div className="day-briefing" aria-label="Daily family briefing">
-          {day.interestHook ? (
-            <p>
-              <strong>Interest lens</strong>
-              <span>{day.interestHook}</span>
-            </p>
-          ) : null}
-          {day.siblingMission ? (
-            <p className="family-briefing-line">
-              <strong>Family roles</strong>
-              <span>{day.siblingMission}</span>
-            </p>
-          ) : null}
-        </div>
-      ) : null}
       <ActivityGame activity={activity} age={age} context={`${day.theme} - day ${day.day} - game ${activityIndex + 1}`} />
-      <i>{activity.prompt}</i>
+      {activity.gameType === "coloring" ? null : <i>{activity.prompt}</i>}
     </article>
   );
 }

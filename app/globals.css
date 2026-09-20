@@ -1845,6 +1845,23 @@ p {
   color: var(--ink);
 }
 
+.destination-raster-art {
+  position: absolute;
+  top: 9px;
+  right: 5px;
+  width: 45%;
+  height: 49px;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: var(--paper);
+}
+
+.destination-raster-art img {
+  object-fit: contain;
+  padding: 2px;
+}
+
 .line-art .art-stroke {
   fill: none;
   stroke: currentColor;
@@ -2608,6 +2625,19 @@ p {
   right: 8%;
   width: 58%;
   height: 68%;
+}
+
+.generated-game-page .destination-raster-art {
+  top: 10%;
+  right: 5%;
+  width: 64%;
+  height: 76%;
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+.generated-game-page .destination-raster-art img {
+  padding: 4%;
 }
 
 .generated-game-page .difference-scene {

@@ -70,7 +70,7 @@ test("same landmark cycles picture compositions across repeated trip days", () =
   );
 });
 
-test("coloring pages use four activity items plus reusable and free bingo cells", () => {
+test("coloring pages use four activity items plus destination challenges and a free cell", () => {
   const page = coloringPageSpec(
     activity("Merlion Color Bingo", "MANE", "Find the lion mane."),
     "Merlion Park - day 1 - game 1",
@@ -79,7 +79,7 @@ test("coloring pages use four activity items plus reusable and free bingo cells"
   assert.equal(page.cells.length, 9);
   assert.equal(page.cells[4].kind, "free");
   assert.equal(page.cells.filter((cell) => cell.kind === "item").length, 4);
-  assert.equal(page.cells.filter((cell) => cell.kind === "reusable").length, 4);
+  assert.equal(page.cells.filter((cell) => cell.kind === "challenge").length, 4);
   assert.equal(page.traceWord, "MERLION");
   assert.equal(page.localClue, "Find the lion mane.");
 });

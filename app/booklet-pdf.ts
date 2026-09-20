@@ -6,6 +6,7 @@ import {
   pushGraphicsState,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
   type RGB,
 } from "pdf-lib";
@@ -94,6 +95,9 @@ export type FamilyPackContext = {
   events: ItineraryEvent[];
   mechanicsByDay: Array<{ day: number; mechanics: QuestMechanic[] }>;
 };
+
+export type ColoringImageResolver = (path: string) => Promise<Uint8Array | null>;
+type ColoringArtwork = Partial<Record<ColoringScene, PDFImage>>;
 
 function pdfText(value: string) {
   const normalized = value
@@ -1187,6 +1191,19 @@ function drawColoringScene(page: PDFPage, scene: Box, variant: ColoringScene, va
   drawColoringVariant(page, scene, variant, variation);
 }
 
+function drawEmbeddedColoringImage(page: PDFPage, image: PDFImage, box: Box) {
+  const dimensions = image.scale(1);
+  const scale = Math.min(box.width / dimensions.width, box.height / dimensions.height);
+  const width = dimensions.width * scale;
+  const height = dimensions.height * scale;
+  page.drawImage(image, {
+    x: box.x + (box.width - width) / 2,
+    y: box.y + (box.height - height) / 2,
+    width,
+    height,
+  });
+}
+
 function drawTraceBoard(
   page: PDFPage,
   fonts: Fonts,
@@ -1194,9 +1211,10 @@ function drawTraceBoard(
   box: Box,
   coloring: boolean,
   context: string,
+  artwork: ColoringArtwork,
 ) {
   if (coloring) {
-    drawColoringActivityBoard(page, fonts, activity, box, context);
+    drawColoringActivityBoard(page, fonts, activity, box, context, artwork);
     return;
   }
   const label = pdfText(activity.items[0]?.label || "LOCAL DETAIL").toUpperCase();
@@ -1234,7 +1252,9 @@ function drawTraceBoard(
     borderColor: colors.line,
     borderWidth: 1.2,
   });
-  drawColoringScene(page, scene, variant, variation);
+  const image = artwork[variant];
+  if (image) drawEmbeddedColoringImage(page, image, scene);
+  else drawColoringScene(page, scene, variant, variation);
 
   page.drawText(coloring ? "TRACE AND COLOR" : "FIELD SKETCH", {
     x: box.x,
@@ -1261,6 +1281,7 @@ function drawColoringActivityBoard(
   activity: Activity,
   box: Box,
   context: string,
+  artwork: ColoringArtwork,
 ) {
   const spec = coloringPageSpec(activity, context);
   const variation = coloringVariantFor(activity, context);
@@ -1307,15 +1328,25 @@ function drawColoringActivityBoard(
     font: fonts.bold,
     color: colors.ink,
   });
-  const artWidth = 320;
-  const artHeight = 200;
-  const artScale = Math.min(sceneBox.width / artWidth, (sceneBox.height - 22) / artHeight);
-  page.pushOperators(
-    pushGraphicsState(),
-    concatTransformationMatrix(artScale, 0, 0, artScale, sceneBox.x, sceneBox.y),
-  );
-  drawColoringScene(page, { x: 0, y: 0, width: artWidth, height: artHeight }, spec.scene, variation);
-  page.pushOperators(popGraphicsState());
+  const image = artwork[spec.scene];
+  if (image) {
+    drawEmbeddedColoringImage(page, image, {
+      x: sceneBox.x + 7,
+      y: sceneBox.y + 7,
+      width: sceneBox.width - 14,
+      height: sceneBox.height - 30,
+    });
+  } else {
+    const artWidth = 320;
+    const artHeight = 200;
+    const artScale = Math.min(sceneBox.width / artWidth, (sceneBox.height - 22) / artHeight);
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(artScale, 0, 0, artScale, sceneBox.x, sceneBox.y),
+    );
+    drawColoringScene(page, { x: 0, y: 0, width: artWidth, height: artHeight }, spec.scene, variation);
+    page.pushOperators(popGraphicsState());
+  }
 
   const gridX = box.x + sceneWidth + gap;
   const gridWidth = box.width - sceneWidth - gap;
@@ -1343,18 +1374,18 @@ function drawColoringActivityBoard(
     const cellX = gridX + column * (cellWidth + cellGap);
     const cellY = gridTop - (row + 1) * cellHeight - row * cellGap;
     const isFree = cell.kind === "free";
-    const isReusable = cell.kind === "reusable";
+    const isChallenge = cell.kind === "challenge";
     page.drawRectangle({
       x: cellX,
       y: cellY,
       width: cellWidth,
       height: cellHeight,
-      color: isFree ? colors.coral : isReusable ? colors.yellowSoft : colors.white,
+      color: isFree ? colors.coral : isChallenge ? colors.yellowSoft : colors.white,
       borderColor: isFree ? colors.coral : colors.line,
       borderWidth: 0.8,
     });
-    const cellColor = isFree ? colors.white : isReusable ? colors.coral : colors.blue;
-    page.drawText(isFree ? "FREE" : isReusable ? "REUSE" : "SPOT", {
+    const cellColor = isFree ? colors.white : isChallenge ? colors.coral : colors.blue;
+    page.drawText(isFree ? "FREE" : isChallenge ? "TRY" : "SPOT", {
       x: cellX + 5,
       y: cellY + cellHeight - 9,
       size: 4.5,
@@ -1415,15 +1446,18 @@ function drawColoringActivityBoard(
   const noteWidth = (box.width - noteGap) / 2;
   page.drawRectangle({ x: box.x, y: notesY, width: noteWidth, height: notesHeight, color: colors.yellowSoft });
   page.drawRectangle({ x: box.x + noteWidth + noteGap, y: notesY, width: noteWidth, height: notesHeight, color: colors.coralSoft });
-  page.drawText("LOCAL CLUE", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
-  drawWrappedText(page, pdfText(spec.localClue), fonts, {
-    x: box.x + 10,
-    y: notesY + notesHeight - 29,
-    size: 7,
-    maxWidth: noteWidth - 20,
-    maxLines: 3,
-    lineHeight: 9,
-    color: colors.ink,
+  page.drawText("DID YOU KNOW?", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
+  spec.facts.slice(0, 3).forEach((fact, index) => {
+    const factY = notesY + notesHeight - 28 - index * 13;
+    page.drawCircle({ x: box.x + 12, y: factY + 2, size: 2, color: colors.coral });
+    drawWrappedText(page, pdfText(fact), fonts, {
+      x: box.x + 18,
+      y: factY + 4,
+      size: 5.2,
+      maxWidth: noteWidth - 28,
+      maxLines: 1,
+      color: colors.ink,
+    });
   });
   const fieldX = box.x + noteWidth + noteGap;
   page.drawText("MY FIELD NOTE", { x: fieldX + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.coral });
@@ -1836,7 +1870,15 @@ function drawStory(page: PDFPage, fonts: Fonts, items: GameItem[], box: Box) {
   }
 }
 
-function drawGame(page: PDFPage, fonts: Fonts, activity: Activity, age: number, frame: Box, context: string) {
+function drawGame(
+  page: PDFPage,
+  fonts: Fonts,
+  activity: Activity,
+  age: number,
+  frame: Box,
+  context: string,
+  artwork: ColoringArtwork,
+) {
   const labels: Record<string, string> = {
     coloring: "Coloring and tracing",
     drawing: "Drawing studio",
@@ -1855,10 +1897,10 @@ function drawGame(page: PDFPage, fonts: Fonts, activity: Activity, age: number, 
   const box = drawGameFrame(page, fonts, labels[activity.gameType] || "Travel game", frame);
   switch (activity.gameType) {
     case "coloring":
-      drawTraceBoard(page, fonts, activity, box, true, context);
+      drawTraceBoard(page, fonts, activity, box, true, context, artwork);
       break;
     case "drawing":
-      drawTraceBoard(page, fonts, activity, box, false, context);
+      drawTraceBoard(page, fonts, activity, box, false, context, artwork);
       break;
     case "word_search":
       drawWordSearch(page, fonts, activity, age, box);
@@ -1904,6 +1946,7 @@ function drawActivityPage(
   activityIndex: number,
   pageNumber: number,
   totalPages: number,
+  artwork: ColoringArtwork,
 ) {
   const day = booklet.dayPlans[dayIndex];
   const accent = activityIndex === 0 ? colors.coral : colors.blue;
@@ -1958,7 +2001,15 @@ function drawActivityPage(
   const gameFrame = activity.gameType === "coloring"
     ? { x: MARGIN, y: 120, width: PAGE_WIDTH - MARGIN * 2, height: 440 }
     : { x: MARGIN, y: 154, width: PAGE_WIDTH - MARGIN * 2, height: 388 };
-  drawGame(page, fonts, activity, booklet.age, gameFrame, `${day.theme} - day ${day.day} - game ${activityIndex + 1}`);
+  drawGame(
+    page,
+    fonts,
+    activity,
+    booklet.age,
+    gameFrame,
+    `${day.theme} - day ${day.day} - game ${activityIndex + 1}`,
+    artwork,
+  );
 
   if (activity.gameType !== "coloring") {
     page.drawRectangle({
@@ -2353,7 +2404,11 @@ export function familyPackPdfFilename(booklet: Pick<GeneratedBookletData, "desti
   return bookletPdfFilename(booklet).replace(/\.pdf$/i, "-family-pack.pdf");
 }
 
-export async function createBookletPdf(inputBooklet: GeneratedBookletData, familyPack?: FamilyPackContext) {
+export async function createBookletPdf(
+  inputBooklet: GeneratedBookletData,
+  familyPack?: FamilyPackContext,
+  resolveColoringImage?: ColoringImageResolver,
+) {
   const booklet: GeneratedBookletData = {
     ...inputBooklet,
     ...validateBookletDraft(inputBooklet, inputBooklet.days, inputBooklet.age),
@@ -2365,6 +2420,26 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData, famil
     mono: await document.embedFont(StandardFonts.Courier),
     monoBold: await document.embedFont(StandardFonts.CourierBold),
   };
+  const coloringArtwork: ColoringArtwork = {};
+  if (resolveColoringImage) {
+    const scenes = new Set<ColoringScene>();
+    booklet.dayPlans.forEach((day) => {
+      day.activities.forEach((activity, activityIndex) => {
+        if (activity.gameType !== "coloring" && activity.gameType !== "drawing") return;
+        scenes.add(coloringSceneFor(activity, `${day.theme} - day ${day.day} - game ${activityIndex + 1}`));
+      });
+    });
+    for (const scene of scenes) {
+      const path = coloringIllustrationSpecs[scene].imagePath;
+      if (!path) continue;
+      try {
+        const bytes = await resolveColoringImage(path);
+        if (bytes) coloringArtwork[scene] = await document.embedPng(bytes);
+      } catch (error) {
+        console.error(`[TripQuest illustration] ${scene}`, error);
+      }
+    }
+  }
   const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));
   document.setTitle(`${pdfText(booklet.destination)} Explorer - Age ${booklet.age}`);
   document.setAuthor("TripQuest");
@@ -2389,6 +2464,7 @@ export async function createBookletPdf(inputBooklet: GeneratedBookletData, famil
         activityIndex,
         pageNumber,
         totalPages,
+        coloringArtwork,
       );
       pageNumber += 1;
     });

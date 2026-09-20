@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import Image from "next/image";
 import type { Activity, GameItem, GameType } from "./booklet";
 import {
   coloringIllustrationSpecs,
@@ -50,15 +51,17 @@ const coloringPageCss = `
 .coloring-scene-panel{display:grid;min-width:0;min-height:0;grid-template-rows:auto minmax(0,1fr);gap:3px;border:1px solid var(--line);border-radius:6px;background:var(--paper);padding:6px}
 .coloring-scene-panel>b,.coloring-mini-heading>b{font-size:.45rem;line-height:1.15}
 .coloring-hero-art{position:static;width:100%;height:100%;min-height:0;border:0;border-radius:3px;background:var(--paper)}
+.coloring-raster-art{position:relative;width:100%;height:100%;min-height:0;overflow:hidden;border-radius:3px;background:var(--paper)}
+.coloring-raster-art img{object-fit:contain;padding:2px}
 .coloring-mini-panel{display:grid;min-width:0;min-height:0;grid-template-rows:auto minmax(0,1fr);gap:4px}
 .coloring-mini-heading{display:flex;align-items:baseline;justify-content:space-between;gap:4px}
 .coloring-mini-heading span{color:var(--teal-dark);white-space:nowrap}
 .coloring-mini-grid{display:grid;min-height:0;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));gap:4px}
 .coloring-mini-cell{display:grid;min-width:0;min-height:0;grid-template-rows:auto auto minmax(0,1fr);gap:2px;overflow:hidden;border:1px solid var(--line);border-radius:5px;background:var(--white);padding:4px}
-.coloring-mini-cell.cell-reusable{background:var(--pale-yellow)}
+.coloring-mini-cell.cell-challenge{background:var(--pale-yellow)}
 .coloring-mini-cell.cell-free{place-items:center;background:var(--coral);border-color:var(--coral);color:var(--white);text-align:center}
 .coloring-cell-badge{color:var(--teal-dark);font-size:.28rem}
-.cell-reusable .coloring-cell-badge{color:var(--coral)}
+.cell-challenge .coloring-cell-badge{color:var(--coral)}
 .cell-free .coloring-cell-badge{color:var(--white)}
 .coloring-mini-cell strong{overflow-wrap:anywhere;font-size:.38rem;line-height:1.1}
 .coloring-mini-cell small{display:-webkit-box;overflow:hidden;color:var(--muted);font-size:.31rem;line-height:1.15;-webkit-box-orient:vertical;-webkit-line-clamp:2}
@@ -71,7 +74,9 @@ const coloringPageCss = `
 .coloring-local-note,.coloring-field-note{min-width:0;min-height:30px;border-radius:5px;padding:6px 8px}
 .coloring-local-note{background:var(--pale-yellow)}
 .coloring-field-note{display:grid;gap:3px;background:var(--pale-coral)}
-.coloring-note-grid p,.coloring-note-grid small{margin:2px 0 0;color:var(--ink);font-size:.36rem;line-height:1.2}
+.coloring-note-grid p,.coloring-note-grid small,.coloring-note-grid li{color:var(--ink);font-size:.36rem;line-height:1.2}
+.coloring-local-note ul{display:grid;gap:2px;margin:3px 0 0;padding-left:12px}
+.coloring-local-note li{margin:0}
 .coloring-field-note i{display:block;border-bottom:1px dashed var(--line)}
 .generated-game-page .coloring-page-board{flex:1;gap:3%;padding-top:4%}
 .generated-game-page .coloring-page-main{gap:4%}
@@ -82,7 +87,7 @@ const coloringPageCss = `
 .generated-game-page .coloring-mini-cell small{font-size:.37rem}
 .generated-game-page .coloring-trace-strip strong{font-size:1.15rem}
 .generated-game-page .coloring-trace-strip small{font-size:.39rem}
-.generated-game-page .coloring-note-grid p,.generated-game-page .coloring-note-grid small{font-size:.43rem}
+.generated-game-page .coloring-note-grid p,.generated-game-page .coloring-note-grid small,.generated-game-page .coloring-note-grid li{font-size:.43rem}
 `;
 
 function VariantLineDetails({
@@ -565,14 +570,26 @@ function ColoringPageBoard({ activity, context }: { activity: Activity; context?
       <div className="coloring-page-main">
         <div className="coloring-scene-panel">
           <b>Color the {spec.illustration.label}</b>
-          <DestinationLineArt scene={spec.scene} variant={variant} className="line-art coloring-hero-art" />
+          {spec.illustration.imagePath ? (
+            <div className="coloring-raster-art">
+              <Image
+                alt={`${spec.illustration.label} coloring illustration`}
+                fill
+                sizes="(max-width: 700px) 42vw, 280px"
+                src={spec.illustration.imagePath}
+                unoptimized
+              />
+            </div>
+          ) : (
+            <DestinationLineArt scene={spec.scene} variant={variant} className="line-art coloring-hero-art" />
+          )}
         </div>
         <div className="coloring-mini-panel">
           <div className="coloring-mini-heading"><b>Can you spot...</b><span>B · I · N · G · O</span></div>
           <div className="coloring-mini-grid">
             {spec.cells.map((cell, index) => (
               <div className={`coloring-mini-cell cell-${cell.kind}`} key={`${cell.kind}-${cell.label}-${index}`}>
-                <span className="coloring-cell-badge">{cell.kind === "item" ? "SPOT" : cell.kind === "free" ? "FREE" : "REUSE"}</span>
+                <span className="coloring-cell-badge">{cell.kind === "item" ? "SPOT" : cell.kind === "free" ? "FREE" : "TRY"}</span>
                 <strong>{cell.label}</strong>
                 <small>{cell.clue}</small>
               </div>
@@ -586,7 +603,10 @@ function ColoringPageBoard({ activity, context }: { activity: Activity; context?
         <small>{spec.illustration.subject}</small>
       </div>
       <div className="coloring-note-grid">
-        <div className="coloring-local-note"><b>LOCAL CLUE</b><p>{spec.localClue}</p></div>
+        <div className="coloring-local-note">
+          <b>DID YOU KNOW?</b>
+          <ul>{spec.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+        </div>
         <div className="coloring-field-note"><b>MY FIELD NOTE</b><small>{spec.fieldNote}</small><i /><i /></div>
       </div>
     </div>
@@ -601,7 +621,19 @@ function DrawingBoard({ activity, coloring, context }: { activity: Activity; col
   const illustration = coloringIllustrationSpecs[scene];
   return (
     <div className="draw-board">
-      <DestinationLineArt scene={scene} variant={variant} />
+      {illustration.imagePath ? (
+        <div className="destination-raster-art">
+          <Image
+            alt={`${illustration.label} drawing reference`}
+            fill
+            sizes="(max-width: 700px) 55vw, 320px"
+            src={illustration.imagePath}
+            unoptimized
+          />
+        </div>
+      ) : (
+        <DestinationLineArt scene={scene} variant={variant} />
+      )}
       <strong>{items[0].label}</strong>
       <small>{items[0].clue || illustration.subject}</small>
     </div>

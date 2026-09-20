@@ -37,6 +37,7 @@ import {
 export const dynamic = "force-dynamic";
 
 type RuntimeEnvironment = PaymentRuntime & {
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   BOOKLET_FILES?: BookletObjectStorage;
   DB?: BookletDatabase;
   KIMI_COMPOSER_MODEL?: string;
@@ -95,6 +96,7 @@ function hasPersonalFamilyNames(input: NormalizedPdfRequest) {
 }
 
 async function preparePdf(
+  request: Request,
   runtime: RuntimeEnvironment,
   input: NormalizedPdfRequest,
   purchase: PurchaseRecord | null,
@@ -170,7 +172,12 @@ async function preparePdf(
       events: input.events,
       mechanicsByDay: mechanicPlanForTrip(input.family, input.days),
     };
-    job = createBookletPdf(personalizedBooklet, familyPack);
+    job = createBookletPdf(personalizedBooklet, familyPack, async (path) => {
+      if (!runtime.ASSETS) return null;
+      const response = await runtime.ASSETS.fetch(new Request(new URL(path, request.url)));
+      if (!response.ok) return null;
+      return new Uint8Array(await response.arrayBuffer());
+    });
     pdfJobs.set(jobKey, job);
     void job.finally(() => pdfJobs.delete(jobKey)).catch(() => undefined);
   }
@@ -234,7 +241,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    return preparePdf(runtime, input, purchase, requestedFingerprint);
+    return preparePdf(request, runtime, input, purchase, requestedFingerprint);
   } catch (error) {
     return errorResponse(error);
   }
@@ -253,7 +260,7 @@ export async function GET(request: Request) {
     if (!purchase) return Response.json({ error: "Payment has not completed or this purchase is not valid." }, { status: 402 });
     const requestValue = JSON.parse(purchase.requestJson) as Record<string, unknown>;
     const input = normalizePdfRequest(requestValue, runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3", runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6");
-    return preparePdf(runtime, input, purchase);
+    return preparePdf(request, runtime, input, purchase);
   } catch (error) {
     return errorResponse(error);
   }

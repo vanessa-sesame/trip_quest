@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "scene": "merlion",
+      "file": "merlion-coloring-v1.png",
+      "source": "OpenAI image generation",
+      "style": "printable editorial line art",
+      "usage": "TripQuest preview and printable PDF"
+    },
+    {
+      "scene": "supertree",
+      "file": "supertree-coloring-v1.png",
+      "source": "OpenAI image generation",
+      "style": "printable editorial line art",
+      "usage": "TripQuest preview and printable PDF"
+    }
+  ]
+}

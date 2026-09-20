@@ -11,7 +11,7 @@ import {
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-19-7";
-export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-20-3";
+export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-20-4";
 
 type D1Value = string | number | null;
 

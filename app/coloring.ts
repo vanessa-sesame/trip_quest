@@ -31,10 +31,11 @@ export type ColoringIllustrationSpec = {
   label: string;
   subject: string;
   detailHints: readonly string[];
+  imagePath?: string;
 };
 
 export type ColoringMiniCell = {
-  kind: "item" | "reusable" | "free";
+  kind: "item" | "challenge" | "free";
   label: string;
   clue: string;
 };
@@ -45,6 +46,7 @@ export type ColoringPageSpec = {
   traceWord: string;
   howToPlay: string;
   localClue: string;
+  facts: string[];
   fieldNote: string;
   cells: ColoringMiniCell[];
 };
@@ -54,6 +56,7 @@ export const coloringIllustrationSpecs: Record<ColoringScene, ColoringIllustrati
     label: "Merlion fountain",
     subject: "the lion head, fish body, and water jet",
     detailHints: ["lion mane", "fish scales", "water spray"],
+    imagePath: "/illustrations/merlion-coloring-v1.png",
   },
   guardian: {
     label: "temple guardian statue",
@@ -66,7 +69,12 @@ export const coloringIllustrationSpecs: Record<ColoringScene, ColoringIllustrati
     detailHints: ["four-point flower", "repeating border", "mirror symmetry"],
   },
   skyline: { label: "city landmark skyline", subject: "a city skyline", detailHints: ["landmark roofline", "windows", "street level"] },
-  supertree: { label: "Supertree Grove", subject: "a vertical garden tree", detailHints: ["branching canopy", "skyway", "hanging plants"] },
+  supertree: {
+    label: "Supertree Grove",
+    subject: "a vertical garden tree",
+    detailHints: ["branching canopy", "skyway", "hanging plants"],
+    imagePath: "/illustrations/supertree-coloring-v1.png",
+  },
   garden: { label: "local garden", subject: "a destination garden", detailHints: ["leaf shapes", "flowers", "garden path"] },
   bridge: { label: "landmark bridge", subject: "a landmark bridge", detailHints: ["arches or cables", "water", "crossing deck"] },
   train: { label: "local train journey", subject: "a local train", detailHints: ["windows", "rails", "station sign"] },
@@ -189,11 +197,11 @@ export function coloringPageSpec(activity: ColoringActivity, context = ""): Colo
       clue: "Find this detail in the picture or at the real place.",
     });
   }
-  const reusableCells: ColoringMiniCell[] = [
-    { kind: "reusable", label: "MY CHOICE", clue: "Choose any detail you spot." },
-    { kind: "reusable", label: "DRAW IT", clue: "Sketch one detail you want to remember." },
-    { kind: "reusable", label: "SAY WHY", clue: "Tell a grown-up what stands out." },
-    { kind: "reusable", label: "REPEAT", clue: "Use this square again for a favorite detail." },
+  const challengeCells: ColoringMiniCell[] = [
+    { kind: "challenge", label: "COLOR CLUE", clue: `Choose a color for the ${illustration.detailHints[0]}.` },
+    { kind: "challenge", label: "SHAPE CLUE", clue: `Trace the outline of the ${illustration.detailHints[1]}.` },
+    { kind: "challenge", label: "TINY DETAIL", clue: `Find the smallest ${illustration.detailHints[2]}.` },
+    { kind: "challenge", label: "FAMILY FIND", clue: "Ask someone which local detail they noticed first." },
   ];
   return {
     scene,
@@ -203,11 +211,12 @@ export function coloringPageSpec(activity: ColoringActivity, context = ""): Colo
       .toUpperCase(),
     howToPlay: "Spot it, color its square, and get 3 in a row.",
     localClue: itemCells[0].clue || activity.body || activity.prompt || illustration.subject,
+    facts: itemCells.slice(0, 3).map((item) => item.clue),
     fieldNote: activity.prompt || "The first thing I noticed was...",
     cells: [
-      itemCells[0], reusableCells[0], itemCells[1],
-      reusableCells[1], { kind: "free", label: "FREE", clue: "Use any detail you choose." }, itemCells[2],
-      reusableCells[2], itemCells[3], reusableCells[3],
+      itemCells[0], challengeCells[0], itemCells[1],
+      challengeCells[1], { kind: "free", label: "FREE", clue: "Use any local detail you choose." }, itemCells[2],
+      challengeCells[2], itemCells[3], challengeCells[3],
     ],
   };
 }

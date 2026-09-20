@@ -28,6 +28,7 @@ type StripeSession = {
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
+const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-1";
 const encoder = new TextEncoder();
 
 function secret(runtime: PaymentRuntime) {
@@ -212,11 +213,11 @@ export async function verifyStripeSignature(payload: string, signature: string, 
 }
 
 export function purchasePdfKey(purchaseId: string) {
-  return `purchases/${purchaseId}/booklet.pdf`;
+  return `purchases/${PURCHASE_PDF_CACHE_VERSION}/${purchaseId}/booklet.pdf`;
 }
 
 export async function readPurchasePdf(artifacts: BookletObjectStorage, key: string) {
-  if (!key.startsWith("purchases/") || !key.endsWith("/booklet.pdf")) return null;
+  if (!key.startsWith(`purchases/${PURCHASE_PDF_CACHE_VERSION}/`) || !key.endsWith("/booklet.pdf")) return null;
   const object = await artifacts.get(key);
   if (!object?.arrayBuffer) return null;
   return object.arrayBuffer();

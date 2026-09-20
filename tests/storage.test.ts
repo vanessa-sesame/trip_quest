@@ -220,6 +220,12 @@ test("D1 metadata and the private R2 artifact restore a generated booklet", asyn
   assert.ok(objects.has(bookletPdfKey(cacheKey)));
   const restoredPdf = await readStoredBookletPdf(database, storage, cacheKey);
   assert.equal(new TextDecoder().decode(restoredPdf?.bytes), "%PDF-test");
+
+  await database
+    .prepare("UPDATE booklet_cache SET pdf_key = ? WHERE cache_key = ?")
+    .bind(`booklets/old-pdf-version/${cacheKey}/booklet.pdf`, cacheKey)
+    .run();
+  assert.equal(await readStoredBookletPdf(database, storage, cacheKey), null);
 });
 
 test("destination research and generation locks persist in D1", async () => {

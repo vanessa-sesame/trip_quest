@@ -108,6 +108,9 @@ Stripe credentials before charging customers:
   `siblingMission` for each day. Both appear in the web preview and on the
   first printable activity page of each day.
 - The application, not the model, renders puzzles and PDF layouts.
+- Coloring and drawing activities use curated landmark PNGs when available.
+  Other exact landmarks are generated once with the OpenAI image API, stored
+  in R2, and referenced by both preview and PDF so the artwork cannot drift.
 - Booklets over six days are composed in four-day batches.
 - Exact age rules, interest assignments, allowed game types, title uniqueness,
   crossword connectivity, and game variety are validated.
@@ -117,6 +120,8 @@ Relevant environment variable names are documented in `.env.example`:
 - `MOONSHOT_API_KEY`
 - `KIMI_RESEARCH_MODEL`
 - `KIMI_COMPOSER_MODEL`
+- `OPENAI_API_KEY`
+- `OPENAI_IMAGE_MODEL`
 - `TRIPQUEST_OWNER_EMAIL`
 
 Never add real values to this document or commit `.env.local`.
@@ -131,8 +136,8 @@ D1 tables:
 - `generation_rate_limits`
 - `family_workspaces`
 
-R2 stores generated booklet JSON and PDF files. D1 stores metadata and R2 object
-keys.
+R2 stores generated booklet JSON, PDF files, and immutable landmark artwork.
+D1 stores metadata and R2 object keys.
 
 - Destination research is retained for 30 days.
 - Generated booklets are retained for 180 days.
@@ -221,6 +226,8 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 - `app/booklet-ai.ts`: generated-data schema, age-safe game plans, and content
   validation.
 - `app/booklet-pdf.ts`: A4 family-pack PDF generation.
+- `app/illustration-ai.ts`: exact-landmark image generation and R2 reuse.
+- `app/api/illustration/route.ts`: immutable generated artwork delivery.
 - `app/puzzles.ts`: deterministic crossword, word-search, maze, and route logic.
 - `app/booklet-storage.ts`: D1/R2 cache keys and persistence.
 - `db/schema.ts`: D1 schema.

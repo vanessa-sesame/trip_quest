@@ -2964,6 +2964,487 @@ p {
   background: var(--pale-yellow);
 }
 
+/* Editorial board treatment for non-coloring games. The activity data remains
+   unchanged; this gives every puzzle the same brief, context, and reflection
+   rhythm as the illustrated coloring page. */
+.game-editorial-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, .72fr);
+  gap: 4px 8px;
+  margin: 8px 0 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 5px 0;
+}
+
+.game-editorial-meta {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--coral);
+  font-size: .34rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.game-editorial-meta b {
+  color: var(--teal-dark);
+}
+
+.game-editorial-header > p {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: .39rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.game-editorial-note {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  border-radius: 4px;
+  background: var(--pale-coral);
+  padding: 4px 6px;
+}
+
+.game-editorial-note b {
+  color: var(--coral);
+  font-size: .3rem;
+  letter-spacing: .03em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.game-editorial-note span {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: .34rem;
+  line-height: 1.15;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.game-board-content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  padding: 4px;
+}
+
+.generated-game-page .game-editorial-header {
+  grid-template-columns: minmax(0, 1fr) minmax(125px, .72fr);
+  gap: 5px 10px;
+  margin: 2% 0 1.5%;
+  padding: 2.5% 0;
+}
+
+.generated-game-page .game-editorial-meta {
+  font-size: .4rem;
+}
+
+.generated-game-page .game-editorial-header > p {
+  font-size: .48rem;
+  line-height: 1.28;
+}
+
+.generated-game-page .game-editorial-note {
+  padding: 5px 7px;
+}
+
+.generated-game-page .game-editorial-note b {
+  font-size: .34rem;
+}
+
+.generated-game-page .game-editorial-note span {
+  font-size: .4rem;
+  line-height: 1.18;
+}
+
+.generated-game-page .game-board-content {
+  padding: 3% 4% 2.5%;
+}
+
+.generated-game-page .word-search-layout,
+.generated-game-page .crossword-layout,
+.generated-game-page .maze-layout,
+.generated-game-page .matching-board,
+.generated-game-page .bingo-board,
+.generated-game-page .difference-layout,
+.generated-game-page .code-board,
+.generated-game-page .map-board,
+.generated-game-page .checklist-board,
+.generated-game-page .quiz-board,
+.generated-game-page .story-board {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--white);
+}
+
+.generated-game-page .word-search-layout,
+.generated-game-page .crossword-layout,
+.generated-game-page .maze-layout {
+  padding: 5% 6%;
+}
+
+.generated-game-page .word-grid {
+  border: 2px solid var(--teal-dark);
+  background: var(--pale-blue);
+  box-shadow: 4px 4px 0 var(--pale-yellow);
+}
+
+.generated-game-page .word-grid span {
+  border: 1px solid rgba(31, 73, 69, .12);
+  background: var(--white);
+  color: var(--teal-dark);
+}
+
+.generated-game-page .word-bank {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.generated-game-page .word-bank span {
+  border-bottom: 1px dotted var(--line);
+  background: var(--pale-yellow);
+  padding: 5px 6px 5px 18px;
+}
+
+.generated-game-page .word-bank span::before {
+  left: 6px;
+  border-color: var(--coral);
+}
+
+.generated-game-page .crossword-layout {
+  justify-content: start;
+}
+
+.generated-game-page .crossword-grid {
+  border: 2px solid var(--teal-dark);
+  background: var(--pale-blue);
+  box-shadow: 4px 4px 0 var(--pale-yellow);
+}
+
+.generated-game-page .crossword-grid .open {
+  border-color: var(--line);
+  background: var(--white);
+}
+
+.generated-game-page .crossword-clues {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 4%;
+}
+
+.generated-game-page .crossword-clues li {
+  min-height: 2.2em;
+  border-bottom: 1px dotted var(--line);
+  padding-bottom: 3px;
+}
+
+.generated-game-page .crossword-clues li b {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pale-yellow);
+}
+
+.generated-game-page .maze-layout {
+  justify-content: center;
+  background: var(--pale-blue);
+}
+
+.generated-game-page .maze-grid {
+  border: 2px solid var(--teal-dark);
+  background: var(--white);
+  box-shadow: 4px 4px 0 var(--pale-yellow);
+}
+
+.generated-game-page .maze-layout > small {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 4%;
+  color: var(--teal-dark);
+  text-align: center;
+}
+
+.generated-game-page .matching-board {
+  align-content: stretch;
+  background: var(--white);
+  padding: 4% 5%;
+}
+
+.generated-game-page .matching-row {
+  align-items: center;
+  border-bottom: 1px dotted var(--line);
+  padding: 4% 0;
+}
+
+.generated-game-page .matching-row:nth-child(even) {
+  background: var(--pale-blue);
+}
+
+.generated-game-page .matching-row span {
+  padding: 0 5px;
+}
+
+.generated-game-page .matching-row .matching-term b,
+.generated-game-page .matching-row .matching-clue b {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--pale-yellow);
+}
+
+.generated-game-page .bingo-board {
+  height: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5%;
+}
+
+.generated-game-page .bingo-board span {
+  min-height: 58px;
+  border: 1px solid var(--teal-dark);
+  border-radius: 4px;
+  background: var(--pale-yellow);
+  padding: 9px 7px;
+}
+
+.generated-game-page .bingo-board span:nth-child(2n) {
+  background: var(--pale-blue);
+}
+
+.generated-game-page .difference-layout {
+  height: auto;
+  grid-template-rows: 1fr auto;
+  gap: 5%;
+  padding: 5%;
+}
+
+.generated-game-page .difference-scene {
+  height: 100%;
+  min-height: 130px;
+  border: 1px solid var(--teal-dark);
+  background: var(--pale-blue);
+}
+
+.generated-game-page .difference-scene::before {
+  position: absolute;
+  right: 9%;
+  top: 10%;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--sun);
+  border-radius: 50%;
+  background: var(--pale-yellow);
+  content: "";
+}
+
+.generated-game-page .difference-scene::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 24%;
+  border-top: 1px solid var(--teal);
+  background: #edf3e5;
+  content: "";
+}
+
+.generated-game-page .difference-scene span {
+  z-index: 1;
+  border: 1px solid var(--teal-dark);
+  border-bottom: 0;
+}
+
+.generated-game-page .difference-scene i {
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  border-color: var(--coral);
+  background: var(--white);
+}
+
+.generated-game-page .difference-layout > small {
+  position: static;
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--line);
+  padding-top: 4%;
+  font-size: .44rem;
+  text-align: left;
+}
+
+.generated-game-page .code-board {
+  justify-content: center;
+  background: var(--pale-blue);
+  padding: 8%;
+}
+
+.generated-game-page .code-board > div span {
+  border: 1px solid var(--teal-dark);
+  border-radius: 4px;
+  background: var(--white);
+  color: var(--coral);
+}
+
+.generated-game-page .code-board small,
+.generated-game-page .code-board i {
+  overflow: visible;
+  white-space: normal;
+}
+
+.generated-game-page .code-board small {
+  border-top: 1px solid var(--line);
+  padding-top: 4%;
+  color: var(--teal-dark);
+}
+
+.generated-game-page .code-board i {
+  border-radius: 4px;
+  background: var(--pale-yellow);
+  padding: 4%;
+  font-style: normal;
+}
+
+.generated-game-page .map-board {
+  background: var(--pale-blue);
+  padding: 5%;
+}
+
+.generated-game-page .route-map {
+  border: 1px solid var(--teal-dark);
+  border-radius: 4px;
+  background: var(--white);
+  padding: 3%;
+}
+
+.generated-game-page .route-map-legend > div {
+  border-bottom: 1px dotted var(--line);
+  padding: 4px 0;
+}
+
+.generated-game-page .checklist-board {
+  background: var(--white);
+  padding: 4% 5%;
+}
+
+.generated-game-page .checklist-row {
+  grid-template-columns: 18px minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: center;
+  background: var(--pale-yellow);
+  padding: 5% 4%;
+}
+
+.generated-game-page .checklist-row:nth-child(even) {
+  background: var(--pale-blue);
+}
+
+.generated-game-page .checklist-row i {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--teal-dark);
+  background: var(--white);
+}
+
+.generated-game-page .quiz-board {
+  align-content: start;
+  gap: 7%;
+  background: var(--pale-yellow);
+  padding: 8%;
+}
+
+.generated-game-page .quiz-board > strong {
+  border-left: 3px solid var(--coral);
+  background: var(--white);
+  padding: 5% 6%;
+  white-space: normal;
+}
+
+.generated-game-page .quiz-board > div {
+  gap: 6px;
+}
+
+.generated-game-page .quiz-board span {
+  border: 1px solid var(--teal-dark);
+  border-radius: 4px;
+  background: var(--white);
+  padding: 7% 6%;
+}
+
+.generated-game-page .story-board {
+  justify-content: center;
+  gap: 10%;
+  background: var(--pale-blue);
+  padding: 8%;
+}
+
+.generated-game-page .story-board strong {
+  border-left: 3px solid var(--coral);
+  background: var(--white);
+  padding: 5% 6%;
+  white-space: normal;
+}
+
+.generated-game-page .story-board span {
+  border-bottom: 1px dashed var(--teal-dark);
+}
+
+@container (max-width: 310px) {
+  .generated-game-page .game-editorial-header {
+    grid-template-columns: minmax(0, 1fr) minmax(88px, .72fr);
+    gap: 3px 5px;
+    padding: 2% 0;
+  }
+
+  .generated-game-page .game-editorial-meta {
+    font-size: .3rem;
+  }
+
+  .generated-game-page .game-editorial-header > p {
+    font-size: .38rem;
+  }
+
+  .generated-game-page .game-editorial-note {
+    padding: 3px 4px;
+  }
+
+  .generated-game-page .game-editorial-note b {
+    font-size: .27rem;
+  }
+
+  .generated-game-page .game-editorial-note span {
+    font-size: .31rem;
+  }
+
+  .generated-game-page .game-board-content {
+    padding: 2% 3% 1.5%;
+  }
+
+  .generated-game-page .difference-scene {
+    min-height: 92px;
+  }
+
+  .generated-game-page .bingo-board span {
+    min-height: 42px;
+  }
+}
+
 .generated-certificate > strong {
   display: block;
   border-bottom: 1px solid var(--line);

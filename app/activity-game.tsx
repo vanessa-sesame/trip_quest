@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { Activity, GameItem, GameType } from "./booklet";
 import {
   coloringIllustrationSpecs,
+  curatedColoringImagePath,
   coloringPageSpec,
   coloringSceneFor,
   coloringSceneLabels,
@@ -619,15 +620,16 @@ function DrawingBoard({ activity, coloring, context }: { activity: Activity; col
   const scene = coloringSceneFor(activity, context);
   const variant = coloringVariantFor(activity, context);
   const illustration = coloringIllustrationSpecs[scene];
+  const imagePath = activity.illustrationPath || curatedColoringImagePath(activity, context);
   return (
     <div className="draw-board">
-      {illustration.imagePath ? (
+      {imagePath ? (
         <div className="destination-raster-art">
           <Image
             alt={`${illustration.label} drawing reference`}
             fill
             sizes="(max-width: 700px) 55vw, 320px"
-            src={illustration.imagePath}
+            src={imagePath}
             unoptimized
           />
         </div>
@@ -869,6 +871,37 @@ function StoryBoard({ items }: { items: GameItem[] }) {
   );
 }
 
+function GameEditorialHeader({ activity }: { activity: Activity }) {
+  const playCue: Partial<Record<GameType, string>> = {
+    word_search: "Circle every local word in the grid.",
+    crossword: "Solve each clue where the answers cross.",
+    maze: "Trace one continuous route without crossing a wall.",
+    matching: "Connect each local detail to its correct clue.",
+    bingo: "Mark a square only when you spot it for real.",
+    spot_the_difference: "Compare both pictures and prove each change.",
+    codebreaker: "Use the key to decode the hidden local word.",
+    map_puzzle: "Visit every stop while keeping the route short.",
+    scavenger_hunt: "Tick each detail when you find it at the place.",
+    quiz: "Choose an answer and point to your evidence.",
+    drawing: "Study the reference, then add one observed detail.",
+    story: "Use the local clues to build a tiny travel story.",
+  };
+  const details = (activity.items || []).slice(0, 3).map((item) => item.label).join(" · ");
+  return (
+    <div className="game-editorial-header">
+      <div className="game-editorial-meta">
+        <span>{activity.kind || "FIELD GAME"}</span>
+        <b>HOW TO PLAY</b>
+      </div>
+      <p>{playCue[activity.gameType || "story"]}</p>
+      <div className="game-editorial-note">
+        <b>LOOK FOR</b>
+        <span>{details || "one unmistakably local detail"}</span>
+      </div>
+    </div>
+  );
+}
+
 export function ActivityGame({ activity, age, context }: { activity: Activity; age: number; context?: string }) {
   const requestedGameType = activity.gameType || "story";
   const items = activity.items?.length === 4 ? activity.items : fallbackItems;
@@ -898,7 +931,12 @@ export function ActivityGame({ activity, age, context }: { activity: Activity; a
     <section className={`activity-game game-${gameType}`} aria-label={gameNames[gameType]}>
       {gameType === "coloring" ? <style>{coloringPageCss}</style> : null}
       <b>{gameNames[gameType]}</b>
-      {board}
+      {gameType === "coloring" ? board : (
+        <>
+          <GameEditorialHeader activity={activity} />
+          <div className="game-board-content">{board}</div>
+        </>
+      )}
     </section>
   );
 }

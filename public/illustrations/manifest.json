@@ -14,6 +14,13 @@
       "source": "OpenAI image generation",
       "style": "printable editorial line art",
       "usage": "TripQuest preview and printable PDF"
+    },
+    {
+      "scene": "eiffel-tower",
+      "file": "eiffel-tower-coloring-v1.png",
+      "source": "OpenAI image generation",
+      "style": "printable editorial line art",
+      "usage": "TripQuest preview and printable PDF"
     }
   ]
 }

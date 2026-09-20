@@ -772,6 +772,9 @@ export function validateBookletDraft(
         ),
         gameType,
         items,
+        ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv1%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
+          ? { illustrationPath: activity.illustrationPath }
+          : {}),
       };
     });
 

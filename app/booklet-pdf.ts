@@ -16,6 +16,7 @@ import {
   coloringPageSpec,
   coloringSceneFor,
   coloringVariantFor,
+  curatedColoringImagePath,
   type ColoringScene,
 } from "./coloring.ts";
 import { getAgeBand } from "./booklet.ts";
@@ -97,7 +98,12 @@ export type FamilyPackContext = {
 };
 
 export type ColoringImageResolver = (path: string) => Promise<Uint8Array | null>;
-type ColoringArtwork = Partial<Record<ColoringScene, PDFImage>>;
+type ColoringArtwork = Record<string, PDFImage>;
+
+function coloringArtworkKey(activity: Activity, context: string) {
+  const scene = coloringSceneFor(activity, context);
+  return activity.illustrationPath || curatedColoringImagePath(activity, context) || scene;
+}
 
 function pdfText(value: string) {
   const normalized = value
@@ -1252,7 +1258,7 @@ function drawTraceBoard(
     borderColor: colors.line,
     borderWidth: 1.2,
   });
-  const image = artwork[variant];
+  const image = artwork[coloringArtworkKey(activity, context)];
   if (image) drawEmbeddedColoringImage(page, image, scene);
   else drawColoringScene(page, scene, variant, variation);
 
@@ -1328,7 +1334,7 @@ function drawColoringActivityBoard(
     font: fonts.bold,
     color: colors.ink,
   });
-  const image = artwork[spec.scene];
+  const image = artwork[coloringArtworkKey(activity, context)];
   if (image) {
     drawEmbeddedColoringImage(page, image, {
       x: sceneBox.x + 7,
@@ -1870,6 +1876,125 @@ function drawStory(page: PDFPage, fonts: Fonts, items: GameItem[], box: Box) {
   }
 }
 
+function gameInstruction(activity: Activity) {
+  switch (activity.gameType) {
+    case "word_search":
+      return "Find each local word in the grid. Circle it when you spot it.";
+    case "crossword":
+      return "Solve the local clues, then write each answer into the numbered squares.";
+    case "maze":
+      return "Trace one route from START to FINISH. Look for the best way through.";
+    case "matching":
+      return "Draw one line from each local word to its matching clue.";
+    case "bingo":
+      return "Spot these details in the real place. Mark a square when you find one.";
+    case "spot_the_difference":
+      return "Compare both pictures carefully. Circle three changes you can prove.";
+    case "codebreaker":
+      return "Use the starter key to crack the local word, one symbol at a time.";
+    case "map_puzzle":
+      return "Plan a route from S to F and visit the numbered stops along the way.";
+    case "scavenger_hunt":
+      return "Tick each detail when you find it. Leave every object where it belongs.";
+    case "quiz":
+      return "Choose an answer, then explain what you noticed that helped you decide.";
+    case "drawing":
+      return "Look closely at the local subject, then sketch one detail you noticed.";
+    default:
+      return "Use the local clues to make a tiny travel story of your own.";
+  }
+}
+
+function drawEditorialBoardChrome(
+  page: PDFPage,
+  fonts: Fonts,
+  activity: Activity,
+  box: Box,
+  boardLabel: string,
+) {
+  const stripHeight = 39;
+  const gap = 8;
+  const stripY = box.y + box.height - stripHeight;
+  page.drawRectangle({
+    x: box.x,
+    y: stripY,
+    width: box.width,
+    height: stripHeight,
+    color: colors.blueSoft,
+  });
+  page.drawText("HOW TO PLAY", {
+    x: box.x + 12,
+    y: stripY + 25,
+    size: 7,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  drawWrappedText(page, gameInstruction(activity), fonts, {
+    x: box.x + 12,
+    y: stripY + 14,
+    size: 7.5,
+    lineHeight: 9,
+    maxWidth: box.width - 150,
+    maxLines: 2,
+    color: colors.ink,
+  });
+  const tag = pdfText(`${boardLabel} board`).toUpperCase();
+  const tagWidth = fonts.bold.widthOfTextAtSize(tag, 6.5);
+  page.drawText(tag, {
+    x: box.x + box.width - tagWidth - 12,
+    y: stripY + 25,
+    size: 6.5,
+    font: fonts.bold,
+    color: colors.coral,
+  });
+  const itemCount = activity.items?.length ?? 0;
+  page.drawText(itemCount ? `${itemCount} LOCAL CLUES` : "LOOK CLOSELY", {
+    x: box.x + box.width - 98,
+    y: stripY + 13,
+    size: 5.5,
+    font: fonts.bold,
+    color: colors.muted,
+  });
+
+  const boardHeight = box.height - stripHeight - gap;
+  const board = { x: box.x, y: box.y, width: box.width, height: boardHeight };
+  page.drawRectangle({
+    ...board,
+    color: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+  });
+  page.drawRectangle({
+    x: board.x,
+    y: board.y + board.height - 22,
+    width: board.width,
+    height: 22,
+    color: colors.paper,
+  });
+  page.drawText("GAME BOARD", {
+    x: board.x + 12,
+    y: board.y + board.height - 14,
+    size: 6.5,
+    font: fonts.bold,
+    color: colors.muted,
+  });
+  const boardTitle = pdfText(activity.title).toUpperCase();
+  const boardTitleSize = fitTextSize(boardTitle, fonts.bold, board.width - 150, 6.5, 5);
+  page.drawText(boardTitle, {
+    x: board.x + board.width - fonts.bold.widthOfTextAtSize(boardTitle, boardTitleSize) - 12,
+    y: board.y + board.height - 14,
+    size: boardTitleSize,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  return {
+    x: board.x + 12,
+    y: board.y + 10,
+    width: board.width - 24,
+    height: board.height - 38,
+  };
+}
+
 function drawGame(
   page: PDFPage,
   fonts: Fonts,
@@ -1894,7 +2019,16 @@ function drawGame(
     quiz: "Quick quiz",
     story: "Story studio",
   };
-  const box = drawGameFrame(page, fonts, labels[activity.gameType] || "Travel game", frame);
+  const frameBox = drawGameFrame(page, fonts, labels[activity.gameType] || "Travel game", frame);
+  const box = activity.gameType === "coloring"
+    ? frameBox
+    : drawEditorialBoardChrome(
+      page,
+      fonts,
+      activity,
+      frameBox,
+      labels[activity.gameType] || "Travel game",
+    );
   switch (activity.gameType) {
     case "coloring":
       drawTraceBoard(page, fonts, activity, box, true, context, artwork);
@@ -2000,7 +2134,7 @@ function drawActivityPage(
 
   const gameFrame = activity.gameType === "coloring"
     ? { x: MARGIN, y: 120, width: PAGE_WIDTH - MARGIN * 2, height: 440 }
-    : { x: MARGIN, y: 154, width: PAGE_WIDTH - MARGIN * 2, height: 388 };
+    : { x: MARGIN, y: 133, width: PAGE_WIDTH - MARGIN * 2, height: 409 };
   drawGame(
     page,
     fonts,
@@ -2012,29 +2146,75 @@ function drawActivityPage(
   );
 
   if (activity.gameType !== "coloring") {
+    const noteGap = 10;
+    const noteWidth = PAGE_WIDTH - MARGIN * 2;
+    const clueWidth = noteWidth * 0.56;
+    const responseX = MARGIN + clueWidth + noteGap;
+    const responseWidth = noteWidth - clueWidth - noteGap;
     page.drawRectangle({
       x: MARGIN,
       y: 61,
-      width: PAGE_WIDTH - MARGIN * 2,
-      height: 72,
+      width: clueWidth,
+      height: 64,
       color: activityIndex === 0 ? colors.coralSoft : colors.greenSoft,
     });
-    page.drawText("MY FIELD NOTE", {
+    page.drawRectangle({
+      x: responseX,
+      y: 61,
+      width: responseWidth,
+      height: 64,
+      color: colors.yellowSoft,
+    });
+    page.drawText("LOCAL CLUES", {
       x: MARGIN + 14,
-      y: 111,
+      y: 109,
+      size: 7,
+      font: fonts.bold,
+      color: accent,
+    });
+    const clues = (activity.items ?? []).slice(0, 2);
+    if (clues.length) {
+      clues.forEach((item, index) => {
+        const clueY = 94 - index * 15;
+        page.drawCircle({ x: MARGIN + 15, y: clueY + 2, size: 2.2, color: accent });
+        drawWrappedText(page, `${item.label}: ${item.clue}`, fonts, {
+          x: MARGIN + 23,
+          y: clueY + 5,
+          size: 6.8,
+          lineHeight: 8,
+          maxWidth: clueWidth - 34,
+          maxLines: 1,
+          color: colors.ink,
+        });
+      });
+    } else {
+      drawWrappedText(page, activity.body, fonts, {
+        x: MARGIN + 14,
+        y: 91,
+        size: 7.5,
+        maxWidth: clueWidth - 28,
+        maxLines: 2,
+        lineHeight: 9,
+        color: colors.ink,
+      });
+    }
+    page.drawText("MY FIELD NOTE", {
+      x: responseX + 12,
+      y: 109,
       size: 7,
       font: fonts.bold,
       color: accent,
     });
     drawWrappedText(page, activity.prompt, fonts, {
-      x: MARGIN + 14,
-      y: 90,
-      size: 9,
-      font: fonts.bold,
-      maxWidth: PAGE_WIDTH - MARGIN * 2 - 28,
-      maxLines: 2,
-      lineHeight: 12,
+      x: responseX + 12,
+      y: 96,
+      size: 7.5,
+      maxWidth: responseWidth - 24,
+      maxLines: 1,
+      color: colors.ink,
     });
+    drawDottedLine(page, responseX + 12, responseX + responseWidth - 12, 78, colors.line, 2, 3);
+    drawDottedLine(page, responseX + 12, responseX + responseWidth - 12, 69, colors.line, 2, 3);
   }
 }
 
@@ -2422,21 +2602,21 @@ export async function createBookletPdf(
   };
   const coloringArtwork: ColoringArtwork = {};
   if (resolveColoringImage) {
-    const scenes = new Set<ColoringScene>();
+    const imageRequests = new Map<string, string>();
     booklet.dayPlans.forEach((day) => {
       day.activities.forEach((activity, activityIndex) => {
         if (activity.gameType !== "coloring" && activity.gameType !== "drawing") return;
-        scenes.add(coloringSceneFor(activity, `${day.theme} - day ${day.day} - game ${activityIndex + 1}`));
+        const context = `${day.theme} - day ${day.day} - game ${activityIndex + 1}`;
+        const path = activity.illustrationPath || curatedColoringImagePath(activity, context);
+        if (path) imageRequests.set(coloringArtworkKey(activity, context), path);
       });
     });
-    for (const scene of scenes) {
-      const path = coloringIllustrationSpecs[scene].imagePath;
-      if (!path) continue;
+    for (const [key, path] of imageRequests) {
       try {
         const bytes = await resolveColoringImage(path);
-        if (bytes) coloringArtwork[scene] = await document.embedPng(bytes);
+        if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
       } catch (error) {
-        console.error(`[TripQuest illustration] ${scene}`, error);
+        console.error(`[TripQuest illustration] ${key}`, error);
       }
     }
   }

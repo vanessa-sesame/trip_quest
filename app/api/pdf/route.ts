@@ -33,6 +33,7 @@ import {
   assertSameOriginRequest,
   readJsonObject,
 } from "../../request-security";
+import { illustrationStorageKey } from "../../illustration-ai";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +174,11 @@ async function preparePdf(
       mechanicsByDay: mechanicPlanForTrip(input.family, input.days),
     };
     job = createBookletPdf(personalizedBooklet, familyPack, async (path) => {
+      const storedKey = illustrationStorageKey(path);
+      if (storedKey) {
+        const stored = await runtime.BOOKLET_FILES?.get(storedKey);
+        return stored?.arrayBuffer ? new Uint8Array(await stored.arrayBuffer()) : null;
+      }
       if (!runtime.ASSETS) return null;
       const response = await runtime.ASSETS.fetch(new Request(new URL(path, request.url)));
       if (!response.ok) return null;

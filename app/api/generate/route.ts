@@ -49,6 +49,7 @@ import {
   createGenerationStreamResponse,
   createGenerationTask,
 } from "../../generation-stream";
+import { addBookletIllustrations } from "../../illustration-ai";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,8 @@ type RuntimeEnvironment = {
   MOONSHOT_API_KEY?: string;
   KIMI_RESEARCH_MODEL?: string;
   KIMI_COMPOSER_MODEL?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_IMAGE_MODEL?: string;
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
 };
@@ -1164,12 +1167,18 @@ export async function POST(request: Request) {
               throw new GenerationStageError("composition", error);
             });
             lockLease?.assertOwned();
+            const illustratedDayPlans = await addBookletIllustrations(runtime, {
+              destination,
+              age,
+              dayPlans: draft.dayPlans,
+            }, publish);
+            lockLease?.assertOwned();
             const result: GeneratedBookletData = {
               destination,
               age,
               days,
               itinerary,
-              ...applySiblingPlan(draft, family),
+              ...applySiblingPlan({ ...draft, dayPlans: illustratedDayPlans }, family),
               sources: research.sources,
               generatedAt: new Date().toISOString(),
               family,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coloringPageSpec, coloringSceneFor, coloringVariantFor } from "../app/coloring.ts";
+import { coloringPageSpec, coloringSceneFor, coloringVariantFor, curatedColoringImagePath } from "../app/coloring.ts";
 
 const activity = (title: string, label = "DETAIL", clue = "A local detail to notice.") => ({
   title,
@@ -93,4 +93,11 @@ test("tile title wins over shophouse context in the shared page spec", () => {
   assert.equal(page.scene, "tile");
   assert.equal(page.illustration.label, "Peranakan tile motif");
   assert.match(page.illustration.subject, /repeating geometric tile pattern/i);
+});
+
+test("Paris activities use the curated Eiffel Tower artwork instead of the generic tower", () => {
+  const eiffel = activity("Color the Three Levels", "LEVEL 1", "Find the broad lower platform.");
+  const context = "Eiffel Tower Iron Giant, Paris";
+  assert.equal(curatedColoringImagePath(eiffel, context), "/illustrations/eiffel-tower-coloring-v1.png");
+  assert.equal(coloringPageSpec(eiffel, context).illustration.imagePath, "/illustrations/eiffel-tower-coloring-v1.png");
 });

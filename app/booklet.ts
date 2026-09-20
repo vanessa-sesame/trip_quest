@@ -28,6 +28,7 @@ export type Activity = {
   prompt: string;
   gameType?: GameType;
   items?: GameItem[];
+  illustrationPath?: string;
 };
 
 export type DayPlan = {

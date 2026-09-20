@@ -96,7 +96,7 @@ export const coloringSceneLabels: Record<ColoringScene, string> = Object.fromEnt
   coloringScenes.map((scene) => [scene, coloringIllustrationSpecs[scene].label]),
 ) as Record<ColoringScene, string>;
 
-type ColoringActivity = Pick<Activity, "title" | "items"> & Partial<Pick<Activity, "body" | "prompt">>;
+type ColoringActivity = Pick<Activity, "title" | "items"> & Partial<Pick<Activity, "body" | "prompt" | "illustrationPath">>;
 
 function coloringText(activity: ColoringActivity, context: string) {
   return [
@@ -106,6 +106,12 @@ function coloringText(activity: ColoringActivity, context: string) {
     ...(activity.items || []).map((item) => `${item.label} ${item.clue}`),
     context,
   ].join("|");
+}
+
+export function curatedColoringImagePath(activity: ColoringActivity, context = "") {
+  const text = coloringText(activity, context).toLocaleLowerCase();
+  if (/eiffel\s+tower|champ\s+de\s+mars/.test(text)) return "/illustrations/eiffel-tower-coloring-v1.png";
+  return coloringIllustrationSpecs[coloringSceneFor(activity, context)].imagePath;
 }
 
 function stableHash(value: string) {
@@ -183,7 +189,12 @@ const traceWords: Partial<Record<ColoringScene, string>> = {
 
 export function coloringPageSpec(activity: ColoringActivity, context = ""): ColoringPageSpec {
   const scene = coloringSceneFor(activity, context);
-  const illustration = coloringIllustrationSpecs[scene];
+  const illustration = {
+    ...coloringIllustrationSpecs[scene],
+    ...(activity.illustrationPath || curatedColoringImagePath(activity, context)
+      ? { imagePath: activity.illustrationPath || curatedColoringImagePath(activity, context) }
+      : {}),
+  };
   const items = (activity.items || []).slice(0, 4);
   const itemCells: ColoringMiniCell[] = items.map((item) => ({
     kind: "item",

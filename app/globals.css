@@ -2445,6 +2445,145 @@ p {
   padding-bottom: 3%;
 }
 
+.generated-game-page .game-coloring {
+  margin-top: 1%;
+  padding: 3%;
+}
+
+.generated-game-page .game-coloring > b {
+  display: none;
+}
+
+.generated-game-page .coloring-page-board {
+  height: 100%;
+  grid-template-rows: 22px minmax(0, 1fr) 28px 52px;
+  gap: 4px;
+  padding-top: 0;
+}
+
+.generated-game-page .coloring-page-topline {
+  min-height: 0;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.generated-game-page .coloring-page-kicker {
+  align-self: center;
+  font-size: 0.3rem;
+}
+
+.generated-game-page .coloring-how-to {
+  max-width: 57%;
+  gap: 1px;
+  padding: 2px 4px;
+}
+
+.generated-game-page .coloring-how-to b {
+  font-size: 0.25rem;
+}
+
+.generated-game-page .coloring-how-to span {
+  font-size: 0.27rem;
+  line-height: 1.05;
+}
+
+.generated-game-page .coloring-page-main {
+  gap: 4px;
+}
+
+.generated-game-page .coloring-scene-panel {
+  gap: 2px;
+  padding: 3px;
+}
+
+.generated-game-page .coloring-scene-panel > b,
+.generated-game-page .coloring-mini-heading > b {
+  font-size: 0.31rem;
+}
+
+.generated-game-page .coloring-mini-heading span {
+  font-size: 0.23rem;
+}
+
+.generated-game-page .coloring-mini-grid {
+  gap: 2px;
+}
+
+.generated-game-page .coloring-mini-cell {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1px;
+  padding: 2px;
+}
+
+.generated-game-page .coloring-cell-badge {
+  font-size: 0.2rem;
+}
+
+.generated-game-page .coloring-mini-cell strong {
+  align-self: center;
+  font-size: 0.26rem;
+  line-height: 1.05;
+}
+
+.generated-game-page .coloring-mini-cell small {
+  display: none;
+}
+
+.generated-game-page .coloring-raster-art img {
+  padding: 1px;
+}
+
+.generated-game-page .coloring-trace-strip {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
+  overflow: hidden;
+  padding: 3px 5px;
+}
+
+.generated-game-page .coloring-trace-strip span {
+  font-size: 0.23rem;
+}
+
+.generated-game-page .coloring-trace-strip strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generated-game-page .coloring-trace-strip small {
+  display: none;
+}
+
+.generated-game-page .coloring-note-grid {
+  gap: 4px;
+  overflow: hidden;
+}
+
+.generated-game-page .coloring-local-note,
+.generated-game-page .coloring-field-note {
+  min-height: 0;
+  overflow: hidden;
+  padding: 4px 5px;
+}
+
+.generated-game-page .coloring-note-grid b {
+  font-size: 0.23rem;
+}
+
+.generated-game-page .coloring-local-note ul {
+  gap: 1px;
+  margin-top: 2px;
+  padding-left: 8px;
+}
+
+.generated-game-page .coloring-note-grid li,
+.generated-game-page .coloring-note-grid small {
+  font-size: 0.24rem;
+  line-height: 1.05;
+}
+
 .generated-game-page .word-search-layout,
 .generated-game-page .crossword-layout,
 .generated-game-page .maze-layout {

@@ -38,7 +38,7 @@ type StripeSession = {
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
-const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-5";
+const PURCHASE_PDF_CACHE_VERSION = "purchase-pdf-2026-09-20-6";
 const LEGACY_PURCHASE_PDF_CACHE_VERSIONS = [
   "purchase-pdf-2026-09-20-2",
   "purchase-pdf-2026-09-20-1",

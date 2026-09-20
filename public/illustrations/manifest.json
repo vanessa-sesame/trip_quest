@@ -1,5 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
+  "sceneLibrary": [
+    "guardian", "tile", "skyline", "garden", "bridge", "train",
+    "market", "mountain", "temple", "mosque", "castle", "cave",
+    "coast", "penguin", "wildlife", "dinosaur", "shophouse", "tower"
+  ],
   "assets": [
     {
       "scene": "merlion",

@@ -85,7 +85,8 @@ export async function addBookletIllustrations(
         continue;
       }
       const context = `${input.destination} | ${day.theme} | ${activity.title}`;
-      if (curatedColoringImagePath(activity, context)) {
+      const curated = curatedColoringImagePath(activity, context);
+      if (curated && /\/(?:merlion|supertree|eiffel-tower)-coloring-v1\.png$/.test(curated)) {
         activities.push(activity);
         continue;
       }

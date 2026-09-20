@@ -1427,7 +1427,7 @@ function GeneratedPage({
           ) : null}
         </div>
       ) : null}
-      <ActivityGame activity={activity} age={age} />
+      <ActivityGame activity={activity} age={age} context={day.theme} />
       <i>{activity.prompt}</i>
     </article>
   );

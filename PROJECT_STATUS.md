@@ -1,6 +1,6 @@
 # TripQuest Project Status
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 This is the handoff document for TripQuest. Read it before starting a new
 development task, and update it after a major product, infrastructure, or launch
@@ -15,8 +15,7 @@ trip length, optional family profiles, interests, and an optional itinerary.
 
 Live site: https://tripquestkids.com
 
-Current public release: Sites version 23, commit
-`239472186ed1ea033a5361001630772b01bd2779` on `main`.
+Current public release: https://tripquestkids.com, source branch `main`.
 
 ## Current User Experience
 
@@ -51,17 +50,28 @@ Current public release: Sites version 23, commit
 - Pasted itineraries recognize named dates such as 10 April, April 10, and
   numeric day/month dates, then group activities by date order.
 - Generated JSON and PDFs are saved for reuse.
+- Drawing and coloring pages use landmark-aware printable line art. The day
+  theme, activity title, labels, and clues select recognizable scenes such as
+  Supertrees, mosques, trains, towers, castles, coasts, penguins, wildlife,
+  dinosaurs, caves, markets, gardens, and shophouses. Unknown subjects use a
+  stable city-landmark scene instead of a random unrelated illustration.
+- Drawing guidance sits in reserved space above the artwork, so it cannot cover
+  a dome, sun, landmark, or other part of the printable scene.
 
 ## Important Launch State
 
-These settings are intentionally open for testing and must be changed before
-charging customers:
+The paid flow is connected in Stripe sandbox mode and must be moved to live
+Stripe credentials before charging customers:
 
-- `FULL_PREVIEW_FOR_TESTERS` is `true` in `app/booklet-preview.ts`, so all web
-  preview pages are visible.
-- Hosted `TRIPQUEST_PDF_TEST_MODE` is currently `true`, so PDF preparation is
-  not limited to a paid customer flow.
-- Payment and purchase verification are not connected.
+- `FULL_PREVIEW_FOR_TESTERS` is `false` in `app/booklet-preview.ts`; only the
+  first three web preview pages are visible before purchase.
+- Hosted `TRIPQUEST_PDF_TEST_MODE` is `false`; the customer PDF button no longer
+  falls back to a free download when checkout is unavailable.
+- Stripe Checkout, signed webhooks, D1 purchase entitlements, and paid PDF
+  delivery are connected with test credentials. Test transactions do not move
+  real money.
+- Going live still requires a live Stripe product/price, live restricted secret
+  key, and live webhook signing secret in production.
 - There is no native iOS application yet. The current product is a responsive
   web application that can later support an iOS client.
 
@@ -72,7 +82,8 @@ charging customers:
 - Styling: `app/globals.css`.
 - Icons: Lucide React.
 - PDF engine: `pdf-lib`; PDFs are built deterministically without another LLM
-  request.
+  request. Illustration selection uses semantic landmark matching plus the day
+  theme, not random scene assignment.
 - Database: Cloudflare D1, exposed to the app as `DB`.
 - Object storage: Cloudflare R2, exposed as `BOOKLET_FILES`.
 - Hosting: OpenAI Sites with the custom domain `tripquestkids.com`.
@@ -160,9 +171,10 @@ git diff --check
 ```
 
 `npm test` performs a production build and runs the automated test suite. At
-this checkpoint there are 37 passing tests covering age behavior, destination
-variation, game validation, puzzles, family profiles, streaming, security,
-D1/R2 storage, and PDF generation.
+this checkpoint there are 45 passing tests covering age behavior, destination
+variation, game validation, puzzles, landmark-aware illustration selection,
+family profiles, streaming, payments, security, D1/R2 storage, and PDF
+generation.
 
 Other useful commands:
 
@@ -201,8 +213,9 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 
 ## Known Gaps
 
-- Payment, receipts, purchase restoration, and entitlement checks are missing.
-- The free-preview/full-product boundary is still in tester mode.
+- Stripe remains in sandbox mode. Live product/price, live credentials, account
+  activation, payouts, receipts, refunds, and purchase restoration still need a
+  launch pass.
 - Kimi token usage and cost are not yet written to D1 per request.
 - A failed validation can still cause a whole composition batch to be retried;
   targeted single-activity repair would reduce cost.
@@ -225,7 +238,8 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
    estimated cost in D1.
 2. Generate a limited high-quality preview before purchase and generate the
    remaining days only after entitlement verification.
-3. Add payment and securely verify PDF access; then disable both tester flags.
+3. Complete Stripe live-mode activation and run one real low-value purchase,
+   webhook, PDF-delivery, refund, and payout verification.
 4. Separate reusable destination research from custom-itinerary research.
 5. Repair only invalid days or activities rather than regenerating a batch.
 6. Run a smaller live release matrix before the full 20- or 50-scenario UAT.

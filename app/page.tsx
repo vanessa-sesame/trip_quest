@@ -82,7 +82,7 @@ const destinationSuggestions = [
 const samplePageTitles: Record<SampleAge, string[]> = {
   5: [
     "Cover",
-    "Grown-up guide",
+    "Quick note for grown-ups",
     "Merlion Face Finder",
     "MRT Color Parade",
     "Hawker Rainbow Hunt",
@@ -93,7 +93,7 @@ const samplePageTitles: Record<SampleAge, string[]> = {
   ],
   7: [
     "Cover",
-    "Grown-up guide",
+    "Quick note for grown-ups",
     "Merlion Myth Lab",
     "MRT Route Codebreaker",
     "Hawker Centre Reporter",
@@ -217,7 +217,7 @@ export default function Home() {
       )
     : [
         "Cover",
-        "Explorer guide",
+        "Quick note for grown-ups",
         ...generatedDays.flatMap((day) =>
           day.activities.slice(0, 2).map((activity) => activity.title),
         ),
@@ -1347,7 +1347,7 @@ function GeneratedPage({
   if (page === 1) {
     return (
       <article className="generated-sheet generated-guide">
-        <span>Grown-up guide</span>
+        <span>A quick note for grown-ups</span>
         <h3>{getAgeBand(age).label}</h3>
         <p>{profile.intro}</p>
         <div>

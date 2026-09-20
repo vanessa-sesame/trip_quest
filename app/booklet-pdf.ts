@@ -477,8 +477,8 @@ function drawGuide(
   totalPages: number,
   familyPack?: FamilyPackContext,
 ) {
-  const page = drawPageBase(document, fonts, "Grown-up guide", 2, totalPages, colors.green);
-  page.drawText("GROWN-UP GUIDE", {
+  const page = drawPageBase(document, fonts, "Quick note for grown-ups", 2, totalPages, colors.green);
+  page.drawText("A QUICK NOTE FOR GROWN-UPS", {
     x: MARGIN,
     y: 775,
     size: 10,

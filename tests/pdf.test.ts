@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 import {
@@ -76,7 +77,13 @@ test("PDF renderer supports explicit Merlion and guardian coloring subjects", as
   };
 
   const bytes = await createBookletPdf(booklet);
+  const illustratedBytes = await createBookletPdf(
+    booklet,
+    undefined,
+    async (path) => new Uint8Array(await readFile(`public${path}`)),
+  );
   const document = await PDFDocument.load(bytes);
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
   assert.ok(bytes.length > 30_000);
+  assert.ok(illustratedBytes.length > bytes.length + 500_000);
 });

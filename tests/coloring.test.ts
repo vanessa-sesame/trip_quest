@@ -82,6 +82,7 @@ test("coloring pages use four activity items plus destination challenges and a f
   assert.equal(page.cells.filter((cell) => cell.kind === "challenge").length, 4);
   assert.equal(page.traceWord, "MERLION");
   assert.equal(page.localClue, "Find the lion mane.");
+  assert.equal(page.illustration.imagePath, "/illustrations/merlion-coloring-v1.png");
 });
 
 test("tile title wins over shophouse context in the shared page spec", () => {

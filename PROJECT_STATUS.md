@@ -295,6 +295,15 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
     implicated day's batch, but only once; the same live Barcelona diagnostic
     still failed outright when the repaired batch exceeded the age-5 word
     budget again on its one retry.
+  - Investigated with the actual failing content (2026-09-21): the ages-3-6
+    word budget (60 words for 5-6, 40 for 3-4, in `readerBandForAge`) sums
+    body + prompt + all 4 required game items, which leaves little headroom
+    once 4 genuine item clues are included. `wordCount` also counted a
+    standalone em dash as its own word; that is now fixed. The fix alone did
+    not close the live Barcelona failure — the same page was still 3 real
+    words over budget after removing the inflated count. Raising the 3-6
+    page-word ceilings, or excluding item text from the page total, was
+    proposed and intentionally not done yet.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

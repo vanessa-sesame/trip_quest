@@ -272,10 +272,12 @@ test("AI booklet validation repairs optional queue presentation labels", () => {
   ];
   raw.dayPlans[0].slots.sitDown.items = structuredClone(raw.dayPlans[0].slots.inThePlace.items);
   delete raw.dayPlans[0].slots.whileYouWait.title;
+  delete raw.dayPlans[0].slots.whileYouWait.instruction;
   delete raw.dayPlans[0].slots.whileYouWait.countLabel;
 
   const result = validateBookletDraft(raw, 1, 7);
   assert.equal(result.dayPlans[0].slots.whileYouWait.title, "Count While You Wait");
+  assert.match(result.dayPlans[0].slots.whileYouWait.instruction, /Count one repeated detail/i);
   assert.equal(result.dayPlans[0].slots.whileYouWait.countLabel, "I counted");
 });
 

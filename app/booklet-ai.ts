@@ -845,7 +845,9 @@ export function validateBookletDraft(
             title: typeof queueValue.title === "string" && queueValue.title.trim()
               ? requireText(queueValue.title, `Day ${dayIndex + 1} queue title`, 3, 55)
               : "Count While You Wait",
-            instruction: requireText(queueValue.instruction, `Day ${dayIndex + 1} queue instruction`, 4, 180),
+            instruction: typeof queueValue.instruction === "string" && queueValue.instruction.trim()
+              ? requireText(queueValue.instruction, `Day ${dayIndex + 1} queue instruction`, 4, 180)
+              : `Count one repeated detail near ${landmark.short}.`,
             countLabel: typeof queueValue.countLabel === "string" && queueValue.countLabel.trim()
               ? requireText(queueValue.countLabel, `Day ${dayIndex + 1} queue count label`, 2, 40)
               : "I counted",

@@ -10,8 +10,8 @@ import {
 } from "./family.ts";
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
-export const BOOKLET_CACHE_VERSION = "booklet-2026-09-20-8";
-export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-20-6";
+export const BOOKLET_CACHE_VERSION = "booklet-2026-09-21-9";
+export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-21-7";
 
 type D1Value = string | number | null;
 
@@ -204,6 +204,9 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
     const sources = parseSources(parsed.sources);
     if (!sources) return null;
     const draft = validateBookletDraft(parsed, parsed.days, parsed.age);
+    const hasDayArchitecture = Array.isArray(parsed.dayPlans) && parsed.dayPlans.every((day) =>
+      Boolean(day && typeof day === "object" && (day as Record<string, unknown>).architectureVersion === 2),
+    );
     const family = Array.isArray(parsed.family)
       ? normalizeFamilyChildren(parsed.family)
       : undefined;
@@ -216,7 +219,12 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
       age: parsed.age,
       days: parsed.days,
       itinerary,
-      ...draft,
+      ...(hasDayArchitecture
+        ? draft
+        : {
+            profile: parsed.profile as GeneratedBookletData["profile"],
+            dayPlans: parsed.dayPlans as GeneratedBookletData["dayPlans"],
+          }),
       sources,
       generatedAt: parsed.generatedAt,
       ...(family ? { family } : {}),

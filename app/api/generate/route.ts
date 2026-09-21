@@ -50,6 +50,7 @@ import {
   createGenerationTask,
 } from "../../generation-stream";
 import { addBookletIllustrations } from "../../illustration-ai";
+import { assertBookletQa } from "../../booklet-qa";
 
 export const dynamic = "force-dynamic";
 
@@ -514,6 +515,9 @@ ${plannedStops.length ? itinerary.map((plan, index) => `Day ${index + 1}: ${plan
 Return concise factual notes covering:
 - 8 to 12 specific, real landmarks, neighborhoods, museums, landscapes, or cultural touchpoints and why each matters
 - verify every named place or activity in the family's plans, including child-noticeable details for it
+- for every landmark, give a header display name, a natural short reference, and the exact place name
+- flag whether visitors commonly wait or queue, and name one visible feature children can count there
+- where sources support it, give exactly three concrete physical or numerical facts, each under 15 words; otherwise give none
 - local visual details, stories, crafts, architecture, or traditions a child can respectfully notice
 - 4 representative foods or food traditions
 - useful public transport or walking details
@@ -669,8 +673,10 @@ function bookletSchema(days: number, age: number) {
           required: ["label", "clue"],
         },
       },
+      requiresPresence: { type: "boolean" },
+      answerMode: { type: "string", enum: ["closed", "open"] },
     },
-    required: ["title", "kind", "body", "prompt", "gameType", "items"],
+    required: ["title", "kind", "body", "prompt", "gameType", "items", "requiresPresence", "answerMode"],
   };
 
   return {
@@ -702,14 +708,46 @@ function bookletSchema(days: number, age: number) {
             mission: { type: "string" },
             interestHook: { type: "string" },
             siblingMission: { type: "string" },
-            activities: {
-              type: "array",
-              minItems: 2,
-              maxItems: 2,
-              items: activitySchema,
+            landmark: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                display: { type: "string" },
+                short: { type: "string" },
+                place: { type: "string" },
+              },
+              required: ["display", "short", "place"],
+            },
+            slots: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                beforeYouGo: { type: "string" },
+                whileYouWait: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string" },
+                    instruction: { type: "string" },
+                    countLabel: { type: "string" },
+                    countTo: { type: "integer", minimum: 1, maximum: 20 },
+                    required: { type: "boolean" },
+                  },
+                  required: ["title", "instruction", "countLabel", "countTo", "required"],
+                },
+                inThePlace: activitySchema,
+                sitDown: activitySchema,
+                factCard: {
+                  type: "array",
+                  minItems: 0,
+                  maxItems: 3,
+                  items: { type: "string" },
+                },
+              },
+              required: ["beforeYouGo", "whileYouWait", "inThePlace", "sitDown", "factCard"],
             },
           },
-          required: ["day", "theme", "focusLabel", "mission", "siblingMission", "activities"],
+          required: ["day", "theme", "focusLabel", "mission", "siblingMission", "landmark", "slots"],
         },
       },
     },
@@ -792,7 +830,7 @@ Use the listed mechanics as the intended mix. Do not use the same mechanic as th
 
 EXACT PRINTABLE GAME SCHEDULE
 ${exactGameSchedule}
-Use these exact gameType values in this exact activity order. This schedule has already been balanced for age and variety; do not substitute a favorite format.
+Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format.
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
@@ -803,6 +841,13 @@ An interest may contain a brand, character, franchise, logo, or protected title.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
+- Every day must return exactly five named slots in this order: beforeYouGo, whileYouWait, inThePlace, sitDown, factCard. These are the day architecture, not two free-floating games.
+- landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
+- beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
+- whileYouWait must be a countable queue activity needing no table and no child reading. Set required=true whenever research or common visitor flow indicates a queue. Use a visible physical target and a countTo suitable for the age.
+- inThePlace must be impossible to solve before arrival. Set requiresPresence=true and make the answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there.
+- sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.
+- factCard contains exactly three facts or zero facts. Drop the entire list when research does not support three. Every fact must be concrete, under 15 words, and never an instruction. Do not repeat a fact sentence anywhere else that day.
 - Follow the DAILY ITINERARY exactly on every day with a family plan. Build that day's theme, mission, facts, vocabulary, and games around those named stops. For an open day, choose a strong subject from the research.
 - Put a recognizable local detail in every day theme and mission. Never use generic themes such as “Hello Destination”, “Landmark Lab”, “Culture Day”, or “Memory Maker”.
 - Give every activity a unique title and a real printable game. Rotate game types across the booklet, never repeat one on consecutive days, and use map_puzzle no more than once in the entire booklet.
@@ -811,7 +856,7 @@ CREATIVE DIRECTION
 - A map_puzzle is a route-planning street-grid challenge with START, FINISH, closed roads, and four named local stops. The child must choose and trace the route; never pre-draw the answer or describe it as connecting four dots. Never call an activity Sudoku because Sudoku is not a supported game mechanic.
 - For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
 - Exactly four items appear in each printed game. Never mention a fifth item, extra target, or different answer in the activity body or prompt.
-- The first activity on each day should be a sit-down puzzle or creative page. The second should turn noticing the real place into a field game, scavenger hunt, map challenge, or family mission.
+- For answerMode use closed only when the puzzle has one checkable answer. Use open for observations, drawings, and imaginative responses.
 - Do not repeat a fill-in template, activity title, sentence frame, or “create your own” task.
 - Keep facts accurate and culturally respectful. Phrase myths as stories rather than facts.
 - Write in clear English using printable Latin letters. Transliterate local words and include a simple pronunciation cue rather than relying on non-Latin script or emoji.
@@ -820,7 +865,10 @@ CREATIVE DIRECTION
 - “style” is a vivid 3-to-7-word destination subtitle. “intro” is 1 or 2 inviting sentences.
 - “word” includes a real local word, a simple pronunciation cue when useful, and its meaning.
 - “etiquette” is a concrete local respect clue for families.
-- Each day has exactly two substantial activities. Keep each activity body to 1-3 short sentences and its prompt to one short response line.
+- Ages 3-4: the adult reads everything; instructions are at most 12 words and child actions are colour, point, or count to 5.
+- Ages 5-6: the adult reads aloud; instructions are at most 20 words and each child-facing page contains at most 60 words total. Use trace, tick, count to 20, or one drawing.
+- Ages 7-9: instructions are at most 40 words. Use single words, matching, and simple codes.
+- Ages 10-14: the child reads alone. Use sketches, sentences, and genuine puzzles.
 
 DAILY ITINERARY
 ${itineraryText}
@@ -1184,6 +1232,7 @@ export async function POST(request: Request) {
               family,
               events,
             };
+            assertBookletQa(result);
             const edition = await withEditionFingerprint(result);
             setCached(bookletCache, cacheKey, {
               expiresAt: Date.now() + MEMORY_BOOKLET_TTL,

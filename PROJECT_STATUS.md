@@ -1,6 +1,6 @@
 # TripQuest Project Status
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 This is the handoff document for TripQuest. Read it before starting a new
 development task, and update it after a major product, infrastructure, or launch
@@ -41,6 +41,17 @@ Current public release: https://tripquestkids.com, source branch `main`.
   deterministic fallback and the composer prompt; official characters, logos,
   slogans, and artwork are not generated.
 - Game formats follow an age-safe schedule to reduce repetition.
+- Every generated day follows one shared five-slot structure: a short adult
+  briefing, a queue activity, an in-place observation game, a sit-down page,
+  and an optional three-fact card. Preview and PDF page order come from the
+  same manifest, so the purchased file matches the edition shown on screen.
+- Landmark content stores separate display, short, and place names. Display
+  names are reserved for headers and cannot leak into awkward sentences.
+- Reader responsibility and page word budgets are enforced for ages 3-4, 5-6,
+  7-9, and 10-14. Ages 3-6 receive especially short adult-led instructions.
+- Pre-export QA rejects missing required queue pages, fake in-place games,
+  repeated facts or cut-out cards, family-role/roster mismatches, over-budget
+  child text, and surviving blank-name placeholders.
 - A four-stop route-map puzzle is allowed at most once per booklet.
 - The printable family pack includes the booklet, parent guide, family mission
   map, mission cards, badge tracker, memory page, and certificate.
@@ -104,6 +115,9 @@ Stripe credentials before charging customers:
 - Research uses web search and asks for source-backed landmarks, culture,
   transport, food, nature, etiquette, and itinerary verification.
 - Composition returns structured JSON and is validated before storage.
+- Composition now returns landmark naming fields and the five daily slots.
+  Facts are kept only when there are exactly three concrete facts under 15
+  words; otherwise the fact card is omitted instead of inventing filler.
 - Composition returns an `interestHook` only on scheduled interest days and a
   `siblingMission` for each day. Both appear in the web preview and on the
   first printable activity page of each day.

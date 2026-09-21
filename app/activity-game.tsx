@@ -605,7 +605,7 @@ function ColoringPageBoard({ activity, context }: { activity: Activity; context?
       </div>
       <div className="coloring-note-grid">
         <div className="coloring-local-note">
-          <b>DID YOU KNOW?</b>
+          <b>LOCAL CLUES</b>
           <ul>{spec.facts.map((fact) => <li key={fact}>{fact}</li>)}</ul>
         </div>
         <div className="coloring-field-note"><b>MY FIELD NOTE</b><small>{spec.fieldNote}</small><i /><i /></div>

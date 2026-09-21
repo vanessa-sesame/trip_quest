@@ -42,6 +42,8 @@ import {
   type ItineraryEvent,
   type QuestMechanic,
 } from "./family.ts";
+import { assertBookletQa } from "./booklet-qa.ts";
+import { bookletDayPageEntries, bookletPageTotal } from "./booklet-pages.ts";
 
 const A4: [number, number] = [595.28, 841.89];
 const PAGE_WIDTH = A4[0];
@@ -447,14 +449,21 @@ function drawCover(
   }
   drawDottedLine(page, 360, 500, 280, colors.ink, 3, 8);
 
-  page.drawText("THIS BOOK BELONGS TO", {
+  const coverExplorerNames = familyPack?.children.length
+    ? familyPack.children.map((child, index) => pdfText(familyChildDisplayName(child, index))).join(" / ")
+    : "";
+  page.drawText(coverExplorerNames ? "MADE FOR" : "DRAW YOUR EXPLORER MARK", {
     x: MARGIN,
     y: 345,
     size: 9,
     font: fonts.bold,
     color: colors.muted,
   });
-  drawDottedLine(page, MARGIN, 280, 316, colors.line, 5, 4);
+  if (coverExplorerNames) {
+    drawWrappedText(page, coverExplorerNames, fonts, { x: MARGIN, y: 322, size: 11, font: fonts.bold, maxWidth: 236, maxLines: 2, lineHeight: 13, color: colors.ink });
+  } else {
+    drawDottedLine(page, MARGIN, 280, 316, colors.line, 5, 4);
+  }
   page.drawText("TRIP DATES", {
     x: MARGIN,
     y: 267,
@@ -1452,7 +1461,7 @@ function drawColoringActivityBoard(
   const noteWidth = (box.width - noteGap) / 2;
   page.drawRectangle({ x: box.x, y: notesY, width: noteWidth, height: notesHeight, color: colors.yellowSoft });
   page.drawRectangle({ x: box.x + noteWidth + noteGap, y: notesY, width: noteWidth, height: notesHeight, color: colors.coralSoft });
-  page.drawText("DID YOU KNOW?", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
+  page.drawText("LOCAL CLUES", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
   spec.facts.slice(0, 3).forEach((fact, index) => {
     const factY = notesY + notesHeight - 28 - index * 13;
     page.drawCircle({ x: box.x + 12, y: factY + 2, size: 2, color: colors.coral });
@@ -2085,7 +2094,7 @@ function drawActivityPage(
   const day = booklet.dayPlans[dayIndex];
   const accent = activityIndex === 0 ? colors.coral : colors.blue;
   const page = drawPageBase(document, fonts, `Day ${day.day}`, pageNumber, totalPages, accent);
-  drawPill(page, `DAY ${day.day} / GAME ${activityIndex + 1} OF 2`, fonts, MARGIN, 765, activityIndex === 0 ? colors.coralSoft : colors.blueSoft, accent);
+  drawPill(page, `DAY ${day.day} / ${activityIndex === 0 ? "IN THE PLACE" : "SIT-DOWN PAGE"}`, fonts, MARGIN, 765, activityIndex === 0 ? colors.coralSoft : colors.blueSoft, accent);
   drawWrappedText(page, day.theme, fonts, {
     x: MARGIN,
     y: 735,
@@ -2218,6 +2227,62 @@ function drawActivityPage(
   }
 }
 
+function drawQueuePage(
+  document: PDFDocument,
+  fonts: Fonts,
+  booklet: GeneratedBookletData,
+  dayIndex: number,
+  pageNumber: number,
+  totalPages: number,
+) {
+  const day = booklet.dayPlans[dayIndex];
+  const queue = day.slots.whileYouWait;
+  const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, colors.yellow);
+  drawPill(page, `DAY ${day.day} / BEFORE YOU GO`, fonts, MARGIN, 765, colors.yellowSoft, colors.ink);
+  page.drawRectangle({ x: MARGIN, y: 690, width: PAGE_WIDTH - MARGIN * 2, height: 48, color: colors.blueSoft });
+  page.drawText("GROWN-UP", { x: MARGIN + 14, y: 721, size: 7, font: fonts.bold, color: colors.blue });
+  drawWrappedText(page, day.slots.beforeYouGo, fonts, {
+    x: MARGIN + 14,
+    y: 706,
+    size: 9,
+    maxWidth: PAGE_WIDTH - MARGIN * 2 - 28,
+    maxLines: 2,
+    lineHeight: 11,
+    color: colors.muted,
+  });
+  drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: 660, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
+  drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: 620, size: 25, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 28 });
+  drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: 575, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
+
+  const count = Math.min(20, queue.countTo);
+  const columns = 5;
+  const gap = 18;
+  const diameter = 40;
+  const gridWidth = columns * diameter + (columns - 1) * gap;
+  const startX = (PAGE_WIDTH - gridWidth) / 2 + diameter / 2;
+  const rows = Math.ceil(count / columns);
+  const startY = 500;
+  for (let index = 0; index < count; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const x = startX + column * (diameter + gap);
+    const y = startY - row * (diameter + 18);
+    page.drawCircle({ x, y, size: diameter / 2, borderColor: colors.blue, borderWidth: 1.5, color: colors.white });
+  }
+  drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: startY - rows * (diameter + 18) + 8, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.blue });
+
+  if (day.slots.factCard.length === 3) {
+    const boxY = 92;
+    page.drawRectangle({ x: MARGIN, y: boxY, width: PAGE_WIDTH - MARGIN * 2, height: 190, color: colors.yellowSoft, borderColor: colors.softLine, borderWidth: 0.8 });
+    page.drawText("DID YOU KNOW?", { x: MARGIN + 16, y: boxY + 164, size: 8, font: fonts.bold, color: colors.coral });
+    day.slots.factCard.forEach((fact, index) => {
+      const y = boxY + 132 - index * 43;
+      page.drawCircle({ x: MARGIN + 18, y: y + 3, size: 3, color: colors.coral });
+      drawWrappedText(page, fact, fonts, { x: MARGIN + 31, y: y + 7, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2 - 48, maxLines: 2, lineHeight: 12, color: colors.ink });
+    });
+  }
+}
+
 function answerFor(activity: Activity, age: number) {
   switch (activity.gameType) {
     case "word_search":
@@ -2262,7 +2327,9 @@ function drawAnswerKey(
     color: colors.muted,
   });
   const entries = booklet.dayPlans.flatMap((day) =>
-    day.activities.map((activity, index) => ({ day: day.day, index, activity })),
+    day.activities
+      .map((activity, index) => ({ day: day.day, index, activity }))
+      .filter((entry) => entry.activity.answerMode === "closed"),
   );
   const rowsPerColumn = Math.ceil(entries.length / 2);
   const columnWidth = (PAGE_WIDTH - MARGIN * 2 - 18) / 2;
@@ -2519,13 +2586,16 @@ function drawMissionCardsPage(
   page.drawText("CUT-OUT MISSION CARDS", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.blue });
   drawWrappedText(page, "Pick one when the day needs a spark", fonts, { x: MARGIN, y: 733, size: 26, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 29 });
   drawWrappedText(page, "Keep the cards together or cut along the lines. The goal is to notice, connect, and enjoy the place, not to finish everything.", fonts, { x: MARGIN, y: 665, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
-  const cards = Array.from({ length: 4 }, (_, index) => {
-    const dayIndex = index % Math.max(1, booklet.dayPlans.length);
-    const day = booklet.dayPlans[dayIndex];
+  const seenCards = new Set<string>();
+  const cards = booklet.dayPlans.flatMap((day, dayIndex) => {
     const plan = pack.mechanicsByDay[dayIndex]?.mechanics || ["spot"];
-    const mechanic = plan[index % plan.length] || "spot";
-    return { day, mechanic };
-  });
+    return plan.flatMap((mechanic) => {
+      const key = `${day.day}|${mechanic}`;
+      if (seenCards.has(key)) return [];
+      seenCards.add(key);
+      return [{ day, mechanic }];
+    });
+  }).slice(0, 4);
   const gap = 16;
   const width = (PAGE_WIDTH - MARGIN * 2 - gap) / 2;
   const height = 210;
@@ -2569,7 +2639,7 @@ function drawBadgeTrackerPage(
 }
 
 export function bookletPdfPageCount(booklet: GeneratedBookletData, includeFamilyPack = false) {
-  return booklet.dayPlans.length * 2 + 5 + (includeFamilyPack ? 4 : 0);
+  return bookletPageTotal(booklet.dayPlans, includeFamilyPack);
 }
 
 export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
@@ -2593,6 +2663,7 @@ export async function createBookletPdf(
     ...inputBooklet,
     ...validateBookletDraft(inputBooklet, inputBooklet.days, inputBooklet.age),
   };
+  assertBookletQa(booklet);
   const document = await PDFDocument.create();
   const fonts: Fonts = {
     regular: await document.embedFont(StandardFonts.Helvetica),
@@ -2633,21 +2704,24 @@ export async function createBookletPdf(
   drawCover(document, fonts, booklet, totalPages, familyPack);
   drawGuide(document, fonts, booklet, totalPages, familyPack);
   let pageNumber = 3;
-  booklet.dayPlans.forEach((day, dayIndex) => {
-    day.activities.forEach((activity, activityIndex) => {
+  bookletDayPageEntries(booklet.dayPlans).forEach((entry) => {
+    const dayIndex = booklet.dayPlans.indexOf(entry.day);
+    if (entry.kind === "queue") {
+      drawQueuePage(document, fonts, booklet, dayIndex, pageNumber, totalPages);
+    } else {
       drawActivityPage(
         document,
         fonts,
         booklet,
-        activity,
+        entry.activity,
         dayIndex,
-        activityIndex,
+        entry.activityIndex,
         pageNumber,
         totalPages,
         coloringArtwork,
       );
-      pageNumber += 1;
-    });
+    }
+    pageNumber += 1;
   });
   drawAnswerKey(document, fonts, booklet, pageNumber, totalPages);
   pageNumber += 1;

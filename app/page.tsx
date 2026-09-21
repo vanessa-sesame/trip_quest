@@ -36,6 +36,7 @@ import {
   isGeneratedBookletData,
 } from "./booklet-ai";
 import { ActivityGame } from "./activity-game";
+import { bookletCorePageTitles, bookletDayPageEntries } from "./booklet-pages";
 import {
   GenerationStreamError,
   readGenerationResponse,
@@ -312,16 +313,7 @@ export default function Home() {
     ? sampleTitles.map((title, index) =>
         isBookletPageLocked(index) ? "Locked printable page" : title,
       )
-    : [
-        "Cover",
-        "Quick note for grown-ups",
-        ...generatedDays.flatMap((day) =>
-          day.activities.slice(0, 2).map((activity) => activity.title),
-        ),
-        "Grown-up answer notes",
-        "Memory Museum",
-        "Certificate",
-      ];
+    : bookletCorePageTitles(generatedDays);
   const familyPageTitles = [
     "Family relay & interest lens",
     "Family mission map",
@@ -1121,8 +1113,8 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {generatedBooklet ? generatedBooklet.days * 2 + 9 : reportPageTitles.length + 1} high-resolution A4 pages</li>
-              <li><Check size={17} /> {isSingaporeSample ? trip.days : trip.days * 2} itinerary-matched game pages</li>
+              <li><Check size={17} /> {reportPageTitles.length} high-resolution A4 pages</li>
+              <li><Check size={17} /> {trip.days * 3} itinerary-matched activity pages</li>
               <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
               <li><Check size={17} /> Grown-up answer notes</li>
               <li><Check size={17} /> Memory page and explorer certificate</li>
@@ -1469,13 +1461,7 @@ function GeneratedPage({
   profile: GeneratedBookletProfile;
   days: ReturnType<typeof buildBooklet>;
 }) {
-  const activityPages = days.flatMap((day) =>
-    day.activities.slice(0, 2).map((activity, activityIndex) => ({
-      activity,
-      activityIndex,
-      day,
-    })),
-  );
+  const activityPages = bookletDayPageEntries(days);
 
   if (page === 0) {
     return (
@@ -1552,11 +1538,35 @@ function GeneratedPage({
     );
   }
 
-  const { activity, activityIndex, day } = activityPages[page - 2];
+  const pageEntry = activityPages[page - 2];
+  if (pageEntry.kind === "queue") {
+    const { day } = pageEntry;
+    return (
+      <article className="generated-sheet generated-day generated-queue-page">
+        <span>Day {day.day} · Before you go</span>
+        <p className="grown-up-line">{day.slots.beforeYouGo}</p>
+        <p className="game-place">{day.landmark.display}</p>
+        <h3>{day.slots.whileYouWait.title}</h3>
+        <p className="game-instructions">{day.slots.whileYouWait.instruction}</p>
+        <div className="queue-counter" aria-label={`${day.slots.whileYouWait.countLabel}, up to ${day.slots.whileYouWait.countTo}`}>
+          {Array.from({ length: Math.min(20, day.slots.whileYouWait.countTo) }, (_, index) => (
+            <span key={index} aria-hidden="true" />
+          ))}
+        </div>
+        {day.slots.factCard.length === 3 ? (
+          <section className="fact-card">
+            <strong>Did you know?</strong>
+            <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+          </section>
+        ) : null}
+      </article>
+    );
+  }
+  const { activity, activityIndex, day } = pageEntry;
   return (
     <article className="generated-sheet generated-day generated-game-page">
-      <span>Day {day.day} · Game {activityIndex + 1} of 2</span>
-      <p className="game-place">{day.theme}</p>
+      <span>Day {day.day} · {activityIndex === 0 ? "In the place" : "Sit-down page"}</span>
+      <p className="game-place">{day.landmark.place}</p>
       <h3>{activity.title}</h3>
       <small className="game-kind">{activity.kind}</small>
       <p className="game-instructions">{activity.body}</p>

@@ -16,7 +16,7 @@ test("a generated booklet becomes a complete A4 PDF", async () => {
 
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
-  assert.equal(document.getPageCount(), 15);
+  assert.equal(document.getPageCount(), 20);
   assert.equal(document.getTitle(), "Singapore Explorer - Age 7");
   for (const page of document.getPages()) {
     assert.ok(Math.abs(page.getWidth() - 595.28) < 0.1);

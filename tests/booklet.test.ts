@@ -55,8 +55,8 @@ test("activity format and difficulty change across developmental age levels", ()
   const investigator = bookletText(10, "Tokyo");
   const correspondent = bookletText(13, "Tokyo");
 
-  assert.match(little, /A grown-up reads|grown-up writes your exact words/);
-  assert.match(navigator, /7-point challenge|five-star scorecard/);
+  assert.match(little, /A grown-up reads|grown-up writes your words/);
+  assert.match(navigator, /three single-word labels|exact location of your answer/);
   assert.match(investigator, /pieces of evidence|annotated version/);
   assert.match(correspondent, /field note|fact, inference, and opinion|trade-off/);
   assert.equal(getAgeBand(4).label, "Little Explorer");
@@ -74,8 +74,8 @@ test("every activity in a full 14-day booklet has a distinct creative title", ()
     booklet.flatMap((day) => day.activities.map((activity) => activity.kind)),
   );
 
-  assert.equal(titles.length, 42);
-  assert.equal(new Set(titles).size, 42);
+  assert.equal(titles.length, 28);
+  assert.equal(new Set(titles).size, 28);
   assert.ok(kinds.size >= 20);
   assert.doesNotMatch(JSON.stringify(booklet), /Map the Moment|Local Detail Story/);
 });
@@ -320,7 +320,7 @@ test("named sibling missions use richer roles and match sketch work to the inter
     { id: "b", name: "Chris", age: 7, readingLevel: "early-reader", interests: ["drawing"], avoid: [], preferredMechanics: [] },
     { id: "c", name: "Vanessa", age: 12, readingLevel: "confident-reader", interests: [], avoid: [], preferredMechanics: [] },
   ]);
-  assert.match(missions.dayPlans[0].siblingMission || "", /Scout|Storyteller/);
+  assert.match(missions.dayPlans[0].siblingMission || "", /Counter|Comparer|Estimator/);
   assert.match(missions.dayPlans[0].siblingMission || "", /Edwin|Chris|Vanessa/);
   assert.match(missions.dayPlans[1].siblingMission || "", /Chris \/ Sketcher/);
   assert.doesNotMatch(JSON.stringify(missions), /younger sibling|older sibling/i);

@@ -2,7 +2,7 @@ import type { DayPlan } from "./booklet.ts";
 import type { BookletObjectStorage } from "./booklet-storage.ts";
 import { curatedColoringImagePath } from "./coloring.ts";
 
-const ILLUSTRATION_VERSION = "v1";
+const ILLUSTRATION_VERSION = "v2";
 const encoder = new TextEncoder();
 
 export type IllustrationRuntime = {
@@ -27,7 +27,7 @@ function printableArtPrompt(destination: string, day: DayPlan, activity: DayPlan
   const details = (activity.items || []).map((item) => `${item.label}: ${item.clue}`).join("; ");
   return [
     "Create a premium black-and-white printable children's travel-booklet illustration.",
-    `The exact subject is ${activity.title}, at ${day.theme}, in ${destination}.`,
+    `The exact place is ${day.landmark?.place || day.theme}, in ${destination}. The page activity is ${activity.title}.`,
     `It is for a ${age}-year-old child.`,
     `Use these researched local details where visually accurate: ${details}.`,
     "The real landmark or local subject must be immediately recognizable and geographically accurate, not a generic substitute.",
@@ -95,6 +95,7 @@ export async function addBookletIllustrations(
         destination: input.destination.toLocaleLowerCase(),
         ageBand: input.age <= 5 ? "preschool" : input.age <= 8 ? "early-reader" : "older-child",
         day: day.theme,
+        landmark: day.landmark?.place,
         title: activity.title,
         items: activity.items,
       });
@@ -123,7 +124,15 @@ export async function addBookletIllustrations(
         ? { ...activity, illustrationPath: `/api/illustration?key=${encodeURIComponent(key)}` }
         : activity);
     }
-    dayPlans.push({ ...day, activities });
+    dayPlans.push({
+      ...day,
+      activities,
+      slots: {
+        ...day.slots,
+        inThePlace: activities[0],
+        sitDown: activities[1],
+      },
+    });
   }
   return dayPlans;
 }
@@ -133,7 +142,7 @@ export function illustrationStorageKey(path: string) {
     const url = new URL(path, "https://tripquest.invalid");
     if (url.pathname !== "/api/illustration") return null;
     const key = url.searchParams.get("key") || "";
-    return /^illustrations\/v1\/[a-f0-9]{64}\/artwork\.png$/i.test(key) ? key : null;
+    return /^illustrations\/v(?:1|2)\/[a-f0-9]{64}\/artwork\.png$/i.test(key) ? key : null;
   } catch {
     return null;
   }

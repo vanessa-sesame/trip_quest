@@ -45,12 +45,19 @@ export function createBookletPreview(
         dayIndex === 0
           ? day.mission
           : "Included in the complete printable booklet.",
-      activities: day.activities.map((activity, activityIndex) => {
-        const pageIndex = 2 + dayIndex * 2 + activityIndex;
-        return isBookletPageLocked(pageIndex, false)
+      slots: {
+        ...day.slots,
+        inThePlace: isBookletPageLocked(3 + dayIndex * 3, false)
           ? lockedActivity()
-          : activity;
-      }),
+          : day.slots.inThePlace,
+        sitDown: isBookletPageLocked(4 + dayIndex * 3, false)
+          ? lockedActivity()
+          : day.slots.sitDown,
+      },
+      activities: [
+        isBookletPageLocked(3 + dayIndex * 3, false) ? lockedActivity() : day.slots.inThePlace,
+        isBookletPageLocked(4 + dayIndex * 3, false) ? lockedActivity() : day.slots.sitDown,
+      ],
     })),
   };
 }

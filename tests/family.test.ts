@@ -32,7 +32,7 @@ test("family profiles normalize ages, reading levels, and bounded tags", () => {
   assert.doesNotMatch(familyPromptSummary(children), /Mia|Leo/);
   assert.equal(defaultFamilyWorkspace().children.length, 1);
   assert.equal(defaultFamilyWorkspace().children[0].name, "Your child");
-  assert.equal(familyChildDisplayName({ ...children[0], name: "Explorer" }, 0), "Your child");
+  assert.equal(familyChildDisplayName({ ...children[0], name: "Explorer" }, 0), "Explorer 1");
   assert.deepEqual(parseFamilyTags("dinosaurs; Pokemon\ntrains, drawing"), [
     "dinosaurs",
     "pokemon",
@@ -123,6 +123,6 @@ test("family PDF adds a usable pack section without changing the base booklet", 
   });
   assert.equal((await PDFDocument.load(base)).getPageCount(), bookletPdfPageCount(booklet));
   assert.equal((await PDFDocument.load(family)).getPageCount(), bookletPdfPageCount(booklet, true));
-  assert.equal((await PDFDocument.load(family)).getPageCount(), 19);
+  assert.equal((await PDFDocument.load(family)).getPageCount(), 24);
   assert.equal(familyPackPdfFilename(booklet), "tripquest-singapore-age-7-family-pack.pdf");
 });

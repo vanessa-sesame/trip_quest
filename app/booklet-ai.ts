@@ -404,6 +404,31 @@ function namedSiblingMission(children: FamilyChild[], dayIndex: number) {
   return `${assignments.join("; ")}. ${pattern.handoff}`.slice(0, 280);
 }
 
+function familyMission(children: FamilyChild[], day: DayPlan, dayIndex: number) {
+  const place = day.landmark?.short || "the place";
+  if (children.length === 1) {
+    const name = familyChildDisplayName(children[0], 0);
+    const childJob = children[0].age <= 6
+      ? `points and counts one repeated detail at ${place}`
+      : children[0].age <= 9
+        ? `finds the real clue at ${place}`
+        : `records the strongest evidence at ${place}`;
+    return `${name}: ${childJob}. Grown-up: tally or read the prompt. Swap who explains the result.`;
+  }
+  const ages = children.map((child) => child.age);
+  if (Math.max(...ages) - Math.min(...ages) <= 2) return namedSiblingMission(children, dayIndex);
+  const tasks = children.map((child, index) => {
+    const name = familyChildDisplayName(child, index);
+    if (child.interests.some((interest) => /draw|art|paint|craft|sketch/i.test(interest)) || child.preferredMechanics.includes("draw")) {
+      return `${name} / Sketcher: draw one real shape and label where it appears`;
+    }
+    if (child.age <= 6) return `${name} / Counter: count or point to the repeated detail`;
+    if (child.age <= 9) return `${name} / Comparer: compare two clues and label the difference`;
+    return `${name} / Estimator: estimate the total and explain the evidence`;
+  });
+  return `${tasks.join("; ")}. Combine the answers at ${place}.`.slice(0, 280);
+}
+
 export function applySiblingPlan(
   draft: BookletDraft,
   familyOrHasSiblings: FamilyChild[] | boolean,
@@ -440,8 +465,8 @@ export function applySiblingPlan(
   return {
     ...draft,
     dayPlans: draft.dayPlans.map((day, index) => {
-      if (family && family.length > 1) {
-        return { ...day, siblingMission: namedSiblingMission(family, index) };
+      if (family?.length) {
+        return { ...day, siblingMission: familyMission(family, day, index) };
       }
       const existing = day.siblingMission?.trim();
       const normalized = existing?.toLocaleLowerCase();
@@ -632,11 +657,17 @@ export function validateBookletDraft(
     }
 
     const day = dayValue as Record<string, unknown>;
-    if (!Array.isArray(day.activities) || day.activities.length !== 2) {
-      throw new Error(`Day ${dayIndex + 1} must contain exactly two activities.`);
+    const slotValue = day.slots && typeof day.slots === "object"
+      ? day.slots as Record<string, unknown>
+      : null;
+    const rawActivities = slotValue
+      ? [slotValue.inThePlace, slotValue.sitDown]
+      : day.activities;
+    if (!Array.isArray(rawActivities) || rawActivities.length !== 2) {
+      throw new Error(`Day ${dayIndex + 1} must contain an in-place and a sit-down activity.`);
     }
 
-    const activities = day.activities.map((activityValue, activityIndex) => {
+    const activities = rawActivities.map((activityValue, activityIndex) => {
       if (!activityValue || typeof activityValue !== "object") {
         throw new Error(
           `Activity ${activityIndex + 1} on day ${dayIndex + 1} is missing.`,
@@ -772,13 +803,66 @@ export function validateBookletDraft(
         ),
         gameType,
         items,
-        ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv1%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
+        requiresPresence: activityIndex === 0 && Boolean(slotValue)
+          ? activity.requiresPresence === true
+          : Boolean(activity.requiresPresence),
+        answerMode: activity.answerMode === "closed" ? "closed" : "open",
+        ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
           ? { illustrationPath: activity.illustrationPath }
           : {}),
       };
     });
 
+    const landmarkValue = day.landmark && typeof day.landmark === "object"
+      ? day.landmark as Record<string, unknown>
+      : null;
+    const landmark = landmarkValue
+      ? {
+          display: requireText(landmarkValue.display, `Day ${dayIndex + 1} landmark display`, 3, 100),
+          short: requireText(landmarkValue.short, `Day ${dayIndex + 1} landmark short name`, 2, 40),
+          place: requireText(landmarkValue.place, `Day ${dayIndex + 1} landmark place`, 2, 70),
+        }
+      : {
+          display: requireText(day.theme, `Day ${dayIndex + 1} theme`, 4, 80),
+          short: "this place",
+          place: requireText(day.theme, `Day ${dayIndex + 1} theme`, 4, 80),
+        };
+    const queueValue = slotValue?.whileYouWait && typeof slotValue.whileYouWait === "object"
+      ? slotValue.whileYouWait as Record<string, unknown>
+      : null;
+    const rawFacts = slotValue && Array.isArray(slotValue.factCard)
+      ? slotValue.factCard.filter((fact): fact is string => typeof fact === "string")
+      : [];
+    const factCard = rawFacts.length === 3
+      ? rawFacts.map((fact, factIndex) => requireText(fact, `Fact ${factIndex + 1} on day ${dayIndex + 1}`, 4, 120))
+      : [];
+    const slots = {
+      beforeYouGo: slotValue
+        ? requireText(slotValue.beforeYouGo, `Day ${dayIndex + 1} grown-up note`, 4, 180)
+        : `Grown-up: point out ${landmark.short} first.`,
+      whileYouWait: queueValue
+        ? {
+            title: requireText(queueValue.title, `Day ${dayIndex + 1} queue title`, 3, 55),
+            instruction: requireText(queueValue.instruction, `Day ${dayIndex + 1} queue instruction`, 4, 180),
+            countLabel: requireText(queueValue.countLabel, `Day ${dayIndex + 1} queue count label`, 2, 40),
+            countTo: Number.isInteger(queueValue.countTo) && Number(queueValue.countTo) >= 1 && Number(queueValue.countTo) <= 20
+              ? Number(queueValue.countTo)
+              : 5,
+            required: queueValue.required === true,
+          }
+        : {
+            title: "Count While You Wait",
+            instruction: `Count one repeated detail near ${landmark.short}.`,
+            countLabel: "I counted",
+            countTo: expectedAge && expectedAge <= 4 ? 5 : 10,
+            required: false,
+          },
+      inThePlace: activities[0],
+      sitDown: activities[1],
+      factCard,
+    };
     const normalizedDay: DayPlan = {
+      ...(slotValue ? { architectureVersion: 2 as const } : {}),
       day: dayIndex + 1,
       theme: requireText(day.theme, `Day ${dayIndex + 1} theme`, 4, 80),
       focusLabel: requireText(
@@ -793,6 +877,8 @@ export function validateBookletDraft(
         20,
         360,
       ),
+      landmark,
+      slots,
       activities,
     };
     if (typeof day.interestHook === "string") {

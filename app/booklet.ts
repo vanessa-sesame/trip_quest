@@ -29,15 +29,43 @@ export type Activity = {
   gameType?: GameType;
   items?: GameItem[];
   illustrationPath?: string;
+  requiresPresence?: boolean;
+  answerMode?: "closed" | "open";
+};
+
+export type LandmarkNames = {
+  display: string;
+  short: string;
+  place: string;
+};
+
+export type QueueSlot = {
+  title: string;
+  instruction: string;
+  countLabel: string;
+  countTo: number;
+  required: boolean;
+};
+
+export type DaySlots = {
+  beforeYouGo: string;
+  whileYouWait: QueueSlot;
+  inThePlace: Activity;
+  sitDown: Activity;
+  factCard: string[];
 };
 
 export type DayPlan = {
+  architectureVersion?: 2;
   day: number;
   theme: string;
   focusLabel: string;
   mission: string;
   interestHook?: string;
   siblingMission?: string;
+  landmark: LandmarkNames;
+  slots: DaySlots;
+  /** Backward-compatible alias. New renderers use slots. */
   activities: Activity[];
 };
 
@@ -1014,6 +1042,112 @@ function makeActivities(
   }));
 }
 
+function cleanLandmarkPlace(value: string, destination: string) {
+  const cleaned = value
+    .replace(/^\s*(?:a|an|the)\s+/i, "")
+    .replace(/\s+(?:from|near|with|at)\s+.+$/i, "")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  return cleaned.length >= 3 ? cleaned : destination;
+}
+
+function landmarkNames(primary: string, theme: string, destination: string): LandmarkNames {
+  const place = cleanLandmarkPlace(primary, destination);
+  const short = /tower/i.test(place)
+    ? "the tower"
+    : /garden|park/i.test(place)
+      ? "the garden"
+      : /museum|gallery/i.test(place)
+        ? "the museum"
+        : /market|hawker/i.test(place)
+          ? "the market"
+          : "this place";
+  return {
+    display: `${place}: ${theme}`,
+    short,
+    place,
+  };
+}
+
+function landmarkFacts(names: LandmarkNames) {
+  const place = names.place.toLocaleLowerCase();
+  if (/eiffel/.test(place)) {
+    return [
+      "The tower uses about 2.5 million metal rivets.",
+      "It can grow about 15 centimetres taller in summer.",
+      "It opened in 1889 for a world fair.",
+    ];
+  }
+  if (/merlion/.test(place)) {
+    return [
+      "The statue is 8.6 metres tall.",
+      "Its fish body recalls Singapore's early fishing village.",
+      "Its lion head represents Singapore's historic name.",
+    ];
+  }
+  if (/supertree/.test(place)) {
+    return [
+      "The tallest Supertree is 50 metres high.",
+      "Eighteen Supertrees stand across Gardens by the Bay.",
+      "Some Supertrees collect solar energy for their lights.",
+    ];
+  }
+  return [];
+}
+
+function queueIsExpected(value: string) {
+  return /tower|museum|gallery|palace|castle|temple|mosque|theme park|aquarium|zoo|garden|monument|cable car|observation/i.test(value);
+}
+
+function buildDaySlots(
+  age: number,
+  names: LandmarkNames,
+  primary: string,
+  activities: Activity[],
+): DaySlots {
+  const sitDownBase = activities[0];
+  const inPlaceBase = activities[1] || activities[0];
+  const inThePlace: Activity = {
+    ...inPlaceBase,
+    body: age <= 6
+      ? `At ${names.place}, point to the real detail before answering.`
+      : `Use evidence you can see at ${names.place}; record the exact location of your answer.`,
+    requiresPresence: true,
+    answerMode: "open",
+  };
+  const sitDown: Activity = {
+    ...sitDownBase,
+    body: age <= 4
+      ? `Draw one shape from ${names.short}. A grown-up writes your words.`
+      : age <= 6
+        ? `Draw one real shape from ${names.short}. Add one colour and one label.`
+        : age <= 9
+          ? `Sketch one real detail from ${names.short}, then add three single-word labels.`
+          : sitDownBase.body,
+    requiresPresence: false,
+    answerMode: "open",
+  };
+  return {
+    beforeYouGo: age <= 4
+      ? `Grown-up: point out ${names.short} first.`
+      : age <= 6
+        ? `Grown-up: point out ${names.short} first and promise one close look.`
+        : `Notice ${names.short} before explaining it; let the child form a first theory.`,
+    whileYouWait: {
+      title: "Count While You Wait",
+      instruction: age <= 6
+        ? `How many moving things can you see near ${names.short}?`
+        : `Count one repeated feature near ${names.short}; compare your total with a grown-up.`,
+      countLabel: "I counted",
+      countTo: age <= 4 ? 5 : age <= 6 ? 10 : 20,
+      required: queueIsExpected(`${primary} ${names.place}`),
+    },
+    inThePlace,
+    sitDown,
+    factCard: landmarkFacts(names),
+  };
+}
+
 export function buildBooklet(age: number, destination: string, days: number): DayPlan[] {
   const safeAge = sanitizeAge(age);
   const safeDays = sanitizeDays(days);
@@ -1026,13 +1160,19 @@ export function buildBooklet(age: number, destination: string, days: number): Da
     const details = profile[blueprint.list];
     const primary = details[index % details.length];
     const secondary = details[(index + 1) % details.length];
+    const activities = makeActivities(day, safeAge, name, profile, primary, secondary);
+    const landmark = landmarkNames(primary, blueprint.theme, name);
+    const slots = buildDaySlots(safeAge, landmark, primary, activities);
 
     return {
+      architectureVersion: 2,
       day,
       theme: blueprint.theme,
       focusLabel: blueprint.focusLabel,
       mission: makeMission(day, name, profile, blueprint, primary, secondary),
-      activities: makeActivities(day, safeAge, name, profile, primary, secondary),
+      landmark,
+      slots,
+      activities: [slots.inThePlace, slots.sitDown],
     };
   });
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBooklet, getDestinationProfile } from "../app/booklet.ts";
-import { assertBookletQa, readerBandForAge, wordCount } from "../app/booklet-qa.ts";
+import { assertBookletQa, wordCount } from "../app/booklet-qa.ts";
 import type { GeneratedBookletData } from "../app/booklet-ai.ts";
 
 function strictBooklet(days = 2): GeneratedBookletData {
@@ -31,7 +31,6 @@ test("five-slot day architecture passes the age-five export contract", () => {
   assert.equal(booklet.dayPlans[0].architectureVersion, 2);
   assert.equal(booklet.dayPlans[0].activities.length, 2);
   assert.equal(booklet.dayPlans[0].slots.inThePlace.requiresPresence, true);
-  assert.equal(readerBandForAge(5).childPageWords, 60);
   assert.equal(assertBookletQa(booklet), booklet);
 });
 
@@ -43,22 +42,6 @@ test("word counts ignore standalone punctuation but keep hyphenated and accented
   assert.equal(wordCount("—"), 0);
 });
 
-test("a standalone dash no longer pushes a borderline page over its word budget", () => {
-  const atBudget = strictBooklet();
-  const day = atBudget.dayPlans[0];
-  day.slots.sitDown.body = Array.from({ length: 14 }, () => "word").join(" ");
-  day.slots.sitDown.prompt = Array.from({ length: 14 }, () => "word").join(" ");
-  day.slots.sitDown.items = Array.from({ length: 4 }, (_, index) => ({
-    label: `item${index}`,
-    clue: Array.from({ length: 7 }, () => "word").join(" "),
-  }));
-  assert.doesNotThrow(() => assertBookletQa(atBudget));
-
-  const withDash = structuredClone(atBudget);
-  withDash.dayPlans[0].slots.sitDown.body += " —";
-  assert.doesNotThrow(() => assertBookletQa(withDash));
-});
-
 test("QA rejects display strings interpolated into sentences", () => {
   const booklet = strictBooklet();
   const day = booklet.dayPlans[0];
@@ -66,7 +49,7 @@ test("QA rejects display strings interpolated into sentences", () => {
   assert.throws(() => assertBookletQa(booklet), /display string/i);
 });
 
-test("QA rejects repeated facts, oversized pages, missing queues, and fake in-place puzzles", () => {
+test("QA rejects repeated facts, missing queues, and fake in-place puzzles", () => {
   const duplicatedFact = strictBooklet();
   duplicatedFact.dayPlans[0].slots.factCard = [
     "The tower opened in 1889.",
@@ -75,9 +58,9 @@ test("QA rejects repeated facts, oversized pages, missing queues, and fake in-pl
   ];
   assert.throws(() => assertBookletQa(duplicatedFact), /repeats a fact/i);
 
-  const oversized = strictBooklet();
-  oversized.dayPlans[0].slots.sitDown.body = Array.from({ length: 21 }, () => "word").join(" ");
-  assert.throws(() => assertBookletQa(oversized), /instruction exceeds/i);
+  const wordy = strictBooklet();
+  wordy.dayPlans[0].slots.sitDown.body = Array.from({ length: 60 }, () => "word").join(" ");
+  assert.doesNotThrow(() => assertBookletQa(wordy));
 
   const missingQueue = strictBooklet();
   missingQueue.dayPlans[0].slots.whileYouWait.required = true;

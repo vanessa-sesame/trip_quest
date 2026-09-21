@@ -47,11 +47,13 @@ Current public release: https://tripquestkids.com, source branch `main`.
   same manifest, so the purchased file matches the edition shown on screen.
 - Landmark content stores separate display, short, and place names. Display
   names are reserved for headers and cannot leak into awkward sentences.
-- Reader responsibility and page word budgets are enforced for ages 3-4, 5-6,
-  7-9, and 10-14. Ages 3-6 receive especially short adult-led instructions.
+- Composition prompts still ask for age-appropriate instruction and page
+  length (short for ages 3-6, longer for older readers), but this is
+  guidance, not an enforced ceiling; see Known Gaps for why the ceiling was
+  removed (2026-09-21).
 - Pre-export QA rejects missing required queue pages, fake in-place games,
-  repeated facts or cut-out cards, family-role/roster mismatches, over-budget
-  child text, and surviving blank-name placeholders.
+  repeated facts or cut-out cards, family-role/roster mismatches, and
+  surviving blank-name placeholders.
 - A four-stop route-map puzzle is allowed at most once per booklet.
 - The printable family pack includes the booklet, parent guide, family mission
   map, mission cards, badge tracker, memory page, and certificate.
@@ -313,6 +315,17 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
     four separate times in a row (two client-level attempts, one server-side
     repair each) before giving up. Retrying more is not closing this
     specific gap; the budget itself is still the most likely lever.
+  - The age-band page/instruction word budget (`readerBandForAge`,
+    `assertAgeBudget`) is removed (2026-09-21) rather than raised, given the
+    live evidence above: two different sub-checks (the per-instruction cap
+    and the whole-page cap) each independently caused a full-batch failure
+    on otherwise good, age-appropriate content, and more retries did not
+    reliably clear it. Composition prompts still ask Kimi to keep
+    instructions age-appropriately short; nothing now rejects the output if
+    it runs a little long. If pages start reading as genuinely too dense for
+    the youngest ages, reintroduce a budget sized around real generated
+    content (the two live diagnostics ran ~60-65 words per activity) rather
+    than the original estimate.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

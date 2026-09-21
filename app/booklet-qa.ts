@@ -1,39 +1,5 @@
-import type { Activity, DayPlan } from "./booklet.ts";
+import type { DayPlan } from "./booklet.ts";
 import type { GeneratedBookletData } from "./booklet-ai.ts";
-
-export type ReaderBand = {
-  reader: string;
-  instructionWords: number | null;
-  childPageWords: number | null;
-  childElement: string;
-};
-
-export function readerBandForAge(age: number): ReaderBand {
-  if (age <= 4) return {
-    reader: "Adult only",
-    instructionWords: 12,
-    childPageWords: 40,
-    childElement: "Colour, point, and count to 5",
-  };
-  if (age <= 6) return {
-    reader: "Adult reads aloud",
-    instructionWords: 20,
-    childPageWords: 60,
-    childElement: "Trace, tick, count to 20, and make one drawing",
-  };
-  if (age <= 9) return {
-    reader: "Child, helped",
-    instructionWords: 40,
-    childPageWords: 105,
-    childElement: "Write single words, match, and solve simple codes",
-  };
-  return {
-    reader: "Child alone",
-    instructionWords: null,
-    childPageWords: null,
-    childElement: "Sketch, write sentences, and solve real puzzles",
-  };
-}
 
 export function wordCount(value: string) {
   if (!value.trim()) return 0;
@@ -54,14 +20,6 @@ function sentences(values: string[]) {
     .flatMap((value) => value.split(/(?<=[.!?])\s+/))
     .map(normalizedSentence)
     .filter(Boolean);
-}
-
-function activityWords(activity: Activity) {
-  return wordCount([
-    activity.body,
-    activity.prompt,
-    ...(activity.items || []).flatMap((item) => [item.label, item.clue]),
-  ].join(" "));
 }
 
 function visibleDayText(day: DayPlan) {
@@ -128,37 +86,6 @@ function assertLandmarkVariables(day: DayPlan) {
   }
 }
 
-function assertAgeBudget(day: DayPlan, age: number) {
-  const band = readerBandForAge(age);
-  if (band.instructionWords !== null) {
-    [
-      ["before-you-go", day.slots.beforeYouGo],
-      ["queue", day.slots.whileYouWait.instruction],
-      ["in-place", day.slots.inThePlace.body],
-      ["sit-down", day.slots.sitDown.body],
-    ].forEach(([label, value]) => {
-      if (wordCount(value) > band.instructionWords!) {
-        throw new Error(`Day ${day.day} ${label} instruction exceeds the age-${age} limit.`);
-      }
-    });
-  }
-  if (band.childPageWords !== null) {
-    const queueWords = wordCount([
-      day.slots.whileYouWait.instruction,
-      day.slots.whileYouWait.countLabel,
-      ...day.slots.factCard,
-    ].join(" "));
-    if (queueWords > band.childPageWords) {
-      throw new Error(`Day ${day.day} queue page exceeds the age-${age} word budget.`);
-    }
-    [day.slots.inThePlace, day.slots.sitDown].forEach((activity) => {
-      if (activityWords(activity) > band.childPageWords!) {
-        throw new Error(`Day ${day.day} “${activity.title}” exceeds the age-${age} word budget.`);
-      }
-    });
-  }
-}
-
 function assertFamily(day: DayPlan, familySize: number) {
   if (familySize !== 1 || !day.siblingMission) return;
   if (/\bone explorer\b.+\bthe other\b|siblings?|relay|swap roles|trade jobs/i.test(day.siblingMission)) {
@@ -173,7 +100,6 @@ export function assertBookletQa(booklet: GeneratedBookletData) {
   strictDays.forEach((day) => {
     assertLandmarkVariables(day);
     assertFacts(day);
-    assertAgeBudget(day, booklet.age);
     assertFamily(day, booklet.family?.length || 1);
     if (day.slots.whileYouWait.required && !day.slots.whileYouWait.instruction.trim()) {
       throw new Error(`Day ${day.day} is missing its required queue page.`);

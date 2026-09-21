@@ -198,14 +198,6 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.doesNotMatch(branded.dayPlans[0].mission, /Pokemon/i);
   assert.match(branded.dayPlans[0].interestHook || "", /creature-collecting/i);
   assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7));
-  assert.doesNotThrow(() => validateBookletDraft(draft, 1, 7, [{
-    day: 1,
-    gameTypes: ["word_search", "map_puzzle"],
-  }]));
-  assert.throws(() => validateBookletDraft(draft, 1, 7, [{
-    day: 1,
-    gameTypes: ["drawing", "scavenger_hunt"],
-  }]), /must use drawing/i);
   assert.throws(() => validateBookletDraft(draft, 1, 4), /not an age-4 game/i);
   assert.throws(() => validateBookletDraft(draft, 2), /exactly 2 day pages/i);
 

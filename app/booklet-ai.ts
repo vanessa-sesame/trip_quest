@@ -625,7 +625,6 @@ export function validateBookletDraft(
   value: unknown,
   expectedDays: number,
   expectedAge?: number,
-  expectedGameTypes?: GameTypePlanItem[],
 ): BookletDraft {
   if (!value || typeof value !== "object") {
     throw new Error("The generated booklet is not an object.");
@@ -762,13 +761,6 @@ export function validateBookletDraft(
           if (/\bsudoku\b/i.test(title)) title = renameActivityForMechanic(title, "Route Challenge");
           if (/\bsudoku\b/i.test(kind)) kind = "Route-planning logic";
         }
-      }
-
-      const plannedGameType = expectedGameTypes?.[dayIndex]?.gameTypes[activityIndex];
-      if (plannedGameType && gameType !== plannedGameType) {
-        throw new Error(
-          `Activity ${activityIndex + 1} on day ${dayIndex + 1} must use ${plannedGameType}, not ${gameType}.`,
-        );
       }
 
       const normalizedTitle = title.toLocaleLowerCase();

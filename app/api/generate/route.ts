@@ -795,10 +795,6 @@ async function composeBookletBatch(
     .map((plan, index) => `Day ${dayOffset + index + 1}: ${plan || "Open day - select a strong subject from the research"}`)
     .join("\n");
   const assignedGameTypes = gameTypePlan.slice(dayOffset, dayOffset + days);
-  const localGameTypePlan = assignedGameTypes.map((plan, index) => ({
-    ...plan,
-    day: index + 1,
-  }));
   const assignedInterests = interestPlan.filter((item) =>
     item.day > dayOffset && item.day <= dayOffset + days,
   );
@@ -921,7 +917,6 @@ ${research.notes}`,
         JSON.parse(message.content),
         days,
         age,
-        localGameTypePlan,
       );
       return applySiblingPlan(
         applyInterestPlan(draft, assignedInterests, dayOffset),
@@ -983,9 +978,6 @@ async function composeBooklet(
     }),
   );
   const drafts = await Promise.all(batches.map(async (batch, index) => {
-    const assignedGameTypes = gameTypePlan
-      .slice(batch.offset, batch.offset + batch.itinerary.length)
-      .map((plan, localIndex) => ({ ...plan, day: localIndex + 1 }));
     const assignedInterests = interestPlan.filter((item) =>
       item.day > batch.offset && item.day <= batch.offset + batch.itinerary.length,
     );
@@ -1002,7 +994,6 @@ async function composeBooklet(
             stored,
             batch.itinerary.length,
             age,
-            assignedGameTypes,
           );
           publish?.(`Restored days ${batch.offset + 1}-${batch.offset + batch.itinerary.length} from saved work…`);
           return applySiblingPlan(
@@ -1054,7 +1045,7 @@ async function composeBooklet(
       day: batches[batchIndex].offset + dayIndex + 1,
     }))),
   });
-  const validated = validateBookletDraft(combined, days, age, gameTypePlan);
+  const validated = validateBookletDraft(combined, days, age);
   return applySiblingPlan(applyInterestPlan(validated, interestPlan), hasSiblings);
 }
 

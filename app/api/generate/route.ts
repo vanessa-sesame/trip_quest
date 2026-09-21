@@ -98,6 +98,10 @@ const CLIENT_GENERATION_LIMIT = 8;
 const GLOBAL_GENERATION_LIMIT = 120;
 const MAX_ACTIVE_GENERATIONS = 4;
 const MAX_MEMORY_RESEARCH_ENTRIES = 128;
+
+function logGenerationTiming(cacheKey: string, stage: string, startedAt: number) {
+  console.info(`[TripQuest timing] ${stage} ${Date.now() - startedAt}ms ${cacheKey.slice(0, 10)}`);
+}
 const MAX_MEMORY_BOOKLET_ENTRIES = 64;
 
 const exactAgeGuidance: Record<number, string> = {
@@ -1127,6 +1131,7 @@ export async function POST(request: Request) {
       task = createGenerationTask(
         "Starting destination research…",
         async (publish) => {
+          const generationStartedAt = Date.now();
           const lockOwner = crypto.randomUUID();
           let ownsLock = false;
           let lockAvailable = false;
@@ -1184,6 +1189,7 @@ export async function POST(request: Request) {
             if (rechecked) return withEditionFingerprint(rechecked);
 
             publish("Researching real landmarks, culture, and local details…");
+            let stageStartedAt = Date.now();
             const research = await researchDestination(
               destination,
               itinerary,
@@ -1194,10 +1200,12 @@ export async function POST(request: Request) {
               if (error instanceof GenerationBusyError) throw error;
               throw new GenerationStageError("research", error);
             });
+            logGenerationTiming(cacheKey, "research", stageStartedAt);
             lockLease?.assertOwned();
             assertResearchMatchesRequest(research);
 
             publish(`Designing printable games specifically for age ${age}…`);
+            stageStartedAt = Date.now();
             const draft = await composeBooklet(
               destination,
               age,
@@ -1214,23 +1222,34 @@ export async function POST(request: Request) {
             ).catch((error) => {
               throw new GenerationStageError("composition", error);
             });
+            logGenerationTiming(cacheKey, "composition", stageStartedAt);
             lockLease?.assertOwned();
-            const illustratedDayPlans = await addBookletIllustrations(runtime, {
-              destination,
-              age,
-              dayPlans: draft.dayPlans,
-            }, publish);
-            lockLease?.assertOwned();
-            const result: GeneratedBookletData = {
+            const preparedDraft = applySiblingPlan(draft, family);
+            const generatedAt = new Date().toISOString();
+            const provisionalResult: GeneratedBookletData = {
               destination,
               age,
               days,
               itinerary,
-              ...applySiblingPlan({ ...draft, dayPlans: illustratedDayPlans }, family),
+              ...preparedDraft,
               sources: research.sources,
-              generatedAt: new Date().toISOString(),
+              generatedAt,
               family,
               events,
+            };
+            // Reject bad model output before paying the latency and cost of images.
+            assertBookletQa(provisionalResult);
+            stageStartedAt = Date.now();
+            const illustratedDayPlans = await addBookletIllustrations(runtime, {
+              destination,
+              age,
+              dayPlans: preparedDraft.dayPlans,
+            }, publish);
+            logGenerationTiming(cacheKey, "illustrations", stageStartedAt);
+            lockLease?.assertOwned();
+            const result: GeneratedBookletData = {
+              ...provisionalResult,
+              dayPlans: illustratedDayPlans,
             };
             assertBookletQa(result);
             const edition = await withEditionFingerprint(result);
@@ -1241,6 +1260,7 @@ export async function POST(request: Request) {
 
             if (runtime.DB && runtime.BOOKLET_FILES) {
               publish("Saving this edition for instant reuse…");
+              stageStartedAt = Date.now();
               try {
                 await writeStoredBooklet(runtime.DB, runtime.BOOKLET_FILES, {
                   cacheKey,
@@ -1252,8 +1272,10 @@ export async function POST(request: Request) {
               } catch (error) {
                 logStorageFailure("write booklet", error);
               }
+              logGenerationTiming(cacheKey, "storage", stageStartedAt);
             }
 
+            logGenerationTiming(cacheKey, "total", generationStartedAt);
             return edition;
           } finally {
             await lockLease?.stop();

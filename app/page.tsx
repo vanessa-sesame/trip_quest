@@ -187,6 +187,7 @@ export default function Home() {
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
   const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>(initialCheckout.state);
   const [paidPdfUrl] = useState(initialCheckout.pdfUrl);
+  const [paidPdfObjectUrl, setPaidPdfObjectUrl] = useState("");
   const [checkoutSessionId] = useState(initialCheckout.sessionId);
   const autoDownloadAttempted = useRef(false);
   const [generatedBooklet, setGeneratedBooklet] =
@@ -251,8 +252,15 @@ export default function Home() {
           lastStatus = response.status;
           const contentType = response.headers.get("content-type") || "";
           if (response.ok && contentType.includes("application/pdf")) {
-            await response.body?.cancel();
-            if (!active) return;
+            const objectUrl = URL.createObjectURL(await response.blob());
+            if (!active) {
+              URL.revokeObjectURL(objectUrl);
+              return;
+            }
+            setPaidPdfObjectUrl((previous) => {
+              if (previous) URL.revokeObjectURL(previous);
+              return objectUrl;
+            });
             setPaidDownloadState("ready");
             setCheckoutNote("Payment received. Your PDF is ready. If it does not download automatically, use the button below.");
             if (!autoDownloadAttempted.current) {
@@ -260,7 +268,7 @@ export default function Home() {
               window.setTimeout(() => {
                 if (!active) return;
                 const link = document.createElement("a");
-                link.href = pdfUrl;
+                link.href = objectUrl;
                 link.download = "TripQuest-booklet.pdf";
                 link.rel = "noopener";
                 link.click();
@@ -289,6 +297,10 @@ export default function Home() {
       active = false;
     };
   }, [checkoutSessionId, paidPdfUrl]);
+
+  useEffect(() => () => {
+    if (paidPdfObjectUrl) URL.revokeObjectURL(paidPdfObjectUrl);
+  }, [paidPdfObjectUrl]);
 
   const destinationName = trip.destination.trim() || "Your destination";
   const sampleTitles = isSampleAge(trip.age)
@@ -602,7 +614,7 @@ export default function Home() {
             <p>{checkoutNote}</p>
           </div>
           {checkoutSessionId && paidPdfUrl && paidDownloadState !== "preparing" ? (
-            <a className="unlock-button paid-download-link" href={paidPdfUrl} download="TripQuest-booklet.pdf">
+            <a className="unlock-button paid-download-link" href={paidPdfObjectUrl || paidPdfUrl} download="TripQuest-booklet.pdf">
               <Download size={18} />
               {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
             </a>
@@ -1031,7 +1043,7 @@ export default function Home() {
                 Preparing PDF…
               </span>
             ) : paidDownloadState !== "idle" && paidPdfUrl ? (
-              <a className="unlock-button paid-download-link" href={paidPdfUrl} download="TripQuest-booklet.pdf">
+              <a className="unlock-button paid-download-link" href={paidPdfObjectUrl || paidPdfUrl} download="TripQuest-booklet.pdf">
                 <Download size={18} />
                 {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
               </a>

@@ -89,10 +89,15 @@ export async function createResearchCacheKey(
   itinerary: string[],
   researchModel: string,
 ) {
+  // Empty days do not change destination research. Filtering them lets a
+  // two-day and a five-day open itinerary reuse the same researched city.
+  const plannedStops = itinerary
+    .map((value) => normalizedText(value.trim()))
+    .filter(Boolean);
   return digest({
     version: RESEARCH_CACHE_VERSION,
-    destination: normalizedText(destination),
-    itinerary: itinerary.map(normalizedText),
+    destination: normalizedText(destination.trim()),
+    itinerary: plannedStops,
     researchModel,
   });
 }

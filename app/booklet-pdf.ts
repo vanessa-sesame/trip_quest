@@ -2682,13 +2682,18 @@ export async function createBookletPdf(
         if (path) imageRequests.set(coloringArtworkKey(activity, context), path);
       });
     });
-    for (const [key, path] of imageRequests) {
+    const resolvedImages = await Promise.all(Array.from(imageRequests, async ([key, path]) => {
       try {
         const bytes = await resolveColoringImage(path);
-        if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
+        return { key, bytes };
       } catch (error) {
         console.error(`[TripQuest illustration] ${key}`, error);
+        return { key, bytes: null };
       }
+    }));
+    // Network/object-storage reads run together; PDF mutation stays sequential.
+    for (const { key, bytes } of resolvedImages) {
+      if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
     }
   }
   const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));

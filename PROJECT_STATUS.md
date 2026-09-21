@@ -61,6 +61,13 @@ Current public release: https://tripquestkids.com, source branch `main`.
 - Pasted itineraries recognize named dates such as 10 April, April 10, and
   numeric day/month dates, then group activities by date order.
 - Generated JSON and PDFs are saved for reuse.
+- Generation performance is instrumented by stage (`research`, `composition`,
+  `illustrations`, `storage`, and `total`) in production Worker logs. Open-trip
+  destination research is shared across trip lengths, custom illustrations are
+  generated concurrently with a three-image ceiling and a 90-second timeout,
+  and PDF artwork reads run concurrently before deterministic embedding.
+- Paid return flow reuses the first successful PDF response for the automatic
+  download instead of probing and downloading the same file twice.
 - Drawing and coloring pages use landmark-aware printable line art. The day
   theme, activity title, labels, and clues select recognizable scenes such as
   the Merlion fountain, temple guardians, Peranakan-style tile patterns,

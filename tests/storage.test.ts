@@ -182,6 +182,17 @@ test("durable cache keys are stable but change with booklet inputs", async () =>
   assert.notEqual(first, research);
 });
 
+test("destination research is reused across empty trip lengths but not custom stops", async () => {
+  const twoOpenDays = await createResearchCacheKey(" Singapore ", ["", ""], "kimi-k3");
+  const fiveOpenDays = await createResearchCacheKey("SINGAPORE", ["", "", "", "", ""], "kimi-k3");
+  const gardens = await createResearchCacheKey("Singapore", [" Gardens by the Bay ", ""], "kimi-k3");
+  const zoo = await createResearchCacheKey("Singapore", ["Singapore Zoo"], "kimi-k3");
+
+  assert.equal(twoOpenDays, fiveOpenDays);
+  assert.notEqual(twoOpenDays, gardens);
+  assert.notEqual(gardens, zoo);
+});
+
 test("D1 metadata and the private R2 artifact restore a generated booklet", async () => {
   const database = createTestDatabase();
   const { objects, storage } = createTestArtifacts();

@@ -132,9 +132,14 @@ Stripe credentials before charging customers:
 - Coloring and drawing activities use curated landmark PNGs when available.
   Other exact landmarks are generated once with the OpenAI image API, stored
   in R2, and referenced by both preview and PDF so the artwork cannot drift.
-- Booklets over six days are composed in four-day batches.
+- Booklets over three days are composed in three-day batches, each checkpointed
+  to R2 independently so a retry can reuse already-valid batches.
 - Exact age rules, interest assignments, allowed game types, title uniqueness,
-  crossword connectivity, and game variety are validated.
+  and crossword connectivity are validated. A specific game type is still
+  pre-assigned per activity and sent to Kimi as guidance for variety and
+  pacing, but is no longer enforced exactly: Kimi frequently substituted an
+  equally age-appropriate type (for example bingo for coloring), which failed
+  the whole batch outright. Day-to-day variety is now a hint, not a guarantee.
 
 Relevant environment variable names are documented in `.env.example`:
 
@@ -272,10 +277,9 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   Kimi web research. Fresh destinations can still exceed a minute; connection
   survival across that wait is now handled (see Reliability And Safety), but
   the wait itself is not shortened.
-- A live five-day diagnostic (London, age 5, 2026-09-21) surfaced a real
+- Live diagnostics (London and Barcelona, age 5, 2026-09-21) surfaced a real
   reliability gap beyond connection loss: composition can still fail outright
-  when Kimi's output repeatedly violates a rule inside one 3-day batch (for
-  example a wrong game type or an interest hook of the wrong length). Each
+  when Kimi's output repeatedly violates a rule inside one 3-day batch. Each
   batch already gets one correction attempt inside `composeBookletBatch`, but
   when both attempts fail the whole request fails, even though the other
   batch(es) already composed validly. Restoring a checkpointed batch also
@@ -283,6 +287,14 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   fails re-validation falls through to a full (costly) fresh recompose rather
   than a targeted fix. Single-activity repair instead of whole-batch retry
   would reduce both the cost and the odds of a full failure.
+  - The exact pre-assigned game type per activity was the most common trigger
+    and is fixed (2026-09-21): only age-appropriateness is enforced now, not
+    an exact match to the pre-built schedule.
+  - A whole-booklet QA failure (word budget, duplicate card, etc.) after every
+    batch validates on its own terms is now repaired by recomposing just the
+    implicated day's batch, but only once; the same live Barcelona diagnostic
+    still failed outright when the repaired batch exceeded the age-5 word
+    budget again on its one retry.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

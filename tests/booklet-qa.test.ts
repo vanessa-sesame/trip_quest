@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBooklet, getDestinationProfile } from "../app/booklet.ts";
-import { assertBookletQa, readerBandForAge } from "../app/booklet-qa.ts";
+import { assertBookletQa, readerBandForAge, wordCount } from "../app/booklet-qa.ts";
 import type { GeneratedBookletData } from "../app/booklet-ai.ts";
 
 function strictBooklet(days = 2): GeneratedBookletData {
@@ -33,6 +33,30 @@ test("five-slot day architecture passes the age-five export contract", () => {
   assert.equal(booklet.dayPlans[0].slots.inThePlace.requiresPresence, true);
   assert.equal(readerBandForAge(5).childPageWords, 60);
   assert.equal(assertBookletQa(booklet), booklet);
+});
+
+test("word counts ignore standalone punctuation but keep hyphenated and accented words", () => {
+  assert.equal(wordCount("Colour it with broken-tile patches — no straight lines allowed!"), 9);
+  assert.equal(wordCount("Gaudí's bench... amazing!"), 3);
+  assert.equal(wordCount(""), 0);
+  assert.equal(wordCount("   "), 0);
+  assert.equal(wordCount("—"), 0);
+});
+
+test("a standalone dash no longer pushes a borderline page over its word budget", () => {
+  const atBudget = strictBooklet();
+  const day = atBudget.dayPlans[0];
+  day.slots.sitDown.body = Array.from({ length: 14 }, () => "word").join(" ");
+  day.slots.sitDown.prompt = Array.from({ length: 14 }, () => "word").join(" ");
+  day.slots.sitDown.items = Array.from({ length: 4 }, (_, index) => ({
+    label: `item${index}`,
+    clue: Array.from({ length: 7 }, () => "word").join(" "),
+  }));
+  assert.doesNotThrow(() => assertBookletQa(atBudget));
+
+  const withDash = structuredClone(atBudget);
+  withDash.dayPlans[0].slots.sitDown.body += " —";
+  assert.doesNotThrow(() => assertBookletQa(withDash));
 });
 
 test("QA rejects display strings interpolated into sentences", () => {

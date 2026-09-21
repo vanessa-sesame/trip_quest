@@ -36,7 +36,10 @@ export function readerBandForAge(age: number): ReaderBand {
 }
 
 export function wordCount(value: string) {
-  return value.trim() ? value.trim().split(/\s+/).length : 0;
+  if (!value.trim()) return 0;
+  // A standalone punctuation token (an em dash, an ellipsis) is not a word a
+  // child has to read; only count tokens that contain a letter or digit.
+  return value.trim().split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
 }
 
 function normalizedSentence(value: string) {

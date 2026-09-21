@@ -232,6 +232,14 @@ function clearPendingGeneration() {
   }
 }
 
+function isConnectionIssue(error: unknown) {
+  return (
+    error instanceof TypeError ||
+    error instanceof SyntaxError ||
+    (error instanceof GenerationStreamError && error.retryable)
+  );
+}
+
 export default function Home() {
   const initialCheckout = checkoutContext();
   const [age, setAge] = useState(5);
@@ -513,72 +521,84 @@ export default function Home() {
     // generation independently of this stream), so it is worth reconnecting
     // for several minutes rather than failing after a few seconds.
     const retryDelaysMs = [1_500, 3_000, 6_000, 10_000, 15_000, 20_000, 30_000];
+    const requestBody = JSON.stringify(nextTrip);
+    let lastError: unknown;
 
     try {
-      let payload: unknown;
-      const requestBody = JSON.stringify(nextTrip);
-
-      for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+      // A hard content failure (Kimi's output failed validation) is not a
+      // connection problem, but checkpointed batches make a retry cheap: the
+      // server reuses every batch that already validated and only
+      // recomposes the one that failed. Give it one automatic retry before
+      // asking the parent to notice and try again themselves.
+      contentRetry: for (let contentAttempt = 0; contentAttempt < 2; contentAttempt += 1) {
         try {
-          const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: {
-              Accept: "text/event-stream, application/json",
-              "Content-Type": "application/json",
-            },
-            body: requestBody,
-          });
-          payload = await readGenerationResponse(response, setGenerationMessage);
-          const errorPayload = payload as { error?: string };
+          let payload: unknown;
 
-          if (!response.ok || typeof errorPayload?.error === "string") {
-            throw new GenerationStreamError(
-              errorPayload.error || "The booklet could not be generated.",
-              false,
-            );
+          for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+            try {
+              const response = await fetch("/api/generate", {
+                method: "POST",
+                headers: {
+                  Accept: "text/event-stream, application/json",
+                  "Content-Type": "application/json",
+                },
+                body: requestBody,
+              });
+              payload = await readGenerationResponse(response, setGenerationMessage);
+              const errorPayload = payload as { error?: string };
+
+              if (!response.ok || typeof errorPayload?.error === "string") {
+                throw new GenerationStreamError(
+                  errorPayload.error || "The booklet could not be generated.",
+                  false,
+                );
+              }
+              break;
+            } catch (error) {
+              if (!isConnectionIssue(error) || attempt === retryDelaysMs.length) throw error;
+
+              setGenerationMessage("Connection paused. Rejoining your saved work…");
+              await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+            }
           }
-          break;
-        } catch (error) {
-          const canReconnect =
-            error instanceof TypeError ||
-            error instanceof SyntaxError ||
-            (error instanceof GenerationStreamError && error.retryable);
-          if (!canReconnect || attempt === retryDelaysMs.length) throw error;
 
-          setGenerationMessage("Connection paused. Rejoining your saved work…");
-          await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+          if (!isGeneratedBookletData(payload)) {
+            throw new Error("The booklet arrived in an unexpected format.");
+          }
+
+          setGeneratedBooklet(payload);
+          setTrip({
+            age: payload.age,
+            destination: payload.destination,
+            days: payload.days,
+          });
+          setAge(payload.age);
+          setDays(payload.days);
+          setItinerary([
+            ...payload.itinerary,
+            ...Array(Math.max(0, 14 - payload.itinerary.length)).fill(""),
+          ]);
+          setPage(0);
+          setGenerationState("idle");
+          setFamilyNeedsRegeneration(false);
+          setAnnouncement(
+            `${payload.destination} AI preview ready for age ${payload.age}.`,
+          );
+          clearPendingGeneration();
+          return;
+        } catch (error) {
+          lastError = error;
+          if (!isConnectionIssue(error) && contentAttempt === 0) {
+            setGenerationMessage("That attempt didn't pass quality checks. Trying once more…");
+            continue contentRetry;
+          }
+          break contentRetry;
         }
       }
 
-      if (!isGeneratedBookletData(payload)) {
-        throw new Error("The booklet arrived in an unexpected format.");
-      }
-
-      setGeneratedBooklet(payload);
-      setTrip({
-        age: payload.age,
-        destination: payload.destination,
-        days: payload.days,
-      });
-      setAge(payload.age);
-      setDays(payload.days);
-      setItinerary([
-        ...payload.itinerary,
-        ...Array(Math.max(0, 14 - payload.itinerary.length)).fill(""),
-      ]);
-      setPage(0);
-      setGenerationState("idle");
-      setFamilyNeedsRegeneration(false);
-      setAnnouncement(
-        `${payload.destination} AI preview ready for age ${payload.age}.`,
-      );
-      clearPendingGeneration();
+      throw lastError;
     } catch (error) {
-      const canReconnect =
-        error instanceof TypeError ||
-        error instanceof SyntaxError ||
-        (error instanceof GenerationStreamError && error.retryable);
-      if (!canReconnect) clearPendingGeneration();
+      if (!isConnectionIssue(error)) clearPendingGeneration();
       setGenerationState("error");
       setGenerationError(
         error instanceof Error &&

@@ -885,9 +885,11 @@ ${research.notes}`,
   let correction = "";
   let lastError: unknown;
 
-  // One correction attempt is enough; a third complete regeneration adds a
-  // large delay and model cost while rarely repairing a structurally bad batch.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  // Two correction attempts (three tries total). A retry only recomposes
+  // this one checkpointed batch, not the whole booklet, so the extra attempt
+  // is now cheap insurance against a systematically tight rule (like the age
+  // word budget) rather than random bad luck.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const payload = await kimiRequest("/chat/completions", apiKey, {
         model,

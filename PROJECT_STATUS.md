@@ -304,6 +304,15 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
     words over budget after removing the inflated count. Raising the 3-6
     page-word ceilings, or excluding item text from the page total, was
     proposed and intentionally not done yet.
+  - The batch correction budget was raised from one attempt to two (three
+    Kimi tries total per batch), and the browser now retries once
+    automatically on a hard content failure, not just a dropped connection,
+    since a retry now only recomposes the batch that failed rather than the
+    whole trip. A live two-day Rome, age-5 diagnostic (2026-09-21) still
+    failed after all of it: the whole-booklet age-5 word budget was violated
+    four separate times in a row (two client-level attempts, one server-side
+    repair each) before giving up. Retrying more is not closing this
+    specific gap; the budget itself is still the most likely lever.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

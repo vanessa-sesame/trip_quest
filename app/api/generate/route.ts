@@ -21,10 +21,12 @@ import {
   createBookletCacheKey,
   createResearchCacheKey,
   bookletSnapshotFingerprint,
+  readStoredBookletBatch,
   readStoredBooklet,
   readStoredResearch,
   releaseGenerationLock,
   writeStoredBooklet,
+  writeStoredBookletBatch,
   writeStoredResearch,
 } from "../../booklet-storage";
 import {
@@ -965,8 +967,13 @@ async function composeBooklet(
   balancePlan: string,
   gameTypePlan: GameTypePlanItem[],
   interestPlan: InterestPlanItem[],
+  artifacts?: BookletObjectStorage,
+  cacheKey?: string,
+  publish?: (message: string) => void,
 ) {
-  const batchSize = days > 6 ? 4 : days;
+  // Long, single model calls are fragile on mobile. Three-day batches keep
+  // each request bounded and can be restored independently after a reconnect.
+  const batchSize = days > 3 ? 3 : days;
   const batches = Array.from(
     { length: Math.ceil(days / batchSize) },
     (_, index) => ({
@@ -974,8 +981,41 @@ async function composeBooklet(
       itinerary: itinerary.slice(index * batchSize, (index + 1) * batchSize),
     }),
   );
-  const drafts = await Promise.all(
-    batches.map((batch) => composeBookletBatch(
+  const drafts = await Promise.all(batches.map(async (batch, index) => {
+    const assignedGameTypes = gameTypePlan
+      .slice(batch.offset, batch.offset + batch.itinerary.length)
+      .map((plan, localIndex) => ({ ...plan, day: localIndex + 1 }));
+    const assignedInterests = interestPlan.filter((item) =>
+      item.day > batch.offset && item.day <= batch.offset + batch.itinerary.length,
+    );
+    if (cacheKey) {
+      try {
+        const stored = await readStoredBookletBatch(
+          artifacts,
+          cacheKey,
+          batch.offset,
+          batch.itinerary.length,
+        );
+        if (stored) {
+          const validated = validateBookletDraft(
+            stored,
+            batch.itinerary.length,
+            age,
+            assignedGameTypes,
+          );
+          publish?.(`Restored days ${batch.offset + 1}-${batch.offset + batch.itinerary.length} from saved work…`);
+          return applySiblingPlan(
+            applyInterestPlan(validated, assignedInterests, batch.offset),
+            hasSiblings,
+          );
+        }
+      } catch (error) {
+        logStorageFailure("read booklet batch", error);
+      }
+    }
+
+    publish?.(`Designing days ${batch.offset + 1}-${batch.offset + batch.itinerary.length} of ${days}…`);
+    const draft = await composeBookletBatch(
       destination,
       age,
       days,
@@ -989,8 +1029,23 @@ async function composeBooklet(
       balancePlan,
       gameTypePlan,
       interestPlan,
-    )),
-  );
+    );
+    if (cacheKey) {
+      try {
+        await writeStoredBookletBatch(
+          artifacts,
+          cacheKey,
+          batch.offset,
+          batch.itinerary.length,
+          draft,
+        );
+      } catch (error) {
+        logStorageFailure("write booklet batch", error);
+      }
+    }
+    publish?.(`Saved part ${index + 1} of ${batches.length}…`);
+    return draft;
+  }));
   const combined = makeActivityTitlesUnique({
     profile: drafts[0].profile,
     dayPlans: drafts.flatMap((draft, batchIndex) => draft.dayPlans.map((day, dayIndex) => ({
@@ -1221,6 +1276,9 @@ export async function POST(request: Request) {
               balancePlan,
               gameTypePlan,
               interestPlan,
+              runtime.BOOKLET_FILES,
+              cacheKey,
+              publish,
             ).catch((error) => {
               throw new GenerationStageError("composition", error);
             });

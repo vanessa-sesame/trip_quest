@@ -1,4 +1,5 @@
 import {
+  type BookletDraft,
   type BookletSource,
   type GeneratedBookletData,
   normalizeItinerary,
@@ -12,6 +13,7 @@ import {
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-21-9";
 export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-21-7";
+export const BOOKLET_BATCH_CACHE_VERSION = "batch-2026-09-21-1";
 
 type D1Value = string | number | null;
 
@@ -119,6 +121,58 @@ export async function createBookletCacheKey(identity: BookletCacheIdentity) {
 
 export function bookletArtifactKey(cacheKey: string, fingerprint: string) {
   return `booklets/${BOOKLET_CACHE_VERSION}/${cacheKey}/${fingerprint}/booklet.json`;
+}
+
+export function bookletBatchArtifactKey(
+  cacheKey: string,
+  dayOffset: number,
+  dayCount: number,
+) {
+  return `booklet-batches/${BOOKLET_BATCH_CACHE_VERSION}/${cacheKey}/${dayOffset}-${dayCount}.json`;
+}
+
+export async function readStoredBookletBatch(
+  artifacts: BookletObjectStorage | undefined,
+  cacheKey: string,
+  dayOffset: number,
+  dayCount: number,
+): Promise<BookletDraft | null> {
+  if (!artifacts) return null;
+  const artifact = await artifacts.get(
+    bookletBatchArtifactKey(cacheKey, dayOffset, dayCount),
+  );
+  if (!artifact) return null;
+  try {
+    const parsed = JSON.parse(await artifact.text());
+    return parsed && typeof parsed === "object" ? parsed as BookletDraft : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeStoredBookletBatch(
+  artifacts: BookletObjectStorage | undefined,
+  cacheKey: string,
+  dayOffset: number,
+  dayCount: number,
+  draft: BookletDraft,
+) {
+  if (!artifacts) return;
+  await artifacts.put(
+    bookletBatchArtifactKey(cacheKey, dayOffset, dayCount),
+    JSON.stringify(draft),
+    {
+      httpMetadata: {
+        cacheControl: "private, no-store",
+        contentType: "application/json; charset=utf-8",
+      },
+      customMetadata: {
+        dayCount: String(dayCount),
+        dayOffset: String(dayOffset),
+        version: BOOKLET_BATCH_CACHE_VERSION,
+      },
+    },
+  );
 }
 
 function legacyBookletArtifactKey(cacheKey: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import {
   BookOpenCheck,
@@ -168,6 +168,70 @@ function checkoutContext() {
   };
 }
 
+type GenerateRequestBody = {
+  age: number;
+  destination: string;
+  days: number;
+  itinerary: string[];
+  family: FamilyChild[];
+  events: ItineraryEvent[];
+};
+
+// A suspended or discarded tab loses all in-memory state, so an in-progress
+// request is mirrored here and resumed on reload instead of restarting the
+// whole (expensive) generation from scratch.
+const PENDING_GENERATION_KEY = "tripquest-pending-generation";
+const PENDING_GENERATION_MAX_AGE_MS = 45 * 60 * 1000;
+
+function isGenerateRequestBody(value: unknown): value is GenerateRequestBody {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.age === "number" &&
+    typeof record.destination === "string" &&
+    typeof record.days === "number" &&
+    Array.isArray(record.itinerary) &&
+    Array.isArray(record.family) &&
+    Array.isArray(record.events)
+  );
+}
+
+function readPendingGeneration(): GenerateRequestBody | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PENDING_GENERATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { trip?: unknown; startedAt?: unknown };
+    if (typeof parsed.startedAt !== "number") return null;
+    if (Date.now() - parsed.startedAt > PENDING_GENERATION_MAX_AGE_MS) return null;
+    return isGenerateRequestBody(parsed.trip) ? parsed.trip : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingGeneration(trip: GenerateRequestBody) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      PENDING_GENERATION_KEY,
+      JSON.stringify({ trip, startedAt: Date.now() }),
+    );
+  } catch {
+    // Private browsing or a full quota can block storage; resuming after a
+    // suspended tab just will not be available this time.
+  }
+}
+
+function clearPendingGeneration() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PENDING_GENERATION_KEY);
+  } catch {
+    // Ignore.
+  }
+}
+
 export default function Home() {
   const initialCheckout = checkoutContext();
   const [age, setAge] = useState(5);
@@ -190,6 +254,8 @@ export default function Home() {
   const [paidPdfObjectUrl, setPaidPdfObjectUrl] = useState("");
   const [checkoutSessionId] = useState(initialCheckout.sessionId);
   const autoDownloadAttempted = useRef(false);
+  const generationInFlight = useRef(false);
+  const resumeAttempted = useRef(false);
   const [generatedBooklet, setGeneratedBooklet] =
     useState<GeneratedBookletData | null>(null);
   const [generationState, setGenerationState] = useState<
@@ -433,36 +499,26 @@ export default function Home() {
     }
   }
 
-  async function handleGenerate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextTrip = {
-      age: sanitizeAge(age),
-      destination: destination.trim(),
-      days: sanitizeDays(days),
-      itinerary: itinerary.slice(0, sanitizeDays(days)).map((plan, index) => {
-        const imported = eventsToDailyPlans(structuredEvents, sanitizeDays(days))[index];
-        return [plan.trim(), imported].filter(Boolean).join("; ").slice(0, 140);
-      }),
-      family: children,
-      events: structuredEvents,
-    };
-
-    if (!nextTrip.destination) {
-      setGenerationState("error");
-      setGenerationError("Enter a city, region, or country first.");
-      return;
-    }
-
+  const runGeneration = useCallback(async (nextTrip: GenerateRequestBody) => {
+    if (generationInFlight.current) return;
+    generationInFlight.current = true;
     setGenerationState("generating");
     setGenerationError("");
     setGenerationMessage("Looking for a saved edition…");
     setDays(nextTrip.days);
+    writePendingGeneration(nextTrip);
+
+    // A dropped connection is common when a tab is backgrounded or the app is
+    // switched away from; the server keeps working regardless (it runs the
+    // generation independently of this stream), so it is worth reconnecting
+    // for several minutes rather than failing after a few seconds.
+    const retryDelaysMs = [1_500, 3_000, 6_000, 10_000, 15_000, 20_000, 30_000];
 
     try {
       let payload: unknown;
       const requestBody = JSON.stringify(nextTrip);
 
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
         try {
           const response = await fetch("/api/generate", {
             method: "POST",
@@ -487,12 +543,10 @@ export default function Home() {
             error instanceof TypeError ||
             error instanceof SyntaxError ||
             (error instanceof GenerationStreamError && error.retryable);
-          if (!canReconnect || attempt === 2) throw error;
+          if (!canReconnect || attempt === retryDelaysMs.length) throw error;
 
           setGenerationMessage("Connection paused. Rejoining your saved work…");
-          await new Promise((resolve) =>
-            setTimeout(resolve, attempt === 0 ? 1_500 : 4_000),
-          );
+          await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
         }
       }
 
@@ -518,7 +572,13 @@ export default function Home() {
       setAnnouncement(
         `${payload.destination} AI preview ready for age ${payload.age}.`,
       );
+      clearPendingGeneration();
     } catch (error) {
+      const canReconnect =
+        error instanceof TypeError ||
+        error instanceof SyntaxError ||
+        (error instanceof GenerationStreamError && error.retryable);
+      if (!canReconnect) clearPendingGeneration();
       setGenerationState("error");
       setGenerationError(
         error instanceof Error &&
@@ -526,10 +586,70 @@ export default function Home() {
             error.message,
           )
           ? error.message
-          : "The connection could not stay open after reconnecting. Please wait a moment and tap Create again; your saved work will resume.",
+          : "The connection could not stay open after reconnecting. Reopening this page will pick up where it left off.",
       );
+    } finally {
+      generationInFlight.current = false;
     }
+  }, []);
+
+  async function handleGenerate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextTrip: GenerateRequestBody = {
+      age: sanitizeAge(age),
+      destination: destination.trim(),
+      days: sanitizeDays(days),
+      itinerary: itinerary.slice(0, sanitizeDays(days)).map((plan, index) => {
+        const imported = eventsToDailyPlans(structuredEvents, sanitizeDays(days))[index];
+        return [plan.trim(), imported].filter(Boolean).join("; ").slice(0, 140);
+      }),
+      family: children,
+      events: structuredEvents,
+    };
+
+    if (!nextTrip.destination) {
+      setGenerationState("error");
+      setGenerationError("Enter a city, region, or country first.");
+      return;
+    }
+
+    await runGeneration(nextTrip);
   }
+
+  useEffect(() => {
+    if (familyLoading || resumeAttempted.current || generatedBooklet) return;
+    const pendingTrip = readPendingGeneration();
+    if (!pendingTrip) return;
+    resumeAttempted.current = true;
+
+    void (async () => {
+      setAge(pendingTrip.age);
+      setDestination(pendingTrip.destination);
+      setDays(pendingTrip.days);
+      setItinerary([
+        ...pendingTrip.itinerary,
+        ...Array(Math.max(0, 14 - pendingTrip.itinerary.length)).fill(""),
+      ]);
+      setChildren(pendingTrip.family);
+      setFamilyDraft(pendingTrip.family);
+      setStructuredEvents(pendingTrip.events);
+      setGenerationMessage("Reopening this trip — resuming where it left off…");
+      await runGeneration(pendingTrip);
+    })();
+  }, [familyLoading, generatedBooklet, runGeneration]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      if (generationInFlight.current || generatedBooklet) return;
+      const pendingTrip = readPendingGeneration();
+      if (!pendingTrip) return;
+      setGenerationMessage("Reconnecting — resuming this trip…");
+      void runGeneration(pendingTrip);
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [generatedBooklet, runGeneration]);
 
   async function handlePdfDownload() {
     if (!generatedBooklet) {

@@ -259,6 +259,12 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 
 ## Known Gaps
 
+- A live one-day diagnostic on 2026-09-21 measured about 96 seconds for fresh
+  Kimi web research. Text composition then retried because Kimi omitted a queue
+  title; that label is now repaired locally and composition is capped at one
+  correction attempt. Fresh destinations can still exceed a minute, so the
+  next architectural improvement is a durable generation job/status endpoint
+  that survives mobile connection loss without restarting model work.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

@@ -252,6 +252,33 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.doesNotThrow(() => validateBookletDraft(oneLetterLabels, 1, 7));
 });
 
+test("AI booklet validation repairs optional queue presentation labels", () => {
+  const raw = {
+    profile: {
+      style: "Garden city discoveries",
+      intro: "Explore a garden city through real places, local details, and family-friendly observation games.",
+      word: "hello - a friendly greeting",
+      etiquette: "Stay with your grown-up and leave every planted detail where it belongs.",
+    },
+    dayPlans: structuredClone(buildBooklet(7, "Singapore", 1)),
+  };
+  raw.dayPlans[0].slots.inThePlace.gameType = "word_search";
+  raw.dayPlans[0].slots.sitDown.gameType = "bingo";
+  raw.dayPlans[0].slots.inThePlace.items = [
+    { label: "GARDEN", clue: "A planted place in the city." },
+    { label: "RIVER", clue: "Water flowing through the landscape." },
+    { label: "TOWER", clue: "A tall structure visible nearby." },
+    { label: "MARKET", clue: "A place where local goods are sold." },
+  ];
+  raw.dayPlans[0].slots.sitDown.items = structuredClone(raw.dayPlans[0].slots.inThePlace.items);
+  delete raw.dayPlans[0].slots.whileYouWait.title;
+  delete raw.dayPlans[0].slots.whileYouWait.countLabel;
+
+  const result = validateBookletDraft(raw, 1, 7);
+  assert.equal(result.dayPlans[0].slots.whileYouWait.title, "Count While You Wait");
+  assert.equal(result.dayPlans[0].slots.whileYouWait.countLabel, "I counted");
+});
+
 test("coloring scenes vary deterministically instead of repeating one drawing", () => {
   const scenes = new Set(
     ["Harbour", "Garden", "Bridge", "Market", "Mountain", "Temple", "Lantern"].map((title) =>

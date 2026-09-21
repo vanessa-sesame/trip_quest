@@ -842,9 +842,13 @@ export function validateBookletDraft(
         : `Grown-up: point out ${landmark.short} first.`,
       whileYouWait: queueValue
         ? {
-            title: requireText(queueValue.title, `Day ${dayIndex + 1} queue title`, 3, 55),
+            title: typeof queueValue.title === "string" && queueValue.title.trim()
+              ? requireText(queueValue.title, `Day ${dayIndex + 1} queue title`, 3, 55)
+              : "Count While You Wait",
             instruction: requireText(queueValue.instruction, `Day ${dayIndex + 1} queue instruction`, 4, 180),
-            countLabel: requireText(queueValue.countLabel, `Day ${dayIndex + 1} queue count label`, 2, 40),
+            countLabel: typeof queueValue.countLabel === "string" && queueValue.countLabel.trim()
+              ? requireText(queueValue.countLabel, `Day ${dayIndex + 1} queue count label`, 2, 40)
+              : "I counted",
             countTo: Number.isInteger(queueValue.countTo) && Number(queueValue.countTo) >= 1 && Number(queueValue.countTo) <= 20
               ? Number(queueValue.countTo)
               : 5,

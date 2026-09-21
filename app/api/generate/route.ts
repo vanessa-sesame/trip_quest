@@ -884,7 +884,9 @@ ${research.notes}`,
   let correction = "";
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // One correction attempt is enough; a third complete regeneration adds a
+  // large delay and model cost while rarely repairing a structurally bad batch.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const payload = await kimiRequest("/chat/completions", apiKey, {
         model,

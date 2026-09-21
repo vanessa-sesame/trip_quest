@@ -8,20 +8,24 @@ import {
   type BookletObjectStorage,
   BOOKLET_CACHE_VERSION,
   acquireGenerationLock,
+  batchRangeForDay,
   bookletArtifactKey,
   bookletPdfKey,
   bookletSnapshotFingerprint,
   consumeGenerationRateLimit,
   createBookletCacheKey,
   createResearchCacheKey,
+  deleteStoredBookletBatch,
   parseStoredResearch,
   readStoredBooklet,
   readStoredBookletArtifact,
+  readStoredBookletBatch,
   readStoredBookletReference,
   readStoredBookletPdf,
   readStoredResearch,
   releaseGenerationLock,
   writeStoredBooklet,
+  writeStoredBookletBatch,
   writeStoredBookletPdf,
   writeStoredResearch,
 } from "../app/booklet-storage.ts";
@@ -89,6 +93,10 @@ function createTestArtifacts() {
       } else {
         objects.set(key, new Uint8Array(value).slice());
       }
+      return undefined;
+    },
+    async delete(key) {
+      objects.delete(key);
       return undefined;
     },
   };
@@ -461,4 +469,40 @@ test("generation rate limits are atomic and reset with the next window", async (
   assert.equal(await consumeGenerationRateLimit(database, "client-a", now + 2, 2, hour), false);
   assert.equal(await consumeGenerationRateLimit(database, "client-b", now + 2, 2, hour), true);
   assert.equal(await consumeGenerationRateLimit(database, "client-a", now + hour, 2, hour), true);
+});
+
+test("a composed day-batch can be saved, restored, and independently invalidated", async () => {
+  const { storage } = createTestArtifacts();
+  const booklet = generatedBooklet();
+  const draft = { profile: booklet.profile, dayPlans: booklet.dayPlans };
+  const cacheKey = "cache-key-batches";
+
+  assert.equal(await readStoredBookletBatch(storage, cacheKey, 3, 3), null);
+
+  await writeStoredBookletBatch(storage, cacheKey, 3, 3, draft);
+  const restored = await readStoredBookletBatch(storage, cacheKey, 3, 3);
+  assert.deepEqual(restored, draft);
+
+  // A batch saved under a different cache key or day range is a separate object.
+  assert.equal(await readStoredBookletBatch(storage, "other-cache-key", 3, 3), null);
+  assert.equal(await readStoredBookletBatch(storage, cacheKey, 0, 3), null);
+
+  await deleteStoredBookletBatch(storage, cacheKey, 3, 3);
+  assert.equal(await readStoredBookletBatch(storage, cacheKey, 3, 3), null);
+});
+
+test("a day number maps back to the exact batch that composed it", () => {
+  // Trips of four days or fewer compose as one batch; longer trips compose
+  // in three-day batches. A whole-booklet QA failure on any given day must
+  // resolve to the same batch composeBooklet used, or a repair would
+  // recompose the wrong days.
+  assert.deepEqual(batchRangeForDay(1, 1), { offset: 0, dayCount: 1 });
+  assert.deepEqual(batchRangeForDay(3, 3), { offset: 0, dayCount: 3 });
+  assert.deepEqual(batchRangeForDay(1, 5), { offset: 0, dayCount: 3 });
+  assert.deepEqual(batchRangeForDay(3, 5), { offset: 0, dayCount: 3 });
+  assert.deepEqual(batchRangeForDay(4, 5), { offset: 3, dayCount: 2 });
+  assert.deepEqual(batchRangeForDay(5, 5), { offset: 3, dayCount: 2 });
+  assert.deepEqual(batchRangeForDay(1, 14), { offset: 0, dayCount: 3 });
+  assert.deepEqual(batchRangeForDay(7, 14), { offset: 6, dayCount: 3 });
+  assert.deepEqual(batchRangeForDay(14, 14), { offset: 12, dayCount: 2 });
 });

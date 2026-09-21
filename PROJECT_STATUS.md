@@ -200,6 +200,15 @@ D1 stores metadata and R2 object keys.
 - D1 locks prevent duplicate work for the same cache key.
 - Generation progress is streamed to the browser, and interrupted clients can
   reconnect to in-progress or saved work.
+- Composition is checkpointed per day-batch to R2 (`booklet-batches/`), and the
+  browser persists the in-flight request to `localStorage`. A suspended tab,
+  a dropped connection, or a full page reload automatically resumes the same
+  request instead of restarting generation from scratch; the server rejoins
+  the existing job/lock or replays only the batches that were not yet saved.
+- A whole-booklet QA failure that survives per-batch validation (for example a
+  word-budget or duplicate-card rule that only makes sense once all days are
+  assembled) invalidates and recomposes only the implicated day's batch
+  instead of failing the entire edition.
 - Destination and itinerary corrections are surfaced to the parent instead of
   silently inventing a place.
 - Child names are used for the local family pack but excluded from AI prompts.
@@ -260,17 +269,24 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 ## Known Gaps
 
 - A live one-day diagnostic on 2026-09-21 measured about 96 seconds for fresh
-  Kimi web research. Text composition then retried because Kimi omitted a queue
-  title; that label is now repaired locally and composition is capped at one
-  correction attempt. Fresh destinations can still exceed a minute, so the
-  next architectural improvement is a durable generation job/status endpoint
-  that survives mobile connection loss without restarting model work.
+  Kimi web research. Fresh destinations can still exceed a minute; connection
+  survival across that wait is now handled (see Reliability And Safety), but
+  the wait itself is not shortened.
+- A live five-day diagnostic (London, age 5, 2026-09-21) surfaced a real
+  reliability gap beyond connection loss: composition can still fail outright
+  when Kimi's output repeatedly violates a rule inside one 3-day batch (for
+  example a wrong game type or an interest hook of the wrong length). Each
+  batch already gets one correction attempt inside `composeBookletBatch`, but
+  when both attempts fail the whole request fails, even though the other
+  batch(es) already composed validly. Restoring a checkpointed batch also
+  re-runs its per-batch validation, so a batch that was valid when saved but
+  fails re-validation falls through to a full (costly) fresh recompose rather
+  than a targeted fix. Single-activity repair instead of whole-batch retry
+  would reduce both the cost and the odds of a full failure.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.
 - Kimi token usage and cost are not yet written to D1 per request.
-- A failed validation can still cause a whole composition batch to be retried;
-  targeted single-activity repair would reduce cost.
 - Destination research cache keys include the itinerary, limiting reuse when
   two families visit the same city with different plans.
 - Family profiles are browser-scoped rather than account-synced.
@@ -286,14 +302,16 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 
 ## Recommended Next Priorities
 
-1. Record Kimi input tokens, output tokens, retries, duration, model, and
+1. Repair a single invalid activity instead of retrying a whole 3-day
+   composition batch, and skip re-validating a checkpointed batch that was
+   already accepted once (see Known Gaps: London/age-5 diagnostic).
+2. Record Kimi input tokens, output tokens, retries, duration, model, and
    estimated cost in D1.
-2. Generate a limited high-quality preview before purchase and generate the
+3. Generate a limited high-quality preview before purchase and generate the
    remaining days only after entitlement verification.
-3. Complete Stripe live-mode activation and run one real low-value purchase,
+4. Complete Stripe live-mode activation and run one real low-value purchase,
    webhook, PDF-delivery, refund, and payout verification.
-4. Separate reusable destination research from custom-itinerary research.
-5. Repair only invalid days or activities rather than regenerating a batch.
+5. Separate reusable destination research from custom-itinerary research.
 6. Run a smaller live release matrix before the full 20- or 50-scenario UAT.
 7. Plan the iOS client after the paid web flow, profiles, and privacy model are
    stable.

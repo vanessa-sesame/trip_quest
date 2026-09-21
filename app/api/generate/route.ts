@@ -18,9 +18,12 @@ import {
   type BookletObjectStorage,
   acquireGenerationLock,
   consumeGenerationRateLimit,
+  batchRangeForDay,
   createBookletCacheKey,
   createResearchCacheKey,
   bookletSnapshotFingerprint,
+  composeBatchSize,
+  deleteStoredBookletBatch,
   readStoredBookletBatch,
   readStoredBooklet,
   readStoredResearch,
@@ -971,9 +974,7 @@ async function composeBooklet(
   cacheKey?: string,
   publish?: (message: string) => void,
 ) {
-  // Long, single model calls are fragile on mobile. Three-day batches keep
-  // each request bounded and can be restored independently after a reconnect.
-  const batchSize = days > 3 ? 3 : days;
+  const batchSize = composeBatchSize(days);
   const batches = Array.from(
     { length: Math.ceil(days / batchSize) },
     (_, index) => ({
@@ -1263,7 +1264,7 @@ export async function POST(request: Request) {
 
             publish(`Designing printable games specifically for age ${age}…`);
             stageStartedAt = Date.now();
-            const draft = await composeBooklet(
+            let draft = await composeBooklet(
               destination,
               age,
               days,
@@ -1284,21 +1285,77 @@ export async function POST(request: Request) {
             });
             logGenerationTiming(cacheKey, "composition", stageStartedAt);
             lockLease?.assertOwned();
-            const preparedDraft = applySiblingPlan(draft, family);
-            const generatedAt = new Date().toISOString();
-            const provisionalResult: GeneratedBookletData = {
+            let preparedDraft = applySiblingPlan(draft, family);
+            let provisionalResult: GeneratedBookletData = {
               destination,
               age,
               days,
               itinerary,
               ...preparedDraft,
               sources: research.sources,
-              generatedAt,
+              generatedAt: new Date().toISOString(),
               family,
               events,
             };
             // Reject bad model output before paying the latency and cost of images.
-            assertBookletQa(provisionalResult);
+            try {
+              assertBookletQa(provisionalResult);
+            } catch (qaError) {
+              // A whole-booklet rule can fail even when every batch passed
+              // its own checks (for example a duplicate mission card across
+              // two batches). Recompose only the offending day's batch
+              // instead of discarding all the already-valid composed work;
+              // give up if the day cannot be identified or the repair also
+              // fails its own QA pass.
+              const failedDay = qaError instanceof Error
+                ? Number(qaError.message.match(/^Day (\d+)/)?.[1])
+                : NaN;
+              if (!Number.isInteger(failedDay)) throw qaError;
+
+              const { offset, dayCount } = batchRangeForDay(failedDay, days);
+              publish(`Repairing day ${failedDay}…`);
+              try {
+                await deleteStoredBookletBatch(runtime.BOOKLET_FILES, cacheKey, offset, dayCount);
+              } catch (error) {
+                logStorageFailure("delete invalid booklet batch", error);
+              }
+
+              stageStartedAt = Date.now();
+              draft = await composeBooklet(
+                destination,
+                age,
+                days,
+                itinerary,
+                research,
+                apiKey,
+                composerModel,
+                familyContext,
+                hasSiblings,
+                balancePlan,
+                gameTypePlan,
+                interestPlan,
+                runtime.BOOKLET_FILES,
+                cacheKey,
+                publish,
+              ).catch((error) => {
+                throw new GenerationStageError("composition", error);
+              });
+              logGenerationTiming(cacheKey, "composition-repair", stageStartedAt);
+              lockLease?.assertOwned();
+              preparedDraft = applySiblingPlan(draft, family);
+              provisionalResult = {
+                destination,
+                age,
+                days,
+                itinerary,
+                ...preparedDraft,
+                sources: research.sources,
+                generatedAt: new Date().toISOString(),
+                family,
+                events,
+              };
+              assertBookletQa(provisionalResult);
+            }
             stageStartedAt = Date.now();
             const illustratedDayPlans = await addBookletIllustrations(runtime, {
               destination,

@@ -45,6 +45,9 @@ test("uncached custom illustrations are generated concurrently and capped at thr
         async put() {
           return undefined;
         },
+        async delete() {
+          return undefined;
+        },
       },
     }, { destination: "Reykjavik", age: 7, dayPlans });
 

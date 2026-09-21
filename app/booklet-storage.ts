@@ -55,6 +55,7 @@ export type BookletObjectStorage = {
     value: string | ArrayBuffer | ArrayBufferView,
     options?: ObjectMetadata,
   ): Promise<unknown>;
+  delete(key: string): Promise<unknown>;
 };
 
 export type StoredResearch = {
@@ -131,6 +132,22 @@ export function bookletBatchArtifactKey(
   return `booklet-batches/${BOOKLET_BATCH_CACHE_VERSION}/${cacheKey}/${dayOffset}-${dayCount}.json`;
 }
 
+// Long, single model calls are fragile on mobile. Three-day batches keep
+// each request bounded and can be restored independently after a reconnect.
+export function composeBatchSize(days: number) {
+  return days > 3 ? 3 : days;
+}
+
+// Maps a 1-indexed day number back to the batch that composed it, so a
+// whole-booklet QA failure can invalidate and recompose just that batch
+// instead of every batch in the request.
+export function batchRangeForDay(day: number, totalDays: number) {
+  const batchSize = composeBatchSize(totalDays);
+  const offset = Math.floor((day - 1) / batchSize) * batchSize;
+  const dayCount = Math.min(batchSize, totalDays - offset);
+  return { offset, dayCount };
+}
+
 export async function readStoredBookletBatch(
   artifacts: BookletObjectStorage | undefined,
   cacheKey: string,
@@ -173,6 +190,16 @@ export async function writeStoredBookletBatch(
       },
     },
   );
+}
+
+export async function deleteStoredBookletBatch(
+  artifacts: BookletObjectStorage | undefined,
+  cacheKey: string,
+  dayOffset: number,
+  dayCount: number,
+) {
+  if (!artifacts) return;
+  await artifacts.delete(bookletBatchArtifactKey(cacheKey, dayOffset, dayCount));
 }
 
 function legacyBookletArtifactKey(cacheKey: string) {

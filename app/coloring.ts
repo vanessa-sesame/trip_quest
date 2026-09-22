@@ -151,7 +151,11 @@ export function coloringSceneFor(
   const sceneFromText = (text: string): ColoringScene | undefined => {
     const value = text.toLocaleLowerCase();
     if (/merlion|water-spouting lion|lion fountain|lion head.*fish|fish.*lion/.test(value)) return "merlion";
-    if (/temple guardian|guardian statue|guardian figure|guardian sculpture|stone sentinel|dvarapala|yaksha|statue|sculpture|idol/.test(value)) return "guardian";
+    // Bare "statue"/"sculpture"/"idol" deliberately excluded: guardian-coloring-v1.png
+    // is a specific Southeast/East Asian temple-guardian lion, not a generic
+    // statue — those bare words matched any statue anywhere (a European
+    // bronze, an Egyptian carving) and showed this specific one regardless.
+    if (/temple guardian|guardian statue|guardian figure|guardian sculpture|stone sentinel|dvarapala|yaksha/.test(value)) return "guardian";
     if (/tile|mosaic|ceramic|peranakan|geometric pattern|repeating pattern|pattern motif/.test(value)) return "tile";
     if (/supertree|gardens by the bay|ocbc skyway|vertical garden/.test(value)) return "supertree";
     if (/dinosaur|fossil|jurassic|prehistoric/.test(value)) return "dinosaur";

@@ -650,6 +650,10 @@ function WordSearchBoard({ activity, age, items }: { activity: Activity; age: nu
     size,
     age >= 9,
   );
+  // Words are normalized/deduped by createWordSearch (may drop or reorder
+  // labels), so puzzle.words[i] is not guaranteed to match items[i]
+  // positionally — look clues up by the same normalized form instead.
+  const clueByWord = new Map(items.map((item) => [normalizePuzzleWord(item.label, size), item.clue]));
   return (
     <div className="word-search-layout">
       <div className="word-grid" style={{ "--puzzle-size": puzzle.grid.length } as CSSProperties}>
@@ -658,7 +662,12 @@ function WordSearchBoard({ activity, age, items }: { activity: Activity; age: nu
         )}
       </div>
       <div className="word-bank">
-        {puzzle.words.map((word) => <span key={word}>{word}</span>)}
+        {puzzle.words.map((word) => (
+          <span key={word}>
+            <strong>{word}</strong>
+            {clueByWord.get(word) ? <em>{clueByWord.get(word)}</em> : null}
+          </span>
+        ))}
       </div>
     </div>
   );

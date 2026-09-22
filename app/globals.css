@@ -1770,6 +1770,11 @@ p {
   font-size: 0.7rem;
 }
 
+.guide-pitch {
+  font-weight: 700;
+  color: var(--leaf);
+}
+
 .generated-day {
   padding: 7%;
 }
@@ -1945,6 +1950,13 @@ p {
 .word-bank span {
   font-size: 0.32rem;
   font-weight: 900;
+}
+
+.word-bank em {
+  display: block;
+  font-size: 0.85em;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .crossword-grid {
@@ -2545,6 +2557,15 @@ p {
   gap: 4%;
 }
 
+/* word_search/crossword/scavenger_hunt need full width to stay legible, so
+   the pair stacks top/bottom instead of side-by-side when either one needs
+   it — see the useStack check in page.tsx and drawPairedInPlaceGames in
+   booklet-pdf.ts. */
+.game-pair.game-pair-stacked {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
 .game-pair-item {
   display: flex;
   min-height: 0;
@@ -2763,28 +2784,42 @@ p {
 
 .generated-game-page .word-bank {
   display: grid;
-  width: min(72cqw, 290px);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 10px;
+  width: min(90cqw, 360px);
+  grid-template-columns: 1fr;
+  gap: 5px;
   border-top: 1px solid var(--line);
   padding-top: 4%;
 }
 
 .generated-game-page .word-bank span {
   position: relative;
+  display: block;
   font-size: 0.45rem;
   padding-left: 12px;
 }
 
 .generated-game-page .word-bank span::before {
   position: absolute;
-  top: 50%;
+  top: 3px;
   left: 0;
   width: 7px;
   height: 7px;
   border: 1px solid var(--ink);
   content: "";
-  transform: translateY(-50%);
+}
+
+.generated-game-page .word-bank strong {
+  display: block;
+  font-size: 1em;
+}
+
+.generated-game-page .word-bank em {
+  display: block;
+  margin-top: 1px;
+  font-size: 0.82em;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .generated-game-page .crossword-grid {

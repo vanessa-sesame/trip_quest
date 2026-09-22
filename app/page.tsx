@@ -27,8 +27,10 @@ import {
   buildBooklet,
   getAgeBand,
   getDestinationProfile,
+  pairEligibleGameTypes,
   sanitizeAge,
   sanitizeDays,
+  wideOnlyGameTypes,
 } from "./booklet";
 import {
   type GeneratedBookletData,
@@ -1643,6 +1645,10 @@ function GeneratedPage({
         </div>
         <h4>Local care clue</h4>
         <p>{profile.etiquette}</p>
+        <h4>Using this booklet</h4>
+        <p>What to bring: pencils or colored pencils, this booklet, and about {getAgeBand(age).minutes} unhurried minutes at each stop.</p>
+        <p>How it works: a quick game while you wait in line, two hands-on games once you arrive, then a calm page to unwind after — no reading required until your child is ready.</p>
+        <p className="guide-pitch">Real places become real adventures — that&apos;s the whole idea.</p>
       </article>
     );
   }
@@ -1732,20 +1738,23 @@ function GeneratedPage({
     );
   }
   const { activity, activityIndex, day } = pageEntry;
-  // Coloring/drawing needs the full page for its illustration and is not
-  // paired with a second game; inThePlace is free to be any age-appropriate
-  // type (including coloring), so this only pairs when it is not.
+  // Coloring needs the full page for its illustration and is not paired with
+  // a second game; inThePlace is free to be any age-appropriate type
+  // (including coloring), so this only pairs when it is not.
   const secondActivity = activityIndex === 0
-    && activity.gameType !== "coloring"
-    && activity.gameType !== "drawing"
+    && pairEligibleGameTypes.includes(activity.gameType)
     ? day.slots.inThePlaceSecond
     : undefined;
   if (secondActivity) {
+    // word_search/crossword/scavenger_hunt need full width to stay legible,
+    // so the pair stacks top/bottom instead of side-by-side when either one
+    // needs it — mirrors drawPairedInPlaceGames' useStack decision in the PDF.
+    const useStack = wideOnlyGameTypes.includes(activity.gameType) || wideOnlyGameTypes.includes(secondActivity.gameType);
     return (
       <article className="generated-sheet generated-day generated-game-page generated-game-page-paired">
         <span>Day {day.day} · In the place</span>
         <p className="game-place">{day.landmark.place}</p>
-        <div className="game-pair">
+        <div className={useStack ? "game-pair game-pair-stacked" : "game-pair"}>
           {[activity, secondActivity].map((pairedActivity, index) => (
             <div className="game-pair-item" key={pairedActivity.title}>
               <h4>{pairedActivity.title}</h4>

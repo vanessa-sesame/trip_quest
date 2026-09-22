@@ -130,6 +130,55 @@ test("a coloring in-place activity keeps its full illustrated page instead of be
   assert.ok(illustratedBytes.length > bytes.length + 100_000, "expected a real illustration to be embedded");
 });
 
+test("a wide game paired with a second in-place game stacks instead of breaking the page count", async () => {
+  const dayPlans = buildBooklet(7, "Singapore", 1);
+  const wordSearchItems = [
+    { label: "KOPI", clue: "Local coffee, often served with condensed milk." },
+    { label: "HAWKER", clue: "A stall selling cheap, quick local food." },
+    { label: "SHOPHOUSE", clue: "A narrow building with a shop below and home above." },
+    { label: "MERLION", clue: "The half-lion, half-fish statue that is Singapore's mascot." },
+  ];
+  const fourItems = [
+    { label: "a", clue: "clue one here" },
+    { label: "b", clue: "clue two here" },
+    { label: "c", clue: "clue three here" },
+    { label: "d", clue: "clue four here" },
+  ];
+  const day = dayPlans[0];
+  day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "word_search", items: wordSearchItems };
+  day.slots.sitDown = { ...day.slots.sitDown, gameType: "story", items: fourItems };
+  assert.ok(day.slots.inThePlaceSecond, "expected a second in-place activity from buildBooklet");
+  // drawing was previously excluded from pairing alongside coloring; it is
+  // now pair-eligible, and word_search forces the pair to stack top/bottom.
+  day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "drawing", items: fourItems };
+  day.activities = [day.slots.inThePlace, day.slots.sitDown];
+  (day.slots.whileYouWait as unknown as { game?: unknown }).game = { gameType: "drawing", items: fourItems };
+
+  const booklet: GeneratedBookletData = {
+    destination: "Singapore",
+    age: 7,
+    days: 1,
+    itinerary: [""],
+    profile: getDestinationProfile("Singapore"),
+    dayPlans,
+    sources: [],
+    generatedAt: "2026-09-22T00:00:00.000Z",
+    family: [{
+      id: "child-1",
+      name: "Explorer 1",
+      age: 7,
+      readingLevel: "reader",
+      interests: [],
+      avoid: [],
+      preferredMechanics: [],
+    }],
+  };
+
+  const bytes = await createBookletPdf(booklet);
+  const document = await PDFDocument.load(bytes);
+  assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
+});
+
 test("PDF filenames are stable and filesystem-safe", () => {
   assert.equal(
     bookletPdfFilename({ destination: "São Paulo, Brazil", age: 9 }),

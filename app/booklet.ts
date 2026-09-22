@@ -16,21 +16,34 @@ export const gameTypes = [
 
 export type GameType = (typeof gameTypes)[number];
 
-// Game types whose PDF/preview layout still reads cleanly at roughly half a
-// page's width, for a second in-place game or a real queue-page game sharing
-// space with other content. word_search/scavenger_hunt use fixed pixel
-// offsets that go negative at that width; coloring/drawing use fixed-height
-// bands that don't compact; crossword/map_puzzle are workable but cramped
-// and carry extra plumbing (crossword's clue column, map_puzzle's
-// once-per-booklet dedupe) for little payoff at this size.
-export const compactSafeGameTypes: GameType[] = [
-  "matching",
-  "bingo",
-  "spot_the_difference",
-  "codebreaker",
-  "quiz",
-  "story",
+// Game types whose PDF/preview layout needs the full page width to read
+// cleanly (word_search's grid, crossword's grid+clue column, and
+// scavenger_hunt's clue column all use fixed offsets that go near-zero at
+// half a page's width) — forces a top/bottom split instead of side-by-side
+// when either game in a pair is one of these.
+export const wideOnlyGameTypes: GameType[] = [
+  "word_search",
+  "crossword",
+  "scavenger_hunt",
 ];
+
+// Eligible for the second in-place game, sharing the in-place page with the
+// first. Excludes map_puzzle (shares a scarce once-per-booklet dedupe budget
+// with inThePlace/sitDown, not worth spending on a third slot) and coloring
+// (drawColoringActivityBoard's fixed ~313pt height band doesn't fit even a
+// top/bottom half of the page, only a full page or the queue page's taller
+// box).
+export const pairEligibleGameTypes: GameType[] = gameTypes.filter(
+  (gameType) => gameType !== "map_puzzle" && gameType !== "coloring",
+);
+
+// Eligible for the queue page's optional real game. That page is already
+// full width and tall enough (~450-510pt) for every layout here, including
+// coloring — only map_puzzle stays excluded, for the same dedupe-budget
+// reason as above.
+export const queueEligibleGameTypes: GameType[] = gameTypes.filter(
+  (gameType) => gameType !== "map_puzzle",
+);
 
 export type GameItem = {
   label: string;
@@ -1172,7 +1185,7 @@ function buildDaySlots(
       title: "Spot It While You Wait",
       instruction: age <= 6
         ? `How many moving things can you see near ${names.short}?`
-        : `Count one repeated feature near ${names.short}; compare your total with a grown-up.`,
+        : `Count how many times you spot something shaped like part of ${names.short}; compare your total with a grown-up.`,
       countLabel: "I counted",
       countTo: age <= 4 ? 5 : age <= 6 ? 10 : 20,
       required: queueIsExpected(`${primary} ${names.place}`),

@@ -1,4 +1,4 @@
-import { compactSafeGameTypes, type DayPlan, type GameType } from "./booklet.ts";
+import { pairEligibleGameTypes, queueEligibleGameTypes, type DayPlan, type GameType } from "./booklet.ts";
 import {
   familyChildDisplayName,
   type FamilyChild,
@@ -838,7 +838,7 @@ export function validateBookletDraft(
           usedTitles,
           mapPuzzleState,
           true,
-          compactSafeGameTypes,
+          pairEligibleGameTypes,
         )
       : undefined;
 
@@ -869,7 +869,7 @@ export function validateBookletDraft(
       if (typeof queueGameTypeRaw !== "string" || !supportedGameTypes.includes(queueGameTypeRaw as GameType)) {
         throw new Error(`Day ${dayIndex + 1} queue game has an invalid game type.`);
       }
-      if (!compactSafeGameTypes.includes(queueGameTypeRaw as GameType)) {
+      if (!queueEligibleGameTypes.includes(queueGameTypeRaw as GameType)) {
         throw new Error(
           `${queueGameTypeRaw} is not a compact enough game type for the queue page on day ${dayIndex + 1}.`,
         );

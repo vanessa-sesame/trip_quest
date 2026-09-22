@@ -1,5 +1,5 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
-import { compactSafeGameTypes, getAgeBand } from "../../booklet";
+import { pairEligibleGameTypes, queueEligibleGameTypes, getAgeBand } from "../../booklet";
 import {
   type BookletDraft,
   type BookletSource,
@@ -688,13 +688,15 @@ function bookletSchema(days: number, age: number) {
     required: ["title", "kind", "body", "prompt", "gameType", "items", "requiresPresence", "answerMode"],
   };
 
-  const compactGameTypesForAge = allowedGameTypesForAge(age)
-    .filter((gameType) => compactSafeGameTypes.includes(gameType));
-  const compactActivitySchema = {
+  const pairGameTypesForAge = allowedGameTypesForAge(age)
+    .filter((gameType) => pairEligibleGameTypes.includes(gameType));
+  const queueGameTypesForAge = allowedGameTypesForAge(age)
+    .filter((gameType) => queueEligibleGameTypes.includes(gameType));
+  const pairActivitySchema = {
     ...activitySchema,
     properties: {
       ...activitySchema.properties,
-      gameType: { type: "string", enum: compactGameTypesForAge },
+      gameType: { type: "string", enum: pairGameTypesForAge },
     },
   };
   const compactItemsSchema = {
@@ -774,7 +776,7 @@ function bookletSchema(days: number, age: number) {
                       type: "object",
                       additionalProperties: false,
                       properties: {
-                        gameType: { type: "string", enum: compactGameTypesForAge },
+                        gameType: { type: "string", enum: queueGameTypesForAge },
                         items: compactItemsSchema,
                       },
                       required: ["gameType", "items"],
@@ -783,7 +785,7 @@ function bookletSchema(days: number, age: number) {
                   required: ["title", "instruction", "countLabel", "countTo", "required", "game"],
                 },
                 inThePlace: activitySchema,
-                inThePlaceSecond: compactActivitySchema,
+                inThePlaceSecond: pairActivitySchema,
                 sitDown: activitySchema,
                 factCard: {
                   type: "array",
@@ -874,7 +876,7 @@ Use the listed mechanics as the intended mix. Do not use the same mechanic as th
 
 EXACT PRINTABLE GAME SCHEDULE
 ${exactGameSchedule}
-Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format. For inThePlaceSecond, choose a different compact game type than inThePlace, from this list only: ${compactSafeGameTypes.join(", ")}.
+Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format. For inThePlaceSecond, choose a different game type than inThePlace, from this list only: ${pairEligibleGameTypes.join(", ")}.
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
@@ -888,15 +890,15 @@ CREATIVE DIRECTION
 - Every day must return exactly six named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
-- whileYouWait is now a real, quick game, not a plain counting line: give it its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${compactSafeGameTypes.join(", ")}. Still set required=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age alongside the game.
-- inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${compactSafeGameTypes.join(", ")}.
+- whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${queueEligibleGameTypes.join(", ")}. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Still set required=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
+- inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${pairEligibleGameTypes.join(", ")}.
 - sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.
 - factCard contains exactly three facts or zero facts. Drop the entire list when research does not support three. Every fact must be concrete, under 15 words, and never an instruction. Do not repeat a fact sentence anywhere else that day.
 - Follow the DAILY ITINERARY exactly on every day with a family plan. Build that day's theme, mission, facts, vocabulary, and games around those named stops. For an open day, choose a strong subject from the research.
 - Put a recognizable local detail in every day theme and mission. Never use generic themes such as “Hello Destination”, “Landmark Lab”, “Culture Day”, or “Memory Maker”.
 - Give every activity a unique title and a real printable game. Rotate game types across the booklet, never repeat one on consecutive days, and use map_puzzle no more than once in the entire booklet.
 - ${ageGameDirection}
-- For crossword and word-search items, each item label must be one unique, locally relevant answer word of 3 to 9 letters. A crossword's four answers must form one connected letter-sharing set: every answer must share at least one letter with another answer, and all four must connect as one group. If four suitable answers cannot connect, choose word_search instead. Do not write “Across” or “Down” inside a clue because the layout engine assigns those directions.
+- For crossword and word-search items, each item label must be one unique, locally relevant answer word of 3 to 9 letters. A crossword's four answers must form one connected letter-sharing set: every answer must share at least one letter with another answer, and all four must connect as one group. If four suitable answers cannot connect, choose word_search instead. Do not write “Across” or “Down” inside a clue because the layout engine assigns those directions. Every crossword and word-search clue is printed right next to its answer word, so it must always teach something, never just hint at the grid: when the label is a transliterated local-language word, the clue must give its plain-English meaning or translation first (for example label "BENTO", clue "a Japanese boxed lunch, packed for the train"); when the label is an English word, the clue must state the specific local fact that makes it the answer, not a generic description.
 - A map_puzzle is a route-planning street-grid challenge with START, FINISH, closed roads, and four named local stops. The child must choose and trace the route; never pre-draw the answer or describe it as connecting four dots. Never call an activity Sudoku because Sudoku is not a supported game mechanic.
 - For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
 - Exactly four items appear in each printed game. Never mention a fifth item, extra target, or different answer in the activity body or prompt.

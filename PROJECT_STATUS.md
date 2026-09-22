@@ -48,9 +48,17 @@ Current public release: https://tripquestkids.com, source branch `main`.
   card. The two in-place games render as two smaller games sharing one
   physical page rather than each getting a full page, in both the PDF and the
   web preview; this keeps the printable page count at 3 pages per day
-  (unchanged) instead of adding a page. Preview and PDF page order come from
-  the same manifest, so the purchased file matches the edition shown on
-  screen.
+  (unchanged) instead of adding a page. The pair sits side by side unless
+  either game needs full width to stay legible (word search, crossword,
+  scavenger hunt), in which case they stack top/bottom instead. Preview and
+  PDF page order come from the same manifest, so the purchased file matches
+  the edition shown on screen.
+- Word search clues (each word's meaning or the local fact that makes it the
+  answer) are shown next to every word in the word bank, not just a couple on
+  a separate strip.
+- The parent guide page explains how to use the booklet — what to bring, the
+  daily rhythm, and why it is worth the parent's time — alongside the
+  existing local-word and etiquette cards and day-by-day overview.
 - The queue page's family-relay/interest content (previously only visible on
   one summary page near the back of the booklet, where it could also get
   truncated) now also appears directly on the day's first activity page.
@@ -144,14 +152,42 @@ Stripe credentials before charging customers:
   their original two-activity shape. Facts are kept only when there are
   exactly three concrete facts under 15 words; otherwise the fact card is
   omitted instead of inventing filler.
-- The second in-place game and the queue game are restricted to
-  `compactSafeGameTypes` (`app/booklet.ts`: matching, bingo,
-  spot_the_difference, codebreaker, quiz, story) — the other game types use
-  fixed layouts that break or badly degrade at the half-page/short-page sizes
-  these two slots render at. `inThePlace` itself is not restricted this way
-  and can still be assigned coloring or drawing, which need the full page for
-  their illustration; when it is, the second in-place game is not shown that
-  day rather than forcing it into a broken half-page layout.
+- The second in-place game and the queue game are restricted by two lists in
+  `app/booklet.ts`: `pairEligibleGameTypes` (everything except `map_puzzle`
+  and `coloring`) for `inThePlaceSecond`, and `queueEligibleGameTypes`
+  (everything except `map_puzzle`) for the queue slot's optional bonus game.
+  `map_puzzle` stays excluded from both because it shares a once-per-booklet
+  dedupe counter with `inThePlace`/`sitDown` that is already scarce.
+  `inThePlace` itself is not restricted and can still be assigned coloring,
+  which needs the full page for its illustration; when it is, the second
+  in-place game is not shown that day rather than forcing it into a broken
+  half-page layout.
+- Pairing two in-place games no longer forces them side by side.
+  `wideOnlyGameTypes` (`word_search`, `crossword`, `scavenger_hunt`) need
+  full page width to stay legible — their PDF/CSS layouts use offsets that
+  go near-illegible at a half-width column — so whenever either game in a
+  pair is one of those, the page stacks them top/bottom at full width
+  instead (`drawStackedInPlaceGames` in `app/booklet-pdf.ts`;
+  `.game-pair-stacked` in `app/globals.css`, chosen client-side by the same
+  `wideOnlyGameTypes` check in `app/page.tsx`).
+- Word-search clues are now shown next to every word, not just the two
+  surfaced in the fixed "LOCAL CLUES" strip: `drawWordSearch` (PDF) and
+  `WordSearchBoard` (`app/activity-game.tsx`, web) both render a clue line
+  under each word bank entry. The lookup is by normalized word, not array
+  index, because `createWordSearch` (`app/puzzles.ts`) dedupes/reorders
+  labels and `puzzle.words[i]` is not guaranteed to match `activity.items[i]`
+  positionally. The prompt now explicitly asks for the plain-English meaning
+  when a word-search/crossword label is a transliterated local word.
+- The queue instruction text has a hard floor independent of whether Kimi
+  includes the optional bonus game (see the gap below): the prompt requires
+  the `instruction` field alone to name a concrete physical thing to count
+  ("Count the pointed rooftops...") rather than a vague placeholder. The
+  offline fallback in `buildDaySlots` was updated to match this bar.
+- The parent guide page (PDF page 2, and page 1 of the web preview) has an
+  expanded "how to use this booklet" section: what to bring, the day
+  structure in parent language, and one persuasive line — sized in the PDF
+  against the 14-day worst case, since the day-overview list above it uses a
+  fixed-height band regardless of trip length.
 - Composition returns an `interestHook` only on scheduled interest days and a
   `siblingMission` for each day. Both appear in the web preview and on the
   first printable activity page of each day.
@@ -364,7 +400,12 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   in-place game (`inThePlaceSecond`) does not have this problem — Kimi
   included it in every live test (6/6) — the difference appears to be
   specific to adding fields to an existing nested schema object rather than
-  a new one, though this is not fully confirmed.
+  a new one, though this is not fully confirmed. Since the bonus game stays
+  unreliable, the prompt (2026-09-22) now splits it from a second,
+  always-required ask: the plain `instruction` text alone must name a
+  concrete physical thing to count, independent of whether the bonus game
+  ever shows up, so the common (gameless) case still reads as a real prompt
+  rather than a vague placeholder.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

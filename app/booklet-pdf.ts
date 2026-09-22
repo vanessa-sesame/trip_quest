@@ -11,6 +11,7 @@ import {
   type RGB,
 } from "pdf-lib";
 import type { Activity, GameItem } from "./booklet.ts";
+import { pairEligibleGameTypes, wideOnlyGameTypes } from "./booklet.ts";
 import {
   coloringIllustrationSpecs,
   coloringPageSpec,
@@ -599,29 +600,63 @@ function drawGuide(
     });
   });
 
+  // Sized for the 14-day worst case: the day-overview list above can reach
+  // down to about y=163 (rowsPerColumn=7 at the 300pt band cap), so this box
+  // stays below that with the same ~15pt cushion the original single-line
+  // box used, just taller to fit what-to-bring / how-it-works / why-it's-worth-it.
+  const packTop = 148;
+  const packBottom = 52;
   page.drawRectangle({
     x: MARGIN,
-    y: 74,
+    y: packBottom,
     width: PAGE_WIDTH - MARGIN * 2,
-    height: 73,
+    height: packTop - packBottom,
     borderColor: colors.softLine,
     borderWidth: 1,
     color: colors.white,
   });
-  page.drawText(familyPack?.children.length ? "FAMILY EXPLORERS" : "PACK", { x: MARGIN + 15, y: 122, size: 8, font: fonts.bold, color: colors.coral });
+  page.drawText(familyPack?.children.length ? "FAMILY EXPLORERS" : "PACK", { x: MARGIN + 15, y: packTop - 22, size: 8, font: fonts.bold, color: colors.coral });
   drawWrappedText(
     page,
     familyPack?.children.length
       ? `${familyPack.children.map((child, index) => `${pdfText(familyChildDisplayName(child, index))} (age ${child.age})`).join(" / ")} / same place, different ways to play`
-      : `Pencil / colored pencils / a grown-up / ${getAgeBand(booklet.age).minutes}-minute pockets of curious time`,
+      : `What to bring: pencils or colored pencils, this booklet, and about ${getAgeBand(booklet.age).minutes} unhurried minutes at each stop.`,
     fonts,
     {
       x: MARGIN + 15,
-      y: 101,
-      size: 9,
+      y: packTop - 35,
+      size: 8.5,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
+      maxLines: 1,
+      color: colors.muted,
+    },
+  );
+  drawWrappedText(
+    page,
+    "How it works: a quick game while you wait in line, two hands-on games once you arrive, then a calm page to unwind after — no reading required until your child is ready.",
+    fonts,
+    {
+      x: MARGIN + 15,
+      y: packTop - 51,
+      size: 8,
+      lineHeight: 11,
       maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
       maxLines: 2,
-      color: colors.muted,
+      color: colors.ink,
+    },
+  );
+  drawWrappedText(
+    page,
+    "Real places become real adventures — that's the whole idea.",
+    fonts,
+    {
+      x: MARGIN + 15,
+      y: packTop - 78,
+      size: 8.5,
+      font: fonts.bold,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
+      maxLines: 1,
+      color: colors.green,
     },
   );
 }
@@ -1524,22 +1559,42 @@ function drawWordSearch(page: PDFPage, fonts: Fonts, activity: Activity, age: nu
     });
   });
   const bankX = gridX + gridSize + 20;
+  const bankWidth = box.x + box.width - bankX;
+  // Words are normalized/deduped by createWordSearch (may drop or reorder
+  // labels), so puzzle.words[i] is not guaranteed to match activity.items[i]
+  // positionally — look clues up by the same normalized form instead.
+  const clueByWord = new Map(activity.items.map((item) => [normalizePuzzleWord(item.label, size), item.clue]));
   page.drawText("FIND", { x: bankX, y: gridY + gridSize - 8, size: 8, font: fonts.bold, color: colors.coral });
+  const rowPitch = 52;
+  const rowHeight = 44;
   puzzle.words.forEach((word, index) => {
+    const rowTop = gridY + gridSize - 13 - index * rowPitch;
     page.drawRectangle({
       x: bankX,
-      y: gridY + gridSize - 47 - index * 52,
-      width: box.x + box.width - bankX,
-      height: 34,
+      y: rowTop - rowHeight,
+      width: bankWidth,
+      height: rowHeight,
       color: index % 2 ? colors.greenSoft : colors.yellowSoft,
     });
     page.drawText(word, {
       x: bankX + 9,
-      y: gridY + gridSize - 35 - index * 52,
+      y: rowTop - 12,
       size: 10,
       font: fonts.monoBold,
       color: colors.ink,
     });
+    const clue = clueByWord.get(word);
+    if (clue) {
+      drawWrappedText(page, clue, fonts, {
+        x: bankX + 9,
+        y: rowTop - 24,
+        size: 6.5,
+        lineHeight: 8,
+        maxWidth: bankWidth - 18,
+        maxLines: 2,
+        color: colors.muted,
+      });
+    }
   });
 }
 
@@ -2004,11 +2059,18 @@ function drawEditorialBoardChrome(
   };
 }
 
-const compactGameLabels: Record<string, string> = {
+const gameTypeLabels: Record<string, string> = {
+  coloring: "Coloring and tracing",
+  drawing: "Drawing studio",
+  crossword: "Mini crossword",
+  word_search: "Word search",
+  maze: "Route maze",
   matching: "Match-up",
   bingo: "Explorer bingo",
   spot_the_difference: "Spot 3 differences",
   codebreaker: "Codebreaker",
+  map_puzzle: "Route-planning challenge",
+  scavenger_hunt: "Scavenger hunt",
   quiz: "Quick quiz",
   story: "Story studio",
 };
@@ -2051,12 +2113,30 @@ function drawCompactGameFrame(page: PDFPage, fonts: Fonts, label: string, box: B
   };
 }
 
-// Only ever called with a compactSafeGameTypes activity (matching, bingo,
-// spot_the_difference, codebreaker, quiz, story) — the other game types use
-// fixed pixel offsets that break well before this box size, or fixed-height
-// bands that do not compact (coloring/drawing).
-function drawCompactGame(page: PDFPage, fonts: Fonts, activity: Activity, frame: Box) {
-  const box = drawCompactGameFrame(page, fonts, compactGameLabels[activity.gameType] || "Travel game", frame);
+// Renders one game into a caller-sized frame with lighter chrome than the
+// full-page drawGame below. Handles every game type except map_puzzle
+// (excluded from both the pair and queue slots — see pairEligibleGameTypes/
+// queueEligibleGameTypes in booklet.ts). coloring bypasses the compact frame
+// entirely and draws straight onto the raw box, the same way drawGame's own
+// coloring case bypasses drawEditorialBoardChrome — drawColoringActivityBoard
+// already has its own "SPOT/COLOR/TRACE"/"HOW TO PLAY" header, and it also
+// needs a taller box than a stacked-pair half provides, so only the
+// queue-page caller (which has a full ~450-510pt-tall box) ever passes
+// gameType "coloring" here in practice.
+function drawCompactGame(
+  page: PDFPage,
+  fonts: Fonts,
+  activity: Activity,
+  frame: Box,
+  age: number,
+  context: string,
+  artwork: ColoringArtwork,
+) {
+  if (activity.gameType === "coloring") {
+    drawColoringActivityBoard(page, fonts, activity, frame, context, artwork);
+    return;
+  }
+  const box = drawCompactGameFrame(page, fonts, gameTypeLabels[activity.gameType] || "Travel game", frame);
   switch (activity.gameType) {
     case "matching":
       drawMatching(page, fonts, activity.items, box);
@@ -2073,19 +2153,51 @@ function drawCompactGame(page: PDFPage, fonts: Fonts, activity: Activity, frame:
     case "quiz":
       drawQuiz(page, fonts, activity.items, box);
       break;
+    case "word_search":
+      drawWordSearch(page, fonts, activity, age, box);
+      break;
+    case "crossword":
+      drawCrossword(page, fonts, activity, box);
+      break;
+    case "maze":
+      drawMazeGame(page, fonts, activity, age, box);
+      break;
+    case "scavenger_hunt":
+      drawChecklist(page, fonts, activity.items, box);
+      break;
+    case "drawing":
+      drawTraceBoard(page, fonts, activity, box, false, context, artwork);
+      break;
     default:
       drawStory(page, fonts, activity.items, box);
   }
 }
 
-function drawPairedInPlaceGames(page: PDFPage, fonts: Fonts, first: Activity, second: Activity) {
+// word_search/crossword/scavenger_hunt need the full page width to stay
+// legible (their PDF layouts use fixed offsets that go near-zero at a
+// half-width column) — when either game in the pair needs that, the whole
+// page stacks top/bottom instead of side-by-side.
+function drawPairedInPlaceGames(
+  page: PDFPage,
+  fonts: Fonts,
+  first: Activity,
+  second: Activity,
+  age: number,
+  contextPrefix: string,
+  artwork: ColoringArtwork,
+) {
+  const useStack = wideOnlyGameTypes.includes(first.gameType) || wideOnlyGameTypes.includes(second.gameType);
+  if (useStack) {
+    drawStackedInPlaceGames(page, fonts, first, second, age, contextPrefix, artwork);
+    return;
+  }
   const columnGap = 16;
   const columnWidth = (PAGE_WIDTH - MARGIN * 2 - columnGap) / 2;
   const columns = [
-    { activity: first, x: MARGIN },
-    { activity: second, x: MARGIN + columnWidth + columnGap },
+    { activity: first, x: MARGIN, index: 0 },
+    { activity: second, x: MARGIN + columnWidth + columnGap, index: 1 },
   ];
-  columns.forEach(({ activity, x }) => {
+  columns.forEach(({ activity, x, index }) => {
     const titleSize = fitWrappedTextSize(activity.title, fonts.bold, columnWidth, 13, 10, 2);
     drawWrappedText(page, activity.title, fonts, {
       x,
@@ -2106,7 +2218,64 @@ function drawPairedInPlaceGames(page: PDFPage, fonts: Fonts, first: Activity, se
       maxLines: 3,
       color: colors.muted,
     });
-    drawCompactGame(page, fonts, activity, { x, y: 50, width: columnWidth, height: 560 });
+    drawCompactGame(
+      page,
+      fonts,
+      activity,
+      { x, y: 50, width: columnWidth, height: 560 },
+      age,
+      `${contextPrefix} - game ${index + 1}`,
+      artwork,
+    );
+  });
+}
+
+function drawStackedInPlaceGames(
+  page: PDFPage,
+  fonts: Fonts,
+  first: Activity,
+  second: Activity,
+  age: number,
+  contextPrefix: string,
+  artwork: ColoringArtwork,
+) {
+  const rowGap = 20;
+  const rowHeight = (700 - 50 - rowGap) / 2;
+  const rows = [
+    { activity: first, top: 700, index: 0 },
+    { activity: second, top: 700 - rowHeight - rowGap, index: 1 },
+  ];
+  const width = PAGE_WIDTH - MARGIN * 2;
+  rows.forEach(({ activity, top, index }) => {
+    const titleSize = fitWrappedTextSize(activity.title, fonts.bold, width, 15, 11, 1);
+    drawWrappedText(page, activity.title, fonts, {
+      x: MARGIN,
+      y: top,
+      size: titleSize,
+      font: fonts.bold,
+      color: colors.ink,
+      lineHeight: titleSize * 1.15,
+      maxWidth: width,
+      maxLines: 1,
+    });
+    drawWrappedText(page, activity.body, fonts, {
+      x: MARGIN,
+      y: top - 22,
+      size: 8,
+      lineHeight: 10,
+      maxWidth: width,
+      maxLines: 2,
+      color: colors.muted,
+    });
+    drawCompactGame(
+      page,
+      fonts,
+      activity,
+      { x: MARGIN, y: top - rowHeight + 8, width, height: rowHeight - 50 },
+      age,
+      `${contextPrefix} - game ${index + 1}`,
+      artwork,
+    );
   });
 }
 
@@ -2119,22 +2288,7 @@ function drawGame(
   context: string,
   artwork: ColoringArtwork,
 ) {
-  const labels: Record<string, string> = {
-    coloring: "Coloring and tracing",
-    drawing: "Drawing studio",
-    crossword: "Mini crossword",
-    word_search: "Word search",
-    maze: "Route maze",
-    matching: "Match-up",
-    bingo: "Explorer bingo",
-    spot_the_difference: "Spot 3 differences",
-    codebreaker: "Codebreaker",
-    map_puzzle: "Route-planning challenge",
-    scavenger_hunt: "Scavenger hunt",
-    quiz: "Quick quiz",
-    story: "Story studio",
-  };
-  const frameBox = drawGameFrame(page, fonts, labels[activity.gameType] || "Travel game", frame);
+  const frameBox = drawGameFrame(page, fonts, gameTypeLabels[activity.gameType] || "Travel game", frame);
   const box = activity.gameType === "coloring"
     ? frameBox
     : drawEditorialBoardChrome(
@@ -2142,7 +2296,7 @@ function drawGame(
       fonts,
       activity,
       frameBox,
-      labels[activity.gameType] || "Travel game",
+      gameTypeLabels[activity.gameType] || "Travel game",
     );
   switch (activity.gameType) {
     case "coloring":
@@ -2198,15 +2352,14 @@ function drawActivityPage(
   artwork: ColoringArtwork,
 ) {
   const day = booklet.dayPlans[dayIndex];
-  // Coloring/drawing needs the full page for its illustration and does not
-  // compact (drawColoringActivityBoard uses fixed-width text offsets that
-  // overlap well before a half-page column). inThePlace is free to be any
+  // Coloring needs the full page for its illustration and does not compact
+  // (drawColoringActivityBoard uses fixed-width text offsets that overlap
+  // well before a half-page column). inThePlace is free to be any
   // age-appropriate type, including coloring, so pairing only happens when
   // it is not — inThePlaceSecond's own content is simply not shown that day
   // rather than forcing a broken layout.
   const secondActivity = activityIndex === 0
-    && activity.gameType !== "coloring"
-    && activity.gameType !== "drawing"
+    && pairEligibleGameTypes.includes(activity.gameType)
     ? day.slots.inThePlaceSecond
     : undefined;
   const accent = activityIndex === 0 ? colors.coral : colors.blue;
@@ -2223,7 +2376,15 @@ function drawActivityPage(
   });
 
   if (secondActivity) {
-    drawPairedInPlaceGames(page, fonts, activity, secondActivity);
+    drawPairedInPlaceGames(
+      page,
+      fonts,
+      activity,
+      secondActivity,
+      booklet.age,
+      `${day.theme} - day ${day.day} - game`,
+      artwork,
+    );
     return;
   }
 
@@ -2357,6 +2518,7 @@ function drawQueuePage(
   dayIndex: number,
   pageNumber: number,
   totalPages: number,
+  artwork: ColoringArtwork,
 ) {
   const day = booklet.dayPlans[dayIndex];
   const queue = day.slots.whileYouWait;
@@ -2435,6 +2597,9 @@ function drawQueuePage(
       fonts,
       { title: queue.title, kind: "Quick queue game", body: queue.instruction, prompt: "", gameType: queue.gameType, items: queue.items },
       { x: MARGIN, y: gameBottom, width: PAGE_WIDTH - MARGIN * 2, height: counterY - diameter / 2 - 14 - gameBottom },
+      booklet.age,
+      `${day.theme} - day ${day.day} - queue game`,
+      artwork,
     );
 
     if (hasFacts) {
@@ -2906,7 +3071,7 @@ export async function createBookletPdf(
   bookletDayPageEntries(booklet.dayPlans).forEach((entry) => {
     const dayIndex = booklet.dayPlans.indexOf(entry.day);
     if (entry.kind === "queue") {
-      drawQueuePage(document, fonts, booklet, dayIndex, pageNumber, totalPages);
+      drawQueuePage(document, fonts, booklet, dayIndex, pageNumber, totalPages, coloringArtwork);
     } else {
       drawActivityPage(
         document,

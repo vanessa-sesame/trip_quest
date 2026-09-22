@@ -2737,7 +2737,11 @@ function drawRevealPage(
     contentTop = photoY - 18;
   }
 
-  drawWrappedText(page, reveal.revealText, fonts, {
+  // chatTop is anchored to the actual bottom of revealText (drawWrappedText
+  // returns it) rather than a fixed offset from contentTop, so short reveal
+  // text (often just 1 line of the 3-line budget) doesn't leave a dead gap
+  // above the chat box.
+  const revealTextBottom = drawWrappedText(page, reveal.revealText, fonts, {
     x: MARGIN,
     y: contentTop,
     size: 10,
@@ -2747,7 +2751,7 @@ function drawRevealPage(
     color: colors.ink,
   });
 
-  const chatTop = contentTop - 56;
+  const chatTop = revealTextBottom - 20;
   page.drawRectangle({ x: MARGIN, y: chatTop - 76, width: PAGE_WIDTH - MARGIN * 2, height: 78, color: colors.blueSoft, borderColor: colors.softLine, borderWidth: 0.8 });
   page.drawText("CHAT ABOUT IT", { x: MARGIN + 15, y: chatTop - 18, size: 8, font: fonts.bold, color: colors.blue });
   reveal.chatPrompts.forEach((prompt, index) => {

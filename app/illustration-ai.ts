@@ -50,7 +50,9 @@ function printableRevealPhotoPrompt(targetLabel: string, destination: string, da
   ].join(" ");
 }
 
-async function generatePng(apiKey: string, model: string, prompt: string) {
+// Exported for scripts/generate-coloring-library.ts, which reuses this
+// same call to batch-generate curated scene art offline.
+export async function generatePng(apiKey: string, model: string, prompt: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   try {

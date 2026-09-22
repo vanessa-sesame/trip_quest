@@ -21,6 +21,14 @@ export const coloringScenes = [
   "wildlife",
   "dinosaur",
   "shophouse",
+  "canal",
+  "windmill",
+  "bicycle",
+  "machine",
+  "boat",
+  "statue",
+  "playground",
+  "artwork",
 ] as const;
 
 export type ColoringScene = (typeof coloringScenes)[number];
@@ -99,6 +107,21 @@ export const coloringIllustrationSpecs: Record<ColoringScene, ColoringIllustrati
   wildlife: { label: "local wildlife", subject: "local wildlife", detailHints: ["animal silhouette", "habitat", "leafy cover"], imagePath: "/illustrations/wildlife-coloring-v1.png" },
   dinosaur: { label: "dinosaur discovery", subject: "a dinosaur discovery", detailHints: ["dinosaur shape", "fossil bones", "footprints"], imagePath: "/illustrations/dinosaur-coloring-v1.png" },
   shophouse: { label: "historic shophouses", subject: "historic shophouses", detailHints: ["shutters", "covered walkway", "shop sign"], imagePath: "/illustrations/shophouse-coloring-v1.png" },
+  // New scenes (2026-09-22): added to widen keyword coverage beyond the
+  // original ~20, so fewer unrelated subjects collide into the same
+  // fallback. No imagePath yet — no image credits available to generate
+  // curated art right now; see scripts/generate-coloring-library.ts, which
+  // is ready to run (and safe to re-run — it skips scenes that already
+  // have a file) the moment credits exist. Until then these render via the
+  // shared neutral fallback in drawColoringScene (see the "skyline" case).
+  canal: { label: "canal and houseboats", subject: "a canal lined with houseboats", detailHints: ["water reflection", "houseboat", "footbridge"] },
+  windmill: { label: "windmill", subject: "a windmill", detailHints: ["turning sails", "tower", "surrounding fields"] },
+  bicycle: { label: "bicycle path", subject: "a bicycle path", detailHints: ["bike wheel", "handlebars", "path markings"] },
+  machine: { label: "invented machine", subject: "an imaginative invented machine", detailHints: ["gear", "lever", "moving part"] },
+  boat: { label: "boat on the water", subject: "a boat on the water", detailHints: ["hull", "sail or deck", "water line"] },
+  statue: { label: "statue or monument", subject: "a statue or monument", detailHints: ["base or pedestal", "figure outline", "plaque"] },
+  playground: { label: "playground", subject: "a playground", detailHints: ["slide", "swing", "climbing frame"] },
+  artwork: { label: "painting or artwork", subject: "a painting or piece of artwork", detailHints: ["frame", "brushstroke", "subject of the piece"] },
 };
 
 export const coloringSceneLabels: Record<ColoringScene, string> = Object.fromEntries(
@@ -166,6 +189,11 @@ export function coloringSceneFor(
     if (/cave|karst|limestone|grotto|cavern/.test(value)) return "cave";
     if (/shophouse|shop house|street shop|old town|lantern/.test(value)) return "shophouse";
     if (/train|railway|station|mrt|metro|tram|subway/.test(value)) return "train";
+    if (/canal|houseboat|canal house|canal ring/.test(value)) return "canal";
+    if (/windmill|watermill/.test(value)) return "windmill";
+    if (/bicycle|bike path|bike lane|cycling|cyclist/.test(value)) return "bicycle";
+    if (/\bmachine\b|invention|contraption|gadget|gears?\b|pulley|chain reaction|mechanism/.test(value)) return "machine";
+    if (/boat|ferry|sailboat|ship\b|vessel/.test(value)) return "boat";
     if (/beach|coast|harbou?r|seaside|ocean|sea\b|island|lighthouse|waterfront|jetty/.test(value)) return "coast";
     if (/zoo|animal|wildlife|elephant|giraffe|monkey|panda|bird park|safari/.test(value)) return "wildlife";
     if (/bridge|skyway|viaduct|crossing/.test(value)) return "bridge";
@@ -173,7 +201,14 @@ export function coloringSceneFor(
     if (/temple|shrine|pagoda|cathedral|church|monastery/.test(value)) return "temple";
     if (/mountain|volcano|alpine|summit|cliff|hill|glacier/.test(value)) return "mountain";
     if (/garden|botanic|orchid|flower|forest|rainforest|bamboo|park|grove/.test(value)) return "garden";
-    if (/skyline|city|downtown|skyscraper|building|architecture|museum|gallery|monument/.test(value)) return "skyline";
+    // "monument" and "gallery" moved here from the skyline bucket below —
+    // a statue/monument or a painting is a better match than a generic
+    // cityscape. "museum" alone stays with skyline: many museums aren't
+    // about art at all (natural history, science, transport).
+    if (/statue|sculpture|monument|memorial|\bidol\b/.test(value)) return "statue";
+    if (/painting|artwork|canvas|portrait|masterpiece|\bgallery\b/.test(value)) return "artwork";
+    if (/playground|\bslide\b|swing set|jungle gym|climbing frame/.test(value)) return "playground";
+    if (/skyline|city|downtown|skyscraper|building|architecture|museum/.test(value)) return "skyline";
     return undefined;
   };
 

@@ -956,6 +956,20 @@ function drawColoringScene(page: PDFPage, scene: Box, variant: ColoringScene, va
       drawPolyline([[218, 144], [207, 158], [229, 158]], colors.coral, 1.5, true);
       break;
     }
+    // These eight scenes (added 2026-09-22) have no bespoke vector art yet —
+    // no image credits available to batch-generate their curated PNGs (see
+    // scripts/generate-coloring-library.ts) or write eight new hand-drawn
+    // compositions in the meantime. They share skyline's neutral scene
+    // rather than rendering blank; each becomes its own bespoke drawing (or
+    // gets real curated art) as a follow-up, not a permanent choice.
+    case "canal":
+    case "windmill":
+    case "bicycle":
+    case "machine":
+    case "boat":
+    case "statue":
+    case "playground":
+    case "artwork":
     case "skyline":
       page.drawCircle({ x: x + width - 42, y: y + height - 36, size: 20, borderColor: colors.yellow, borderWidth: 2 });
       drawCloud(x + 34, y + height - 46);

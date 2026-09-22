@@ -28,6 +28,32 @@ test("unknown drawing subjects use a stable neutral skyline", () => {
   assert.equal(coloringSceneFor(activity("Another Unclassified Prompt", "THING")), "skyline");
 });
 
+test("the neutral skyline fallback has no curated image (it is not a real landmark)", () => {
+  // skyline-coloring-v1.png was removed: it depicted a specific real
+  // landmark (Marina Bay Sands, Singapore), not a generic city, and was
+  // being shown for every unmatched subject worldwide via this fallback.
+  assert.equal(curatedColoringImagePath(activity("Mystery Shape Studio", "OBJECT")), undefined);
+});
+
+test("newer scene keywords route to their own scene, not the generic fallback", () => {
+  assert.equal(coloringSceneFor(activity("Draw the Secret Cycle Path"), "a bicycle path through the museum"), "bicycle");
+  assert.equal(coloringSceneFor(activity("Canal House Sketch")), "canal");
+  assert.equal(coloringSceneFor(activity("Windmill Studio")), "windmill");
+  assert.equal(coloringSceneFor(activity("Draw Your Chain Reaction"), "an invented machine with gears"), "machine");
+  assert.equal(coloringSceneFor(activity("Harbor Boat Sketch"), "a small sailboat"), "boat");
+  assert.equal(coloringSceneFor(activity("Playground Studio")), "playground");
+  assert.equal(coloringSceneFor(activity("Gallery Sketch"), "a painting in the gallery"), "artwork");
+});
+
+test("a generic statue no longer borrows the Asian temple-guardian image", () => {
+  // "statue"/"sculpture"/"idol" alone used to match "guardian" (a specific
+  // Southeast/East Asian temple-guardian lion) regardless of context.
+  assert.equal(coloringSceneFor(activity("Bronze Statue Sketch"), "a European statue"), "statue");
+  assert.equal(coloringSceneFor(activity("Museum Sculpture Studio")), "statue");
+  // Genuine temple-guardian phrasing still matches guardian.
+  assert.equal(coloringSceneFor(activity("Guardian Statue Studio"), "temple guardian statue"), "guardian");
+});
+
 test("activity subjects take precedence over mixed day context", () => {
   assert.equal(coloringSceneFor(activity("Market Observation Drawing"), "railway station and market"), "market");
   assert.equal(coloringSceneFor(activity("Mountain Observation Drawing"), "historic temple and mountain trail"), "mountain");

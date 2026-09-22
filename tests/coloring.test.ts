@@ -15,7 +15,7 @@ const activity = (title: string, label = "DETAIL", clue = "A local detail to not
 test("landmark-aware coloring scenes recognize distinctive subjects", () => {
   assert.equal(coloringSceneFor(activity("Merlion Color Bingo", "TOWER", "A round tower shape."), "garden skyline"), "merlion");
   assert.equal(coloringSceneFor(activity("Temple Guardian Coloring", "TOWER", "Color the tower guardians."), "temple tower"), "guardian");
-  assert.equal(coloringSceneFor(activity("Tile Pattern Drawing", "SHOPHOUSE", "Draw the repeating motif."), "Katong-Joo Chiat shophouses"), "tile");
+  assert.equal(coloringSceneFor(activity("Peranakan Tile Pattern Drawing", "SHOPHOUSE", "Draw the repeating nyonya motif."), "Katong-Joo Chiat shophouses"), "tile");
   assert.equal(coloringSceneFor(activity("Observation drawing"), "Gardens by the Bay Supertrees"), "supertree");
   assert.equal(coloringSceneFor(activity("Golden Dome Drawing Lab"), "Kampong Gelam"), "mosque");
   assert.equal(coloringSceneFor(activity("Railway Window Hunt"), "Kyoto Station"), "train");
@@ -54,6 +54,22 @@ test("a generic statue no longer borrows the Asian temple-guardian image", () =>
   assert.equal(coloringSceneFor(activity("Guardian Statue Studio"), "temple guardian statue"), "guardian");
 });
 
+test("a generic mosaic or old town no longer borrows Singapore-specific art", () => {
+  // "mosaic"/"ceramic"/"geometric pattern" alone used to match "tile" (a
+  // specific Peranakan/Singapore motif) — confirmed live: a Barcelona
+  // Gaudí-mosaic activity got routed here via a sibling activity's
+  // unrelated "Mosaic" title and was labeled "PERANAKAN TILE MOTIF".
+  assert.equal(coloringSceneFor(activity("Mosaic Pattern Studio"), "Gaudí trencadís mosaic tilework"), "skyline");
+  assert.equal(coloringSceneFor(activity("Ceramic Pattern Studio")), "skyline");
+  // Genuine Peranakan/Nyonya phrasing still matches tile.
+  assert.equal(coloringSceneFor(activity("Peranakan Tile Studio")), "tile");
+  // "old town"/"lantern"/"street shop" alone used to match "shophouse" (a
+  // specific Singapore/Malaysia architecture style).
+  assert.equal(coloringSceneFor(activity("Lantern Festival Sketch"), "the old town street shops"), "skyline");
+  // Genuine shophouse phrasing still matches shophouse.
+  assert.equal(coloringSceneFor(activity("Shophouse Facade Studio")), "shophouse");
+});
+
 test("activity subjects take precedence over mixed day context", () => {
   assert.equal(coloringSceneFor(activity("Market Observation Drawing"), "railway station and market"), "market");
   assert.equal(coloringSceneFor(activity("Mountain Observation Drawing"), "historic temple and mountain trail"), "mountain");
@@ -70,7 +86,7 @@ test("specific title subjects outrank generic item and context subjects", () => 
     "guardian",
   );
   assert.equal(
-    coloringSceneFor(activity("Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."), "shophouse street"),
+    coloringSceneFor(activity("Peranakan Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."), "shophouse street"),
     "tile",
   );
 });
@@ -113,7 +129,7 @@ test("coloring pages use four activity items plus destination challenges and a f
 
 test("tile title wins over shophouse context in the shared page spec", () => {
   const page = coloringPageSpec(
-    activity("Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."),
+    activity("Peranakan Tile Pattern Drawing", "SHOPHOUSE", "Look at the shophouse wall."),
     "Katong-Joo Chiat shophouses",
   );
   assert.equal(page.scene, "tile");

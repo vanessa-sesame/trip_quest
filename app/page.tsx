@@ -30,7 +30,6 @@ import {
   pairEligibleGameTypes,
   sanitizeAge,
   sanitizeDays,
-  wideOnlyGameTypes,
 } from "./booklet";
 import {
   type GeneratedBookletData,
@@ -1795,15 +1794,13 @@ function GeneratedPage({
     ? day.slots.inThePlaceSecond
     : undefined;
   if (secondActivity) {
-    // word_search/crossword/scavenger_hunt need full width to stay legible,
-    // so the pair stacks top/bottom instead of side-by-side when either one
-    // needs it — mirrors drawPairedInPlaceGames' useStack decision in the PDF.
-    const useStack = wideOnlyGameTypes.includes(activity.gameType) || wideOnlyGameTypes.includes(secondActivity.gameType);
+    // Always stacks top/bottom, full width — mirrors drawPairedInPlaceGames
+    // in the PDF, which had the same side-by-side path removed (2026-09-22).
     return (
       <article className="generated-sheet generated-day generated-game-page generated-game-page-paired">
         <span>Day {day.day} · In the place</span>
         <p className="game-place">{day.landmark.place}</p>
-        <div className={useStack ? "game-pair game-pair-stacked" : "game-pair"}>
+        <div className="game-pair game-pair-stacked">
           {[activity, secondActivity].map((pairedActivity, index) => (
             <div className="game-pair-item" key={pairedActivity.title}>
               <h4>{pairedActivity.title}</h4>

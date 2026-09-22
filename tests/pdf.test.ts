@@ -188,6 +188,73 @@ test("a coloring in-place activity keeps its full illustrated page instead of be
   assert.ok(illustratedBytes.length > bytes.length + 100_000, "expected a real illustration to be embedded");
 });
 
+test("two activities that land on the same curated scene do not embed the same picture twice", async () => {
+  const buildTwoDayBooklet = (secondDaySubject: string) => {
+    const dayPlans = buildBooklet(6, "Riverside", 2);
+    const fourItems = [
+      { label: "a", clue: "clue one here" },
+      { label: "b", clue: "clue two here" },
+      { label: "c", clue: "clue three here" },
+      { label: "d", clue: "clue four here" },
+    ];
+    dayPlans[0].slots.sitDown = {
+      ...dayPlans[0].slots.sitDown,
+      title: "Hawker Market Sketch",
+      body: "Draw the local hawker market stalls.",
+      gameType: "drawing",
+      items: fourItems,
+    };
+    dayPlans[1].slots.sitDown = {
+      ...dayPlans[1].slots.sitDown,
+      title: secondDaySubject,
+      body: `Draw the ${secondDaySubject.toLowerCase()}.`,
+      gameType: "drawing",
+      items: fourItems,
+    };
+    dayPlans.forEach((day) => {
+      day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "bingo", items: fourItems };
+      if (day.slots.inThePlaceSecond) {
+        day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "matching", items: fourItems };
+      }
+      day.activities = [day.slots.inThePlace, day.slots.sitDown];
+    });
+    const booklet: GeneratedBookletData = {
+      destination: "Riverside",
+      age: 6,
+      days: 2,
+      itinerary: ["", ""],
+      profile: getDestinationProfile("Riverside"),
+      dayPlans,
+      sources: [],
+      generatedAt: "2026-09-22T00:00:00.000Z",
+      family: [{
+        id: "child-1",
+        name: "Explorer 1",
+        age: 6,
+        readingLevel: "reader",
+        interests: [],
+        avoid: [],
+        preferredMechanics: [],
+      }],
+    };
+    return booklet;
+  };
+  const resolver = async (path: string) => new Uint8Array(await readFile(`public${path}`));
+
+  // Day 2 lands on the exact same "market" scene as day 1 (both mention
+  // a local market) — the second occurrence must not embed the same
+  // picture again.
+  const collidingBytes = await createBookletPdf(buildTwoDayBooklet("Local Market Stalls"), undefined, resolver);
+  // Day 2 lands on a different scene ("mountain") — both days should get
+  // their own distinct embedded picture.
+  const distinctBytes = await createBookletPdf(buildTwoDayBooklet("Mountain Trail View"), undefined, resolver);
+
+  assert.ok(
+    distinctBytes.length > collidingBytes.length + 100_000,
+    "expected the colliding-scene booklet to embed one fewer curated image than the distinct-scene booklet",
+  );
+});
+
 test("a wide game paired with a second in-place game stacks instead of breaking the page count", async () => {
   const dayPlans = buildBooklet(7, "Singapore", 1);
   const wordSearchItems = [

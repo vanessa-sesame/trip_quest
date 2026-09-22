@@ -167,6 +167,17 @@ export function coloringVariantFor(
   return (stableHash(coloringText(activity, context)) % 3) as ColoringVariant;
 }
 
+// Keyword-matching discipline (learned the hard way from skyline/guardian/
+// tile, 2026-09-22): a curated scene whose image depicts a specific real
+// place or culture (merlion, guardian, tile, shophouse, supertree — all
+// Singapore/Malaysia-specific) must only match keywords that are
+// themselves specific to that place or culture. A bare generic category
+// word ("statue", "tile", "mosaic", "lantern", "old town") will eventually
+// match unrelated content from anywhere in the world and show a
+// specific-but-wrong picture, not a generic one. Genuinely generic scenes
+// (castle, mountain, skyline) are the only ones that should match broad
+// category words, and skyline in particular has no curated image at all
+// for exactly this reason — see its case below.
 export function coloringSceneFor(
   activity: ColoringActivity,
   context = "",
@@ -179,7 +190,14 @@ export function coloringSceneFor(
     // statue — those bare words matched any statue anywhere (a European
     // bronze, an Egyptian carving) and showed this specific one regardless.
     if (/temple guardian|guardian statue|guardian figure|guardian sculpture|stone sentinel|dvarapala|yaksha/.test(value)) return "guardian";
-    if (/tile|mosaic|ceramic|peranakan|geometric pattern|repeating pattern|pattern motif/.test(value)) return "tile";
+    // Bare "tile"/"mosaic"/"ceramic"/"geometric pattern" deliberately
+    // excluded: tile-coloring-v1.png is a specific Peranakan (Singapore/
+    // Malaysia) motif, not generic tilework — those bare words matched
+    // Spanish azulejos, Moroccan zellige, or any mosaic mention anywhere
+    // (confirmed live: a Barcelona Gaudí-mosaic activity matched via a
+    // sibling activity's unrelated "Mosaic" title and got labeled
+    // "PERANAKAN TILE MOTIF") and showed this specific one regardless.
+    if (/peranakan|nyonya|baba.?nyonya/.test(value)) return "tile";
     if (/supertree|gardens by the bay|ocbc skyway|vertical garden/.test(value)) return "supertree";
     if (/dinosaur|fossil|jurassic|prehistoric/.test(value)) return "dinosaur";
     if (/penguin|rookery/.test(value)) return "penguin";
@@ -187,7 +205,10 @@ export function coloringSceneFor(
     if (/castle|citadel|fortress|fort\b|palace|rampart|battlement/.test(value)) return "castle";
     if (/eiffel|tower|spire|needle|observation deck|clock tower|belfry/.test(value)) return "tower";
     if (/cave|karst|limestone|grotto|cavern/.test(value)) return "cave";
-    if (/shophouse|shop house|street shop|old town|lantern/.test(value)) return "shophouse";
+    // "street shop"/"old town"/"lantern" deliberately excluded: broad enough
+    // to match any old-town or lantern-festival mention worldwide, not just
+    // this specific Singapore/Malaysia shophouse architecture style.
+    if (/shophouse|shop house|five-foot way/.test(value)) return "shophouse";
     if (/train|railway|station|mrt|metro|tram|subway/.test(value)) return "train";
     if (/canal|houseboat|canal house|canal ring/.test(value)) return "canal";
     if (/windmill|watermill/.test(value)) return "windmill";

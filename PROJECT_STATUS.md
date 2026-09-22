@@ -48,11 +48,19 @@ Current public release: https://tripquestkids.com, source branch `main`.
   card. The two in-place games render as two smaller games sharing one
   physical page rather than each getting a full page, in both the PDF and the
   web preview; this keeps the printable page count at 3 pages per day
-  (unchanged) instead of adding a page. The pair sits side by side unless
-  either game needs full width to stay legible (word search, crossword,
-  scavenger hunt), in which case they stack top/bottom instead. Preview and
-  PDF page order come from the same manifest, so the purchased file matches
-  the edition shown on screen.
+  (unchanged) instead of adding a page. The pair always stacks top/bottom,
+  full width (side-by-side columns were tried and removed, 2026-09-22 — the
+  original ask was never to squeeze two games into narrow columns). Preview
+  and PDF page order come from the same manifest, so the purchased file
+  matches the edition shown on screen.
+- A coloring/drawing activity's curated fallback picture is deduplicated
+  within one booklet: if a second day's activity would land on the same
+  scene as an earlier day's (matched by `app/coloring.ts`'s keyword system),
+  it does not embed that picture a second time — it falls back to the
+  abstract vector scene instead, so no two days show the literal same
+  image. This is deterministic (`app/booklet-pdf.ts`'s `usedCuratedPaths`),
+  not a retry/regeneration mechanism — see Known Gaps for why a QA-and-retry
+  approach was considered and rejected for this specific problem.
 - Word search clues (each word's meaning or the local fact that makes it the
   answer) are shown next to every word in the word bank, not just a couple on
   a separate strip.
@@ -446,6 +454,37 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   `addRevealPhoto`) is gated on `questReveal.targetLabel` (needs a concrete
   subject to depict) and never attempts generation without it, so it adds
   no cost/latency when absent.
+- Curated coloring/drawing fallback art (`app/coloring.ts`'s ~28 scenes) had
+  a recurring bug class, found live three times in one session (2026-09-22):
+  a scene's curated image depicts one specific real place or culture
+  (Marina Bay Sands for "skyline"; a Southeast/East Asian temple-guardian
+  lion for "guardian"; a Peranakan tile motif for "tile"), but its keyword
+  match list included bare generic category words ("city"/"building",
+  "statue"/"sculpture", "mosaic"/"ceramic"/"tile") that fire for unrelated
+  content from anywhere in the world. Fixed for these three (skyline lost
+  its curated image entirely — the abstract vector fallback is honestly
+  generic where no real generic-city photo exists; guardian/tile were
+  narrowed to their actually-specific keywords). Not exhaustively re-audited
+  across all ~28 scenes; the pattern to watch for is documented in a
+  comment above `coloringSceneFor` in `app/coloring.ts`. A *dynamic*
+  "ask Kimi if this image is relevant" check was considered and rejected —
+  it would need a new AI call and reintroduces the same retry-failure risk
+  as the item below, for a problem that is 100% a consequence of our own
+  keyword list and has nothing to do with Kimi's output.
+- A "repeated activity instructions" QA check (flag two days sharing
+  near-identical activity body text) was built, tested, and reverted the
+  same day (2026-09-22): it false-positived on `buildBooklet`'s own offline
+  fallback generator, which intentionally reuses fixed template body text
+  ("Draw one real shape from this place...") across multiple open days at
+  young ages when no specific landmark is available — a legitimate,
+  by-design pattern, not a defect. Distinguishing "the same landmark
+  reasonably produces similar instructions" from "a real accidental repeat"
+  would need more than a text-equality check, and shipping the naive
+  version risked failing real generations for content that was actually
+  fine — the same class of mistake as the `whileYouWait.gameType` hard-
+  enforcement above. Repeated *pictures* did ship (see above) because that
+  one is fully deterministic and never risks failing a generation; repeated
+  *text* would need a smarter check before it's safe to add.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

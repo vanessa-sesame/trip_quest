@@ -16,17 +16,6 @@ export const gameTypes = [
 
 export type GameType = (typeof gameTypes)[number];
 
-// Game types whose PDF/preview layout needs the full page width to read
-// cleanly (word_search's grid, crossword's grid+clue column, and
-// scavenger_hunt's clue column all use fixed offsets that go near-zero at
-// half a page's width) — forces a top/bottom split instead of side-by-side
-// when either game in a pair is one of these.
-export const wideOnlyGameTypes: GameType[] = [
-  "word_search",
-  "crossword",
-  "scavenger_hunt",
-];
-
 // Eligible for the second in-place game, sharing the in-place page with the
 // first. Excludes map_puzzle (shares a scarce once-per-booklet dedupe budget
 // with inThePlace/sitDown, not worth spending on a third slot) and coloring

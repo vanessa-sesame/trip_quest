@@ -11,7 +11,7 @@ import {
   type RGB,
 } from "pdf-lib";
 import type { Activity, GameItem } from "./booklet.ts";
-import { pairEligibleGameTypes, wideOnlyGameTypes } from "./booklet.ts";
+import { pairEligibleGameTypes } from "./booklet.ts";
 import {
   coloringIllustrationSpecs,
   coloringPageSpec,
@@ -2200,64 +2200,11 @@ function drawCompactGame(
   }
 }
 
-// word_search/crossword/scavenger_hunt need the full page width to stay
-// legible (their PDF layouts use fixed offsets that go near-zero at a
-// half-width column) — when either game in the pair needs that, the whole
-// page stacks top/bottom instead of side-by-side.
+// Always stacks top/bottom, full width — side-by-side columns were tried
+// and removed (2026-09-22): the user's original ask was never to squeeze
+// two games into narrow columns at all, and the "only stack when the game
+// needs full width" compromise still left some pairs side-by-side.
 function drawPairedInPlaceGames(
-  page: PDFPage,
-  fonts: Fonts,
-  first: Activity,
-  second: Activity,
-  age: number,
-  contextPrefix: string,
-  artwork: ColoringArtwork,
-) {
-  const useStack = wideOnlyGameTypes.includes(first.gameType) || wideOnlyGameTypes.includes(second.gameType);
-  if (useStack) {
-    drawStackedInPlaceGames(page, fonts, first, second, age, contextPrefix, artwork);
-    return;
-  }
-  const columnGap = 16;
-  const columnWidth = (PAGE_WIDTH - MARGIN * 2 - columnGap) / 2;
-  const columns = [
-    { activity: first, x: MARGIN, index: 0 },
-    { activity: second, x: MARGIN + columnWidth + columnGap, index: 1 },
-  ];
-  columns.forEach(({ activity, x, index }) => {
-    const titleSize = fitWrappedTextSize(activity.title, fonts.bold, columnWidth, 13, 10, 2);
-    drawWrappedText(page, activity.title, fonts, {
-      x,
-      y: 700,
-      size: titleSize,
-      font: fonts.bold,
-      color: colors.ink,
-      lineHeight: titleSize * 1.15,
-      maxWidth: columnWidth,
-      maxLines: 2,
-    });
-    drawWrappedText(page, activity.body, fonts, {
-      x,
-      y: 655,
-      size: 7.5,
-      lineHeight: 9.5,
-      maxWidth: columnWidth,
-      maxLines: 3,
-      color: colors.muted,
-    });
-    drawCompactGame(
-      page,
-      fonts,
-      activity,
-      { x, y: 50, width: columnWidth, height: 560 },
-      age,
-      `${contextPrefix} - game ${index + 1}`,
-      artwork,
-    );
-  });
-}
-
-function drawStackedInPlaceGames(
   page: PDFPage,
   fonts: Fonts,
   first: Activity,
@@ -3193,12 +3140,27 @@ export async function createBookletPdf(
   const revealArtwork: Record<number, PDFImage> = {};
   if (resolveColoringImage) {
     const imageRequests = new Map<string, string>();
+    // Curated static art (unlike AI-generated art, which is unique per
+    // activity by content hash) is shared across the whole scene library —
+    // two activities landing on the same scene would otherwise show the
+    // literal same picture twice in one booklet. Only the first activity to
+    // reach a given curated path gets it; later collisions are left
+    // unrequested, so drawTraceBoard/drawColoringActivityBoard's existing
+    // "if (image) ... else drawColoringScene(...)" fallback draws the
+    // honest abstract scene instead of repeating a picture.
+    const usedCuratedPaths = new Set<string>();
     booklet.dayPlans.forEach((day) => {
       day.activities.forEach((activity, activityIndex) => {
         if (activity.gameType !== "coloring" && activity.gameType !== "drawing") return;
         const context = `${day.theme} - day ${day.day} - game ${activityIndex + 1}`;
-        const path = activity.illustrationPath || curatedColoringImagePath(activity, context);
-        if (path) imageRequests.set(coloringArtworkKey(activity, context), path);
+        if (activity.illustrationPath) {
+          imageRequests.set(coloringArtworkKey(activity, context), activity.illustrationPath);
+          return;
+        }
+        const path = curatedColoringImagePath(activity, context);
+        if (!path || usedCuratedPaths.has(path)) return;
+        usedCuratedPaths.add(path);
+        imageRequests.set(coloringArtworkKey(activity, context), path);
       });
     });
     const revealPhotoRequests = new Map<number, string>();

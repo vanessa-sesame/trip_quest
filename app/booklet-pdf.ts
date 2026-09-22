@@ -2075,6 +2075,19 @@ const gameTypeLabels: Record<string, string> = {
   story: "Story studio",
 };
 
+// Label prefix and accent color for the queue page's secret-target badge,
+// keyed by QueueTargetKind. Purely presentational — never AI-authored — so a
+// new/unexpected kind value just falls back to a neutral default rather than
+// breaking the page.
+const queueTargetKindCopy: Record<string, { prefix: string; accent: RGB; soft: RGB }> = {
+  shape: { prefix: "Your secret shape:", accent: colors.blue, soft: colors.blueSoft },
+  colour: { prefix: "Your secret colour:", accent: colors.coral, soft: colors.coralSoft },
+  object: { prefix: "Your secret object:", accent: colors.green, soft: colors.greenSoft },
+  sound: { prefix: "Your secret sound:", accent: colors.coral, soft: colors.coralSoft },
+  person: { prefix: "Who to spot:", accent: colors.green, soft: colors.greenSoft },
+};
+const defaultQueueTargetKindCopy = { prefix: "Your secret target:", accent: colors.blue, soft: colors.blueSoft };
+
 // A much lighter combined header than drawGameFrame + drawEditorialBoardChrome
 // (which together cost ~152pt of fixed chrome regardless of box size). At the
 // column widths a paired or queue-page game gets, that overhead would eat a
@@ -2558,18 +2571,58 @@ function drawQueuePage(
   // same amount; the rest of the page is positioned relative to this rather
   // than fixed coordinates so it works with or without the banner.
   const titleTop = cueText ? 616 : 660;
-  const shift = 660 - titleTop;
+  // The secret-target badge and bonus-quest strip (when present) each add
+  // their own fixed band below the instruction text, on top of the cue
+  // banner's shift, so everything below (counter, game/grid, facts) still
+  // lines up correctly whichever combination is present.
+  const badgeHeight = queue.targetLabel ? 34 : 0;
+  const bonusHeight = queue.bonusQuest ? 26 : 0;
+  const shift = (660 - titleTop) + badgeHeight + bonusHeight;
   drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: titleTop, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
   drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: titleTop - 22, size: 15, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, lineHeight: 17 });
   drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: titleTop - 42, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 10, color: colors.muted });
+
+  let bandTop = titleTop - 64;
+  if (queue.targetLabel) {
+    const kindCopy = queueTargetKindCopy[queue.targetKind || ""] || defaultQueueTargetKindCopy;
+    const badgeY = bandTop;
+    page.drawRectangle({ x: MARGIN, y: badgeY - 26, width: PAGE_WIDTH - MARGIN * 2, height: 28, color: kindCopy.soft, borderColor: kindCopy.accent, borderWidth: 1 });
+    page.drawText(pdfText(kindCopy.prefix).toUpperCase(), { x: MARGIN + 12, y: badgeY - 10, size: 6.5, font: fonts.bold, color: kindCopy.accent });
+    const labelSize = fitWrappedTextSize(queue.targetLabel, fonts.bold, PAGE_WIDTH - MARGIN * 2 - 24, 13, 10, 1);
+    drawWrappedText(page, queue.targetLabel.toUpperCase(), fonts, {
+      x: MARGIN + 12,
+      y: badgeY - 22,
+      size: labelSize,
+      font: fonts.bold,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 24,
+      maxLines: 1,
+      color: colors.ink,
+    });
+    bandTop -= badgeHeight;
+  }
+  if (queue.bonusQuest) {
+    const bonusY = bandTop;
+    page.drawRectangle({ x: MARGIN, y: bonusY - 20, width: PAGE_WIDTH - MARGIN * 2, height: 22, color: colors.yellowSoft });
+    page.drawText("BONUS QUEST", { x: MARGIN + 12, y: bonusY - 12, size: 6.5, font: fonts.bold, color: colors.coral });
+    drawWrappedText(page, queue.bonusQuest, fonts, {
+      x: MARGIN + 96,
+      y: bonusY - 12,
+      size: 7.5,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 108,
+      maxLines: 1,
+      color: colors.muted,
+    });
+    bandTop -= bonusHeight;
+  }
 
   const hasFacts = day.slots.factCard.length === 3;
 
   if (queue.gameType && queue.items) {
     // whileYouWait carries a real compact game — requested in the prompt,
     // but Kimi does not reliably include it, so this path is a bonus when
-    // present rather than the common case.
-    const counterY = titleTop - 76;
+    // present rather than the common case. bandTop already accounts for the
+    // secret-target badge and bonus-quest strip above, when present.
+    const counterY = bandTop - 12;
     const count = Math.min(8, queue.countTo);
     const diameter = 20;
     const counterGap = 8;
@@ -2640,6 +2693,92 @@ function drawQueuePage(
       drawWrappedText(page, fact, fonts, { x: MARGIN + 31, y: y + 7, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2 - 48, maxLines: 2, lineHeight: 12, color: colors.ink });
     });
   }
+}
+
+// The payoff page for whileYouWait's mystery target (see queueTargetKindCopy
+// above), shown once the family has arrived. Only reached when
+// bookletDayPageEntries emitted a "reveal" entry for this day, which itself
+// only happens when both questReveal and whileYouWait.targetLabel are
+// present — so this function can assume both exist.
+function drawRevealPage(
+  document: PDFDocument,
+  fonts: Fonts,
+  booklet: GeneratedBookletData,
+  dayIndex: number,
+  pageNumber: number,
+  totalPages: number,
+  photo?: PDFImage,
+) {
+  const day = booklet.dayPlans[dayIndex];
+  const reveal = day.slots.questReveal;
+  if (!reveal) return;
+  const page = drawPageBase(document, fonts, `Day ${day.day} reveal`, pageNumber, totalPages, colors.blue);
+  drawPill(page, `DAY ${day.day} / AT THE DESTINATION`, fonts, MARGIN, 765, colors.blueSoft, colors.blue);
+  drawWrappedText(page, "Found It!", fonts, {
+    x: MARGIN,
+    y: 725,
+    size: 27,
+    font: fonts.bold,
+    color: colors.ink,
+  });
+
+  let contentTop = 685;
+  if (photo) {
+    const photoHeight = 220;
+    const dims = photo.scale(1);
+    const photoWidth = PAGE_WIDTH - MARGIN * 2;
+    const scale = Math.min(photoWidth / dims.width, photoHeight / dims.height);
+    const drawWidth = dims.width * scale;
+    const drawHeight = dims.height * scale;
+    const photoX = MARGIN + (photoWidth - drawWidth) / 2;
+    const photoY = contentTop - photoHeight;
+    page.drawRectangle({ x: MARGIN, y: photoY, width: photoWidth, height: photoHeight, color: colors.paper, borderColor: colors.softLine, borderWidth: 1 });
+    page.drawImage(photo, { x: photoX, y: photoY + (photoHeight - drawHeight) / 2, width: drawWidth, height: drawHeight });
+    contentTop = photoY - 18;
+  }
+
+  drawWrappedText(page, reveal.revealText, fonts, {
+    x: MARGIN,
+    y: contentTop,
+    size: 10,
+    lineHeight: 14,
+    maxWidth: PAGE_WIDTH - MARGIN * 2,
+    maxLines: 3,
+    color: colors.ink,
+  });
+
+  const chatTop = contentTop - 56;
+  page.drawRectangle({ x: MARGIN, y: chatTop - 76, width: PAGE_WIDTH - MARGIN * 2, height: 78, color: colors.blueSoft, borderColor: colors.softLine, borderWidth: 0.8 });
+  page.drawText("CHAT ABOUT IT", { x: MARGIN + 15, y: chatTop - 18, size: 8, font: fonts.bold, color: colors.blue });
+  reveal.chatPrompts.forEach((prompt, index) => {
+    const y = chatTop - 36 - index * 26;
+    page.drawCircle({ x: MARGIN + 20, y: y + 3, size: 3, color: colors.blue });
+    drawWrappedText(page, prompt, fonts, { x: MARGIN + 32, y: y + 7, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 47, maxLines: 2, lineHeight: 11, color: colors.ink });
+  });
+
+  const badgeTop = chatTop - 90;
+  page.drawRectangle({ x: MARGIN, y: badgeTop - 26, width: 150, height: 28, color: colors.yellowSoft, borderColor: colors.coral, borderWidth: 1 });
+  page.drawCircle({ x: MARGIN + 20, y: badgeTop - 13, size: 6, color: colors.coral });
+  page.drawText("QUEST COMPLETE", { x: MARGIN + 34, y: badgeTop - 16, size: 7.5, font: fonts.bold, color: colors.coral });
+
+  const photoBoxTop = badgeTop - 40;
+  const photoBoxHeight = Math.max(120, photoBoxTop - 50);
+  page.drawRectangle({
+    x: MARGIN,
+    y: photoBoxTop - photoBoxHeight,
+    width: PAGE_WIDTH - MARGIN * 2,
+    height: photoBoxHeight,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderDashArray: [4, 4],
+  });
+  page.drawText("Draw or stick a photo of your discovery here", {
+    x: MARGIN + 12,
+    y: photoBoxTop - 16,
+    size: 8,
+    font: fonts.bold,
+    color: colors.muted,
+  });
 }
 
 function answerFor(activity: Activity, age: number) {
@@ -3031,6 +3170,7 @@ export async function createBookletPdf(
     monoBold: await document.embedFont(StandardFonts.CourierBold),
   };
   const coloringArtwork: ColoringArtwork = {};
+  const revealArtwork: Record<number, PDFImage> = {};
   if (resolveColoringImage) {
     const imageRequests = new Map<string, string>();
     booklet.dayPlans.forEach((day) => {
@@ -3041,6 +3181,12 @@ export async function createBookletPdf(
         if (path) imageRequests.set(coloringArtworkKey(activity, context), path);
       });
     });
+    const revealPhotoRequests = new Map<number, string>();
+    booklet.dayPlans.forEach((day, dayIndex) => {
+      if (day.slots.questReveal?.photoPath) {
+        revealPhotoRequests.set(dayIndex, day.slots.questReveal.photoPath);
+      }
+    });
     const resolvedImages = await Promise.all(Array.from(imageRequests, async ([key, path]) => {
       try {
         const bytes = await resolveColoringImage(path);
@@ -3050,9 +3196,21 @@ export async function createBookletPdf(
         return { key, bytes: null };
       }
     }));
+    const resolvedRevealPhotos = await Promise.all(Array.from(revealPhotoRequests, async ([dayIndex, path]) => {
+      try {
+        const bytes = await resolveColoringImage(path);
+        return { dayIndex, bytes };
+      } catch (error) {
+        console.error(`[TripQuest illustration] reveal photo day ${dayIndex + 1}`, error);
+        return { dayIndex, bytes: null };
+      }
+    }));
     // Network/object-storage reads run together; PDF mutation stays sequential.
     for (const { key, bytes } of resolvedImages) {
       if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
+    }
+    for (const { dayIndex, bytes } of resolvedRevealPhotos) {
+      if (bytes) revealArtwork[dayIndex] = await document.embedPng(bytes);
     }
   }
   const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));
@@ -3072,6 +3230,8 @@ export async function createBookletPdf(
     const dayIndex = booklet.dayPlans.indexOf(entry.day);
     if (entry.kind === "queue") {
       drawQueuePage(document, fonts, booklet, dayIndex, pageNumber, totalPages, coloringArtwork);
+    } else if (entry.kind === "reveal") {
+      drawRevealPage(document, fonts, booklet, dayIndex, pageNumber, totalPages, revealArtwork[dayIndex]);
     } else {
       drawActivityPage(
         document,

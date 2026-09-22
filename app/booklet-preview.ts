@@ -1,5 +1,6 @@
-import type { Activity } from "./booklet";
-import type { GeneratedBookletData } from "./booklet-ai";
+import type { Activity, DayPlan } from "./booklet.ts";
+import type { GeneratedBookletData } from "./booklet-ai.ts";
+import { bookletDayPageEntries, type DayPageEntry } from "./booklet-pages.ts";
 
 export const FREE_PREVIEW_PAGE_COUNT = 3;
 export const FULL_PREVIEW_FOR_TESTERS = true;
@@ -22,6 +23,13 @@ function lockedActivity(): Activity {
   };
 }
 
+function lockedQuestReveal(): NonNullable<DayPlan["slots"]["questReveal"]> {
+  return {
+    revealText: "Included in the printable booklet.",
+    chatPrompts: ["Unlock the printable booklet to continue.", "Unlock the printable booklet to continue."],
+  };
+}
+
 export function isBookletPageLocked(
   pageIndex: number,
   fullPreview = FULL_PREVIEW_FOR_TESTERS,
@@ -35,36 +43,58 @@ export function createBookletPreview(
 ): GeneratedBookletData {
   if (fullPreview) return booklet;
 
+  // Derived from the same manifest bookletCorePageTitles/page.tsx's pager
+  // already use, rather than assuming a fixed stride — a day can be 3 or 4
+  // pages now (the "Found It!" reveal page is conditional), so "day N's
+  // inThePlace is always page 3 + dayIndex*3" no longer holds.
+  const entries = bookletDayPageEntries(booklet.dayPlans);
+  // +2 for the two leading pages (cover, guide) that come before any day
+  // page in this same index space, matching FREE_PREVIEW_PAGE_COUNT = 3
+  // (cover + guide + day-1's queue page are free).
+  const pageIndexFor = (day: DayPlan, match: (entry: DayPageEntry) => boolean) => {
+    const index = entries.findIndex((entry) => entry.day === day && match(entry));
+    return index === -1 ? -1 : index + 2;
+  };
+
   return {
     ...booklet,
-    dayPlans: booklet.dayPlans.map((day, dayIndex) => ({
-      ...day,
-      theme: dayIndex === 0 ? day.theme : `Day ${day.day} adventure`,
-      focusLabel: dayIndex === 0 ? day.focusLabel : "Printable activity",
-      mission:
-        dayIndex === 0
-          ? day.mission
-          : "Included in the complete printable booklet.",
-      slots: {
-        ...day.slots,
-        inThePlace: isBookletPageLocked(3 + dayIndex * 3, false)
-          ? lockedActivity()
-          : day.slots.inThePlace,
-        ...(day.slots?.inThePlaceSecond
-          ? {
-              inThePlaceSecond: isBookletPageLocked(3 + dayIndex * 3, false)
-                ? lockedActivity()
-                : day.slots.inThePlaceSecond,
-            }
-          : {}),
-        sitDown: isBookletPageLocked(4 + dayIndex * 3, false)
-          ? lockedActivity()
-          : day.slots.sitDown,
-      },
-      activities: [
-        isBookletPageLocked(3 + dayIndex * 3, false) ? lockedActivity() : day.slots.inThePlace,
-        isBookletPageLocked(4 + dayIndex * 3, false) ? lockedActivity() : day.slots.sitDown,
-      ],
-    })),
+    dayPlans: booklet.dayPlans.map((day, dayIndex) => {
+      const inThePlaceLocked = isBookletPageLocked(
+        pageIndexFor(day, (entry) => entry.kind === "activity" && entry.activityIndex === 0),
+        false,
+      );
+      const sitDownLocked = isBookletPageLocked(
+        pageIndexFor(day, (entry) => entry.kind === "activity" && entry.activityIndex === 1),
+        false,
+      );
+      const revealLocked = isBookletPageLocked(
+        pageIndexFor(day, (entry) => entry.kind === "reveal"),
+        false,
+      );
+      return {
+        ...day,
+        theme: dayIndex === 0 ? day.theme : `Day ${day.day} adventure`,
+        focusLabel: dayIndex === 0 ? day.focusLabel : "Printable activity",
+        mission:
+          dayIndex === 0
+            ? day.mission
+            : "Included in the complete printable booklet.",
+        slots: {
+          ...day.slots,
+          inThePlace: inThePlaceLocked ? lockedActivity() : day.slots.inThePlace,
+          ...(day.slots?.inThePlaceSecond
+            ? { inThePlaceSecond: inThePlaceLocked ? lockedActivity() : day.slots.inThePlaceSecond }
+            : {}),
+          sitDown: sitDownLocked ? lockedActivity() : day.slots.sitDown,
+          ...(day.slots?.questReveal
+            ? { questReveal: revealLocked ? lockedQuestReveal() : day.slots.questReveal }
+            : {}),
+        },
+        activities: [
+          inThePlaceLocked ? lockedActivity() : day.slots.inThePlace,
+          sitDownLocked ? lockedActivity() : day.slots.sitDown,
+        ],
+      };
+    }),
   };
 }

@@ -54,7 +54,7 @@ import {
   createGenerationStreamResponse,
   createGenerationTask,
 } from "../../generation-stream";
-import { addBookletIllustrations } from "../../illustration-ai";
+import { addBookletIllustrations, addRevealPhoto } from "../../illustration-ai";
 import { assertBookletQa } from "../../booklet-qa";
 
 export const dynamic = "force-dynamic";
@@ -767,6 +767,9 @@ function bookletSchema(days: number, age: number) {
                     countLabel: { type: "string" },
                     countTo: { type: "integer", minimum: 1, maximum: 20 },
                     required: { type: "boolean" },
+                    targetLabel: { type: "string" },
+                    targetKind: { type: "string", enum: ["shape", "colour", "object", "sound", "person"] },
+                    bonusQuest: { type: "string" },
                     // Nested (not gameType/items alongside "required") because
                     // this object already has its own property named
                     // "required" next to the JSON-Schema "required" keyword;
@@ -782,7 +785,17 @@ function bookletSchema(days: number, age: number) {
                       required: ["gameType", "items"],
                     },
                   },
-                  required: ["title", "instruction", "countLabel", "countTo", "required", "game"],
+                  required: [
+                    "title",
+                    "instruction",
+                    "countLabel",
+                    "countTo",
+                    "required",
+                    "targetLabel",
+                    "targetKind",
+                    "bonusQuest",
+                    "game",
+                  ],
                 },
                 inThePlace: activitySchema,
                 inThePlaceSecond: pairActivitySchema,
@@ -793,8 +806,30 @@ function bookletSchema(days: number, age: number) {
                   maxItems: 3,
                   items: { type: "string" },
                 },
+                questReveal: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    revealText: { type: "string" },
+                    chatPrompts: {
+                      type: "array",
+                      minItems: 2,
+                      maxItems: 2,
+                      items: { type: "string" },
+                    },
+                  },
+                  required: ["revealText", "chatPrompts"],
+                },
               },
-              required: ["beforeYouGo", "whileYouWait", "inThePlace", "inThePlaceSecond", "sitDown", "factCard"],
+              required: [
+                "beforeYouGo",
+                "whileYouWait",
+                "inThePlace",
+                "inThePlaceSecond",
+                "sitDown",
+                "factCard",
+                "questReveal",
+              ],
             },
           },
           required: ["day", "theme", "focusLabel", "mission", "siblingMission", "landmark", "slots"],
@@ -887,10 +922,11 @@ An interest may contain a brand, character, franchise, logo, or protected title.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
-- Every day must return exactly six named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard. These are the day architecture, not free-floating games.
+- Every day must return exactly seven named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard, questReveal. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
 - whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${queueEligibleGameTypes.join(", ")}. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Still set required=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
+- whileYouWait and questReveal together form a two-page mystery: the child is set a secret target to spot while waiting, then the payoff page confirms it once the family has arrived. targetLabel is the short, punchy name of that target as it would look on a badge (2-5 words, for example "ARCH", "SOMETHING RED", "A DRUM BEAT") — it must be a specific, visually or audibly spottable thing drawn from the research, never a vague category. targetKind classifies it as exactly one of shape, colour, object, sound, or person. bonusQuest is one short extra challenge line tied to the same target (for example "Find the strangest one!"). questReveal.revealText is the payoff: 1-2 sentences that name the real place/detail the target came from, tied to the actual research, in an excited voice (for example "Here it is! The arch you spotted is from the colourful shophouses on this street!"). questReveal.chatPrompts are exactly two short, open-ended questions a parent could actually ask on the spot, building on what the child just found.
 - inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${pairEligibleGameTypes.join(", ")}.
 - sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.
 - factCard contains exactly three facts or zero facts. Drop the entire list when research does not support three. Every fact must be concrete, under 15 words, and never an instruction. Do not repeat a fact sentence anywhere else that day.
@@ -1402,16 +1438,35 @@ export async function POST(request: Request) {
               assertBookletQa(provisionalResult);
             }
             stageStartedAt = Date.now();
-            const illustratedDayPlans = await addBookletIllustrations(runtime, {
-              destination,
-              age,
-              dayPlans: preparedDraft.dayPlans,
-            }, publish);
+            // Run in parallel, not chained: each generates a disjoint set of
+            // images (coloring/drawing activities vs. one reveal photo) and
+            // touches disjoint fields, so there is no reason to pay the
+            // reveal photo's latency on top of the illustration batch's.
+            const [illustratedDayPlans, revealPhotoDayPlans] = await Promise.all([
+              addBookletIllustrations(runtime, {
+                destination,
+                age,
+                dayPlans: preparedDraft.dayPlans,
+              }, publish),
+              addRevealPhoto(runtime, {
+                destination,
+                age,
+                dayPlans: preparedDraft.dayPlans,
+              }, publish),
+            ]);
+            const revealedDayPlans = illustratedDayPlans.map((day, index) => {
+              const photoPath = revealPhotoDayPlans[index]?.slots?.questReveal?.photoPath;
+              if (!photoPath || !day.slots.questReveal) return day;
+              return {
+                ...day,
+                slots: { ...day.slots, questReveal: { ...day.slots.questReveal, photoPath } },
+              };
+            });
             logGenerationTiming(cacheKey, "illustrations", stageStartedAt);
             lockLease?.assertOwned();
             const result: GeneratedBookletData = {
               ...provisionalResult,
-              dayPlans: illustratedDayPlans,
+              dayPlans: revealedDayPlans,
             };
             assertBookletQa(result);
             const edition = await withEditionFingerprint(result);

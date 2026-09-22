@@ -68,6 +68,8 @@ export type LandmarkNames = {
   place: string;
 };
 
+export type QueueTargetKind = "shape" | "colour" | "object" | "sound" | "person";
+
 export type QueueSlot = {
   title: string;
   instruction: string;
@@ -79,6 +81,14 @@ export type QueueSlot = {
   // rendering with the plain counting instruction above.
   gameType?: GameType;
   items?: GameItem[];
+  // The mystery target shown as a badge on the queue page, and the category
+  // used to pick its label prefix/accent color. Optional and paired with
+  // DaySlots.questReveal below — both must be present for the two-page
+  // mystery/reveal treatment; either missing falls back to today's plain
+  // instruction-only page.
+  targetLabel?: string;
+  targetKind?: QueueTargetKind;
+  bonusQuest?: string;
 };
 
 export type DaySlots = {
@@ -90,6 +100,16 @@ export type DaySlots = {
   inThePlaceSecond?: Activity;
   sitDown: Activity;
   factCard: string[];
+  // The "Found it!" payoff page for whileYouWait's mystery target, shown
+  // once the family has arrived. Optional/backward-compatible like the
+  // fields above; only rendered as its own page when whileYouWait.targetLabel
+  // is also present. photoPath is set post-generation (not by Kimi), the
+  // same way Activity.illustrationPath is.
+  questReveal?: {
+    revealText: string;
+    chatPrompts: [string, string];
+    photoPath?: string;
+  };
 };
 
 export type DayPlan = {
@@ -1182,7 +1202,7 @@ function buildDaySlots(
         ? `Grown-up: point out ${names.short} first and promise one close look.`
         : `Notice ${names.short} before explaining it; let the child form a first theory.`,
     whileYouWait: {
-      title: "Spot It While You Wait",
+      title: age <= 6 ? "Spot It While You Wait" : "Shape Detective",
       instruction: age <= 6
         ? `How many moving things can you see near ${names.short}?`
         : `Count how many times you spot something shaped like part of ${names.short}; compare your total with a grown-up.`,
@@ -1196,11 +1216,21 @@ function buildDaySlots(
         { label: "A sound", clue: `Something you can hear while you wait here.` },
         { label: "A person", clue: `Someone doing a job near ${names.short}.` },
       ],
+      targetLabel: age <= 6 ? "Something that moves" : `Something shaped like ${names.short}`,
+      targetKind: age <= 6 ? "object" : "shape",
+      bonusQuest: "Find the one that surprises you most.",
     },
     inThePlace,
     ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
     sitDown,
     factCard: landmarkFacts(names),
+    questReveal: {
+      revealText: `Here it is! What you were counting is part of ${names.short} itself — now you can see it up close.`,
+      chatPrompts: [
+        `What did you notice about ${names.short} while you were counting?`,
+        "Was it easier or harder to find than you expected?",
+      ],
+    },
   };
 }
 

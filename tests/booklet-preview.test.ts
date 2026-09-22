@@ -85,3 +85,42 @@ test("a second in-place activity is locked with its page, not left exposed", () 
   assert.equal(preview.dayPlans[0].slots.inThePlace.title, "Locked printable page");
   assert.equal(preview.dayPlans[0].slots.inThePlaceSecond?.title, "Locked printable page");
 });
+
+test("a reveal page shifts every later lock boundary by one, day by day", () => {
+  // buildBooklet's offline fallback (app/booklet.ts's buildDaySlots) always
+  // sets questReveal + whileYouWait.targetLabel, so day 1 here is 4 pages
+  // (queue, reveal, in-place, sit-down) instead of 3 — proving the lock
+  // logic derives indices from bookletDayPageEntries rather than assuming a
+  // fixed stride, which would silently misalign every day after the first.
+  const booklet: GeneratedBookletData = {
+    destination: "Rome",
+    age: 7,
+    days: 2,
+    itinerary: ["", ""],
+    profile: getDestinationProfile("Rome"),
+    dayPlans: buildBooklet(7, "Rome", 2),
+    sources: [],
+    generatedAt: "2026-09-22T00:00:00.000Z",
+    family: [{
+      id: "child-1",
+      name: "Explorer 1",
+      age: 7,
+      readingLevel: "reader",
+      interests: [],
+      avoid: [],
+      preferredMechanics: [],
+    }],
+  };
+  assert.ok(booklet.dayPlans[0].slots.questReveal, "expected buildBooklet to produce a reveal for day 1");
+
+  const preview = createBookletPreview(booklet, false);
+  // Free preview: cover(0), guide(1), day-1 queue(2) — day 1's reveal(3) is
+  // the first locked page now that a reveal page exists, one earlier than
+  // it would be without this feature.
+  assert.equal(preview.dayPlans[0].slots.questReveal?.revealText, "Included in the printable booklet.");
+  assert.equal(preview.dayPlans[0].slots.inThePlace.title, "Locked printable page");
+  // Day 2's queue page (index 6: cover, guide, day1 queue/reveal/inThePlace/
+  // sitDown, day2 queue) keeps its own targetLabel visible — whileYouWait is
+  // never content-locked, matching today's behavior for day 1's queue page.
+  assert.equal(preview.dayPlans[1].slots.whileYouWait.targetLabel, booklet.dayPlans[1].slots.whileYouWait.targetLabel);
+});

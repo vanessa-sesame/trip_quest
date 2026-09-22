@@ -38,6 +38,18 @@ function printableArtPrompt(destination: string, day: DayPlan, activity: DayPlan
   ].join(" ");
 }
 
+function printableRevealPhotoPrompt(targetLabel: string, destination: string, day: DayPlan) {
+  return [
+    "Create a warm, realistic travel photograph for a printable children's travel-booklet page.",
+    `The exact place is ${day.landmark?.place || day.theme}, in ${destination}.`,
+    `The photo should clearly show: ${targetLabel}.`,
+    "The real landmark or local subject must be immediately recognizable and geographically accurate, not a generic substitute.",
+    "Bright natural daylight, candid travel-photography style, sharply in focus.",
+    "No identifiable faces, no text, no watermark, no logo, no decorative frame or border.",
+    "Portrait composition suitable for a printed page.",
+  ].join(" ");
+}
+
 async function generatePng(apiKey: string, model: string, prompt: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
@@ -169,6 +181,76 @@ export async function addBookletIllustrations(
         ...day.slots,
         inThePlace: activities[0],
         sitDown: activities[1],
+      },
+    };
+  });
+}
+
+// Generates one real photo-style image per booklet, for the first day whose
+// slots have both questReveal and whileYouWait.targetLabel (the "Found It!"
+// reveal page). Deliberately separate from addBookletIllustrations above:
+// it does not share or count against that function's up-to-3-image cap, so
+// this always costs at most one extra image generation call per booklet,
+// regardless of trip length.
+export async function addRevealPhoto(
+  runtime: IllustrationRuntime,
+  input: { destination: string; age: number; dayPlans: DayPlan[] },
+  publish?: (message: string) => void,
+) {
+  const storage = runtime.BOOKLET_FILES;
+  const apiKey = runtime.OPENAI_API_KEY?.trim();
+  if (!storage || !apiKey) return input.dayPlans;
+  const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
+
+  const dayIndex = input.dayPlans.findIndex(
+    (day) => day.slots?.questReveal && day.slots?.whileYouWait?.targetLabel,
+  );
+  if (dayIndex === -1) return input.dayPlans;
+  const day = input.dayPlans[dayIndex];
+  const targetLabel = day.slots.whileYouWait.targetLabel as string;
+
+  const identity = JSON.stringify({
+    version: ILLUSTRATION_VERSION,
+    kind: "reveal-photo",
+    destination: input.destination.toLocaleLowerCase(),
+    landmark: day.landmark?.place,
+    targetLabel,
+  });
+  const hash = await digest(identity);
+  const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
+
+  let available = false;
+  try {
+    available = Boolean(await storage.get(key));
+  } catch (error) {
+    console.error("[TripQuest illustration cache] reveal photo", error);
+  }
+
+  if (!available) {
+    publish?.("Finding a photo for the reveal page…");
+    try {
+      const prompt = printableRevealPhotoPrompt(targetLabel, input.destination, day);
+      const png = await generatePng(apiKey, model, prompt);
+      await storage.put(key, png, {
+        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" },
+        customMetadata: { destination: input.destination, title: `Reveal: ${targetLabel}`, model },
+      });
+      available = true;
+    } catch (error) {
+      console.error("[TripQuest illustration] reveal photo", error);
+    }
+  }
+
+  if (!available) return input.dayPlans;
+
+  const photoPath = `/api/illustration?key=${encodeURIComponent(key)}`;
+  return input.dayPlans.map((plan, index): DayPlan => {
+    if (index !== dayIndex || !plan.slots.questReveal) return plan;
+    return {
+      ...plan,
+      slots: {
+        ...plan.slots,
+        questReveal: { ...plan.slots.questReveal, photoPath },
       },
     };
   });

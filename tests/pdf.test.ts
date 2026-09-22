@@ -44,6 +44,14 @@ test("a second in-place game and a real queue game do not add pages", async () =
       day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "matching", items: fourItems };
     }
     day.activities = [day.slots.inThePlace, day.slots.sitDown];
+    // This test is specifically about inThePlaceSecond + the queue's bonus
+    // game NOT adding pages — the mystery/reveal pair is a separate,
+    // independently-gated feature (see "a wide game paired..." below), so
+    // strip it here to keep this test isolated to its original claim.
+    delete day.slots.questReveal;
+    delete day.slots.whileYouWait.targetLabel;
+    delete day.slots.whileYouWait.targetKind;
+    delete day.slots.whileYouWait.bonusQuest;
   });
   const booklet: GeneratedBookletData = {
     destination: "Paris",
@@ -73,6 +81,60 @@ test("a second in-place game and a real queue game do not add pages", async () =
   // Unchanged from the pre-existing 3-pages-per-day layout: cover, guide,
   // (queue + in-place + sit-down) x 2 days, answer notes, memory, certificate.
   assert.equal(document.getPageCount(), 11);
+});
+
+test("a queue mystery with a reveal adds exactly one page for that day, and only that day", async () => {
+  const dayPlans = buildBooklet(6, "Rome", 2);
+  const fourItems = [
+    { label: "a", clue: "clue one here" },
+    { label: "b", clue: "clue two here" },
+    { label: "c", clue: "clue three here" },
+    { label: "d", clue: "clue four here" },
+  ];
+  dayPlans.forEach((day) => {
+    day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "bingo", items: fourItems };
+    day.slots.sitDown = { ...day.slots.sitDown, gameType: "story", items: fourItems };
+    if (day.slots.inThePlaceSecond) {
+      day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "matching", items: fourItems };
+    }
+    day.activities = [day.slots.inThePlace, day.slots.sitDown];
+  });
+  // buildBooklet's offline fallback already populates targetLabel/questReveal
+  // on every day (see app/booklet.ts's buildDaySlots) — strip day 2's so only
+  // day 1 gets the reveal page, proving the extra page is per-day, not
+  // whole-booklet.
+  delete dayPlans[1].slots.questReveal;
+  delete dayPlans[1].slots.whileYouWait.targetLabel;
+
+  const booklet: GeneratedBookletData = {
+    destination: "Rome",
+    age: 6,
+    days: 2,
+    itinerary: ["", ""],
+    profile: getDestinationProfile("Rome"),
+    dayPlans,
+    sources: [],
+    generatedAt: "2026-09-22T00:00:00.000Z",
+    family: [{
+      id: "child-1",
+      name: "Explorer 1",
+      age: 6,
+      readingLevel: "reader",
+      interests: [],
+      avoid: [],
+      preferredMechanics: [],
+    }],
+  };
+  assert.ok(booklet.dayPlans[0].slots.questReveal, "expected day 1 to keep its reveal content");
+  assert.ok(!booklet.dayPlans[1].slots.questReveal, "expected day 2's reveal content to be stripped");
+
+  const bytes = await createBookletPdf(booklet);
+  const document = await PDFDocument.load(bytes);
+  assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
+  // cover, guide, (queue + reveal + in-place + sit-down) day 1, (queue +
+  // in-place + sit-down) day 2, answer notes, memory, certificate — one more
+  // than the 11-page baseline in the test above, for day 1's reveal page only.
+  assert.equal(document.getPageCount(), 12);
 });
 
 test("a coloring in-place activity keeps its full illustrated page instead of being paired away", async () => {

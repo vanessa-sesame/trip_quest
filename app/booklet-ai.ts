@@ -1,4 +1,4 @@
-import { pairEligibleGameTypes, queueEligibleGameTypes, type DayPlan, type GameType } from "./booklet.ts";
+import { pairEligibleGameTypes, queueEligibleGameTypes, type DayPlan, type GameType, type QueueTargetKind } from "./booklet.ts";
 import {
   familyChildDisplayName,
   type FamilyChild,
@@ -22,6 +22,8 @@ const supportedGameTypes: GameType[] = [
   "quiz",
   "story",
 ];
+
+const supportedQueueTargetKinds: QueueTargetKind[] = ["shape", "colour", "object", "sound", "person"];
 
 export function allowedGameTypesForAge(age: number): GameType[] {
   if (age <= 5) {
@@ -897,6 +899,47 @@ export function validateBookletDraft(
         }),
       };
     }
+    // Mystery-target badge fields, soft-validated: never throw if absent,
+    // since Kimi compliance on newly-added fields is unproven (unlike
+    // inThePlaceSecond, a whole new top-level object, which had 6/6 live
+    // compliance this session). If present, the values must be sane.
+    const targetLabelRaw = typeof queueValue?.targetLabel === "string" ? queueValue.targetLabel.trim() : "";
+    const targetLabel = targetLabelRaw
+      ? requireText(targetLabelRaw, `Day ${dayIndex + 1} queue target label`, 2, 40)
+      : undefined;
+    const targetKindRaw = queueValue?.targetKind;
+    const targetKind = typeof targetKindRaw === "string" && supportedQueueTargetKinds.includes(targetKindRaw as QueueTargetKind)
+      ? targetKindRaw as QueueTargetKind
+      : undefined;
+    const bonusQuestRaw = typeof queueValue?.bonusQuest === "string" ? queueValue.bonusQuest.trim() : "";
+    const bonusQuest = bonusQuestRaw
+      ? requireText(bonusQuestRaw, `Day ${dayIndex + 1} queue bonus quest`, 4, 120)
+      : undefined;
+
+    // questReveal is a new top-level optional slot (same backward-compat
+    // pattern as inThePlaceSecond): absent entirely for older editions and
+    // for any generation Kimi doesn't comply on, strict when present.
+    const questRevealValue = slotValue?.questReveal && typeof slotValue.questReveal === "object"
+      ? slotValue.questReveal as Record<string, unknown>
+      : null;
+    const questReveal = questRevealValue
+      ? {
+          revealText: requireText(questRevealValue.revealText, `Day ${dayIndex + 1} quest reveal text`, 10, 260),
+          chatPrompts: (() => {
+            const rawPrompts = Array.isArray(questRevealValue.chatPrompts) ? questRevealValue.chatPrompts : [];
+            if (rawPrompts.length !== 2) {
+              throw new Error(`Day ${dayIndex + 1} quest reveal must contain exactly two chat prompts.`);
+            }
+            return rawPrompts.map((prompt, promptIndex) => requireText(
+              prompt,
+              `Day ${dayIndex + 1} quest reveal chat prompt ${promptIndex + 1}`,
+              4,
+              140,
+            )) as [string, string];
+          })(),
+        }
+      : undefined;
+
     const rawFacts = slotValue && Array.isArray(slotValue.factCard)
       ? slotValue.factCard.filter((fact): fact is string => typeof fact === "string")
       : [];
@@ -922,6 +965,9 @@ export function validateBookletDraft(
               ? Number(queueValue.countTo)
               : 5,
             required: queueValue.required === true,
+            ...(targetLabel ? { targetLabel } : {}),
+            ...(targetKind ? { targetKind } : {}),
+            ...(bonusQuest ? { bonusQuest } : {}),
             ...queueGame,
           }
         : {
@@ -935,6 +981,7 @@ export function validateBookletDraft(
       ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
       sitDown: activities[1],
       factCard,
+      ...(questReveal ? { questReveal } : {}),
     };
     const normalizedDay: DayPlan = {
       ...(slotValue ? { architectureVersion: 2 as const } : {}),

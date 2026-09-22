@@ -65,6 +65,19 @@ Current public release: https://tripquestkids.com, source branch `main`.
   Composition additionally asks Kimi to give the queue activity a real
   compact game instead of a plain counting instruction, but this is not
   reliable; see Known Gaps.
+- The queue page can carry a two-page "secret target" mystery: a badge
+  naming a specific spottable thing (a shape, colour, object, sound, or
+  person) plus an optional bonus quest on the queue page itself, and — only
+  once the family has arrived — a second "Found It!" page confirming what it
+  really was, with two chat-about-it discussion prompts, a quest-complete
+  badge, and a space to draw or stick a photo. One booklet-wide real photo
+  (not the usual coloring-book line art) is generated for whichever day gets
+  the reveal, when the AI provider has capacity; every other day's reveal
+  page is text-only. This is fully optional/additive: a day only gets the
+  extra page when both halves are present, so older editions and any
+  generation Kimi doesn't comply on keep today's plain queue page and page
+  count, unchanged. Kimi's compliance on this pair has been unreliable in
+  live testing so far; see Known Gaps.
 - Landmark content stores separate display, short, and place names. Display
   names are reserved for headers and cannot leak into awkward sentences.
 - Composition prompts still ask for age-appropriate instruction and page
@@ -406,6 +419,22 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   concrete physical thing to count, independent of whether the bonus game
   ever shows up, so the common (gameless) case still reads as a real prompt
   rather than a vague placeholder.
+- The queue mystery/reveal pair (`whileYouWait.targetLabel`/`.targetKind`/
+  `.bonusQuest` and the new top-level `questReveal` slot, added 2026-09-22)
+  has the same compliance problem: 0/2 live generations (Rome age 7, Kyoto
+  age 7) returned any of these fields, even though `targetLabel` etc. are
+  flat fields on `whileYouWait` (the same shape as the already-reliable
+  `title`/`countLabel`) and `questReveal` is a brand-new top-level object
+  (the same shape as `inThePlaceSecond`, which had 6/6 compliance). Two
+  samples is not enough to conclude the flat-field/new-top-level-object
+  theory from the earlier queue-game gap is wrong, but it is not confirmed
+  either — worth tracking compliance over more live generations before
+  investing further here. The feature stays fully optional at validation and
+  degrades to today's plain queue page when absent, so this has not caused
+  any generation failures, only a currently-rare enhanced experience. The
+  one-photo-per-booklet reveal-page image (`app/illustration-ai.ts`'s
+  `addRevealPhoto`) never even attempts generation when no day has both
+  fields, so it adds no cost/latency on a non-compliant generation.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

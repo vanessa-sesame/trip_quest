@@ -1602,6 +1602,18 @@ function FamilyPackPreviewPage({
   );
 }
 
+// Label prefix for the queue page's secret-target badge, keyed by
+// QueueTargetKind. Purely presentational (never AI-authored), mirrors
+// queueTargetKindCopy in app/booklet-pdf.ts; an unexpected kind falls back
+// to a neutral default rather than showing nothing.
+const queueTargetKindPrefix: Record<string, string> = {
+  shape: "Your secret shape:",
+  colour: "Your secret colour:",
+  object: "Your secret object:",
+  sound: "Your secret sound:",
+  person: "Who to spot:",
+};
+
 function GeneratedPage({
   age,
   destination,
@@ -1716,6 +1728,17 @@ function GeneratedPage({
         <p className="game-place">{day.landmark.display}</p>
         <h3>{queue.title}</h3>
         <p className="game-instructions">{queue.instruction}</p>
+        {queue.targetLabel ? (
+          <p className="queue-target">
+            <strong>{queueTargetKindPrefix[queue.targetKind || ""] || "Your secret target:"}</strong>
+            <span>{queue.targetLabel.toUpperCase()}</span>
+          </p>
+        ) : null}
+        {queue.bonusQuest ? (
+          <p className="queue-bonus-quest">
+            <strong>Bonus quest</strong> {queue.bonusQuest}
+          </p>
+        ) : null}
         <div className="queue-counter" aria-label={`${queue.countLabel}, up to ${queue.countTo}`}>
           {Array.from({ length: Math.min(20, queue.countTo) }, (_, index) => (
             <span key={index} aria-hidden="true" />
@@ -1734,6 +1757,31 @@ function GeneratedPage({
             <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
           </section>
         ) : null}
+      </article>
+    );
+  }
+  if (pageEntry.kind === "reveal") {
+    const { day } = pageEntry;
+    const reveal = day.slots.questReveal;
+    if (!reveal) return null;
+    return (
+      <article className="generated-sheet generated-day generated-reveal-page">
+        <span>Day {day.day} · At the destination</span>
+        <h3>Found It!</h3>
+        {reveal.photoPath ? (
+          <div className="reveal-photo">
+            <Image src={reveal.photoPath} alt="" fill sizes="(max-width: 760px) 340px, 400px" unoptimized />
+          </div>
+        ) : null}
+        <p className="game-instructions">{reveal.revealText}</p>
+        <section className="reveal-chat">
+          <strong>Chat about it</strong>
+          <ul>{reveal.chatPrompts.map((prompt) => <li key={prompt}>{prompt}</li>)}</ul>
+        </section>
+        <p className="reveal-badge">Quest complete</p>
+        <div className="reveal-photo-box" aria-hidden="true">
+          <span>Draw or stick a photo of your discovery here</span>
+        </div>
       </article>
     );
   }

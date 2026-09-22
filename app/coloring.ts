@@ -70,7 +70,14 @@ export const coloringIllustrationSpecs: Record<ColoringScene, ColoringIllustrati
     detailHints: ["four-point flower", "repeating border", "mirror symmetry"],
     imagePath: "/illustrations/tile-coloring-v1.png",
   },
-  skyline: { label: "city landmark skyline", subject: "a city skyline", detailHints: ["landmark roofline", "windows", "street level"], imagePath: "/illustrations/skyline-coloring-v1.png" },
+  // No imagePath: this is the catch-all scene (coloringSceneFor's final
+  // fallback, and the broadest keyword match — "city", "building",
+  // "museum", etc.), reached far more often than any other single scene.
+  // skyline-coloring-v1.png is a real but specific, identifiable landmark
+  // (Marina Bay Sands, Singapore) — showing it for every unmatched subject
+  // worldwide is factually wrong, not just generic. Falling back to the
+  // abstract vector scene (drawColoringScene) instead is honestly generic.
+  skyline: { label: "city landmark skyline", subject: "a city skyline", detailHints: ["landmark roofline", "windows", "street level"] },
   supertree: {
     label: "Supertree Grove",
     subject: "a vertical garden tree",

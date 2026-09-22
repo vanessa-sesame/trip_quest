@@ -10,6 +10,7 @@ import {
   type PDFPage,
   type RGB,
 } from "pdf-lib";
+import * as fontkit from "fontkit";
 import type { Activity, GameItem } from "./booklet.ts";
 import { pairEligibleGameTypes } from "./booklet.ts";
 import {
@@ -74,6 +75,9 @@ type Fonts = {
   bold: PDFFont;
   mono: PDFFont;
   monoBold: PDFFont;
+  // Expressive hand-lettered face used only for titles/headings (see
+  // FONT_ASSETS below) — everything else uses regular/bold (Nunito Sans).
+  display: PDFFont;
 };
 
 type Box = {
@@ -101,6 +105,22 @@ export type FamilyPackContext = {
 };
 
 export type ColoringImageResolver = (path: string) => Promise<Uint8Array | null>;
+export type FontResolver = (path: string) => Promise<Uint8Array | null>;
+
+// Self-hosted in public/fonts/ (see public/fonts/manifest.json for sourcing/
+// licensing — both OFL). Display is deliberately a single weight: a
+// hand-lettered face carries personality through size, not a bold cut, and
+// Short Stack only ships one weight upstream. Two other display candidates
+// (Caveat, Patrick Hand — both connected/ligature-reliant handwriting
+// fonts) and one irregular sans (Shantell Sans) were tested and rejected:
+// pdf-lib's text layout has no GSUB/complex-GPOS support, so they dropped
+// or badly mis-spaced ordinary words (e.g. Patrick Hand gapped every word
+// containing "ll"). Short Stack and Nunito Sans have no such features.
+const FONT_ASSETS = {
+  display: "/fonts/ShortStack-Regular.ttf",
+  regular: "/fonts/NunitoSans-Regular.ttf",
+  bold: "/fonts/NunitoSans-Bold.ttf",
+} as const;
 type ColoringArtwork = Record<string, PDFImage>;
 
 function coloringArtworkKey(activity: Activity, context: string) {
@@ -3119,10 +3139,32 @@ export function familyPackPdfFilename(booklet: Pick<GeneratedBookletData, "desti
   return bookletPdfFilename(booklet).replace(/\.pdf$/i, "-family-pack.pdf");
 }
 
+// Embeds the custom font at `path` via resolveFontBytes when available,
+// falling back to the given StandardFonts face on a missing resolver, a
+// failed fetch, or a font that fails to parse — a booklet must never fail
+// to generate over a missing/broken font file.
+async function loadFont(
+  document: PDFDocument,
+  resolveFontBytes: FontResolver | undefined,
+  path: string,
+  fallback: StandardFonts,
+) {
+  if (resolveFontBytes) {
+    try {
+      const bytes = await resolveFontBytes(path);
+      if (bytes) return await document.embedFont(bytes);
+    } catch (error) {
+      console.error(`[TripQuest font] ${path}`, error);
+    }
+  }
+  return document.embedFont(fallback);
+}
+
 export async function createBookletPdf(
   inputBooklet: GeneratedBookletData,
   familyPack?: FamilyPackContext,
   resolveColoringImage?: ColoringImageResolver,
+  resolveFontBytes?: FontResolver,
 ) {
   const booklet: GeneratedBookletData = {
     ...inputBooklet,
@@ -3130,11 +3172,13 @@ export async function createBookletPdf(
   };
   assertBookletQa(booklet);
   const document = await PDFDocument.create();
+  document.registerFontkit(fontkit);
   const fonts: Fonts = {
-    regular: await document.embedFont(StandardFonts.Helvetica),
-    bold: await document.embedFont(StandardFonts.HelveticaBold),
+    regular: await loadFont(document, resolveFontBytes, FONT_ASSETS.regular, StandardFonts.Helvetica),
+    bold: await loadFont(document, resolveFontBytes, FONT_ASSETS.bold, StandardFonts.HelveticaBold),
     mono: await document.embedFont(StandardFonts.Courier),
     monoBold: await document.embedFont(StandardFonts.CourierBold),
+    display: await loadFont(document, resolveFontBytes, FONT_ASSETS.display, StandardFonts.HelveticaBold),
   };
   const coloringArtwork: ColoringArtwork = {};
   const revealArtwork: Record<number, PDFImage> = {};

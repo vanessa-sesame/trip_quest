@@ -1,0 +1,21 @@
+{
+  "fonts": [
+    {
+      "family": "Short Stack",
+      "role": "display",
+      "file": "ShortStack-Regular.ttf",
+      "weight": 400,
+      "source": "Google Fonts (github.com/google/fonts, ofl/shortstack)",
+      "license": "SIL Open Font License 1.1 (OFL-ShortStack.txt)",
+      "note": "Two hand-lettered/connected-script candidates (Caveat, Patrick Hand) and one irregular sans (Shantell Sans) were tested first and rejected: pdf-lib's simple glyph layout has no GSUB/ligature or complex GPOS support, so all three dropped or badly mis-spaced common letter pairs (e.g. Patrick Hand gapped every word containing \"ll\" — well, small, hello, tell). Short Stack has no such features and renders cleanly."
+    },
+    {
+      "family": "Nunito Sans",
+      "role": "body",
+      "files": ["NunitoSans-Regular.ttf", "NunitoSans-Bold.ttf"],
+      "weights": [400, 700],
+      "source": "Google Fonts (github.com/google/fonts, ofl/nunitosans)",
+      "license": "SIL Open Font License 1.1 (OFL-NunitoSans.txt)"
+    }
+  ]
+}

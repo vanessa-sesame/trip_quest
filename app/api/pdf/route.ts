@@ -173,7 +173,11 @@ async function preparePdf(
       events: input.events,
       mechanicsByDay: mechanicPlanForTrip(input.family, input.days),
     };
-    job = createBookletPdf(personalizedBooklet, familyPack, async (path) => {
+    // Also reused as-is for font files (createBookletPdf's resolveFontBytes,
+    // below): illustrationStorageKey only matches the R2-backed
+    // illustrations/v.../artwork.png shape, so a /fonts/*.ttf path already
+    // falls through to the generic ASSETS.fetch branch correctly.
+    const resolveStaticAsset = async (path: string) => {
       const storedKey = illustrationStorageKey(path);
       if (storedKey) {
         const stored = await runtime.BOOKLET_FILES?.get(storedKey);
@@ -183,7 +187,8 @@ async function preparePdf(
       const response = await runtime.ASSETS.fetch(new Request(new URL(path, request.url)));
       if (!response.ok) return null;
       return new Uint8Array(await response.arrayBuffer());
-    });
+    };
+    job = createBookletPdf(personalizedBooklet, familyPack, resolveStaticAsset, resolveStaticAsset);
     pdfJobs.set(jobKey, job);
     void job.finally(() => pdfJobs.delete(jobKey)).catch(() => undefined);
   }

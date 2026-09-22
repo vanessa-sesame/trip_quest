@@ -38,3 +38,12 @@ export function bookletCorePageTitles(dayPlans: DayPlan[]) {
 export function bookletPageTotal(dayPlans: DayPlan[], includeFamilyPack = false) {
   return bookletCorePageTitles(dayPlans).length + (includeFamilyPack ? 4 : 0);
 }
+
+// day.activities stays the legacy [inThePlace, sitDown] pair everywhere it is
+// read by index today. Call sites that also need the optional second
+// in-place activity (the answer key, coloring-artwork lookups) use this
+// instead of changing what day.activities contains.
+export function dayGameActivities(day: DayPlan): Activity[] {
+  return [day.slots?.inThePlace, day.slots?.inThePlaceSecond, day.slots?.sitDown]
+    .filter((activity): activity is Activity => Boolean(activity));
+}

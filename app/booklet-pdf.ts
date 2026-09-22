@@ -43,7 +43,7 @@ import {
   type QuestMechanic,
 } from "./family.ts";
 import { assertBookletQa } from "./booklet-qa.ts";
-import { bookletDayPageEntries, bookletPageTotal } from "./booklet-pages.ts";
+import { bookletDayPageEntries, bookletPageTotal, dayGameActivities } from "./booklet-pages.ts";
 
 const A4: [number, number] = [595.28, 841.89];
 const PAGE_WIDTH = A4[0];
@@ -2004,6 +2004,112 @@ function drawEditorialBoardChrome(
   };
 }
 
+const compactGameLabels: Record<string, string> = {
+  matching: "Match-up",
+  bingo: "Explorer bingo",
+  spot_the_difference: "Spot 3 differences",
+  codebreaker: "Codebreaker",
+  quiz: "Quick quiz",
+  story: "Story studio",
+};
+
+// A much lighter combined header than drawGameFrame + drawEditorialBoardChrome
+// (which together cost ~152pt of fixed chrome regardless of box size). At the
+// column widths a paired or queue-page game gets, that overhead would eat a
+// disproportionate share of a much smaller budget, so this keeps only a
+// single label strip and hands almost the whole box to the actual board.
+function drawCompactGameFrame(page: PDFPage, fonts: Fonts, label: string, box: Box) {
+  page.drawRectangle({
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    color: colors.white,
+    borderColor: colors.softLine,
+    borderWidth: 1,
+  });
+  const stripHeight = 20;
+  page.drawRectangle({
+    x: box.x,
+    y: box.y + box.height - stripHeight,
+    width: box.width,
+    height: stripHeight,
+    color: colors.blueSoft,
+  });
+  page.drawText(pdfText(label).toUpperCase(), {
+    x: box.x + 8,
+    y: box.y + box.height - 14,
+    size: 6.5,
+    font: fonts.bold,
+    color: colors.blue,
+  });
+  return {
+    x: box.x + 8,
+    y: box.y + 8,
+    width: box.width - 16,
+    height: box.height - stripHeight - 16,
+  };
+}
+
+// Only ever called with a compactSafeGameTypes activity (matching, bingo,
+// spot_the_difference, codebreaker, quiz, story) — the other game types use
+// fixed pixel offsets that break well before this box size, or fixed-height
+// bands that do not compact (coloring/drawing).
+function drawCompactGame(page: PDFPage, fonts: Fonts, activity: Activity, frame: Box) {
+  const box = drawCompactGameFrame(page, fonts, compactGameLabels[activity.gameType] || "Travel game", frame);
+  switch (activity.gameType) {
+    case "matching":
+      drawMatching(page, fonts, activity.items, box);
+      break;
+    case "bingo":
+      drawBingo(page, fonts, activity.items, box);
+      break;
+    case "spot_the_difference":
+      drawDifferences(page, fonts, box);
+      break;
+    case "codebreaker":
+      drawCodebreaker(page, fonts, activity.items, box);
+      break;
+    case "quiz":
+      drawQuiz(page, fonts, activity.items, box);
+      break;
+    default:
+      drawStory(page, fonts, activity.items, box);
+  }
+}
+
+function drawPairedInPlaceGames(page: PDFPage, fonts: Fonts, first: Activity, second: Activity) {
+  const columnGap = 16;
+  const columnWidth = (PAGE_WIDTH - MARGIN * 2 - columnGap) / 2;
+  const columns = [
+    { activity: first, x: MARGIN },
+    { activity: second, x: MARGIN + columnWidth + columnGap },
+  ];
+  columns.forEach(({ activity, x }) => {
+    const titleSize = fitWrappedTextSize(activity.title, fonts.bold, columnWidth, 13, 10, 2);
+    drawWrappedText(page, activity.title, fonts, {
+      x,
+      y: 700,
+      size: titleSize,
+      font: fonts.bold,
+      color: colors.ink,
+      lineHeight: titleSize * 1.15,
+      maxWidth: columnWidth,
+      maxLines: 2,
+    });
+    drawWrappedText(page, activity.body, fonts, {
+      x,
+      y: 655,
+      size: 7.5,
+      lineHeight: 9.5,
+      maxWidth: columnWidth,
+      maxLines: 3,
+      color: colors.muted,
+    });
+    drawCompactGame(page, fonts, activity, { x, y: 50, width: columnWidth, height: 560 });
+  });
+}
+
 function drawGame(
   page: PDFPage,
   fonts: Fonts,
@@ -2092,6 +2198,17 @@ function drawActivityPage(
   artwork: ColoringArtwork,
 ) {
   const day = booklet.dayPlans[dayIndex];
+  // Coloring/drawing needs the full page for its illustration and does not
+  // compact (drawColoringActivityBoard uses fixed-width text offsets that
+  // overlap well before a half-page column). inThePlace is free to be any
+  // age-appropriate type, including coloring, so pairing only happens when
+  // it is not — inThePlaceSecond's own content is simply not shown that day
+  // rather than forcing a broken layout.
+  const secondActivity = activityIndex === 0
+    && activity.gameType !== "coloring"
+    && activity.gameType !== "drawing"
+    ? day.slots.inThePlaceSecond
+    : undefined;
   const accent = activityIndex === 0 ? colors.coral : colors.blue;
   const page = drawPageBase(document, fonts, `Day ${day.day}`, pageNumber, totalPages, accent);
   drawPill(page, `DAY ${day.day} / ${activityIndex === 0 ? "IN THE PLACE" : "SIT-DOWN PAGE"}`, fonts, MARGIN, 765, activityIndex === 0 ? colors.coralSoft : colors.blueSoft, accent);
@@ -2104,6 +2221,12 @@ function drawActivityPage(
     maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 1,
   });
+
+  if (secondActivity) {
+    drawPairedInPlaceGames(page, fonts, activity, secondActivity);
+    return;
+  }
+
   const titleSize = fitWrappedTextSize(
     activity.title,
     fonts.bold,
@@ -2239,20 +2362,91 @@ function drawQueuePage(
   const queue = day.slots.whileYouWait;
   const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, colors.yellow);
   drawPill(page, `DAY ${day.day} / BEFORE YOU GO`, fonts, MARGIN, 765, colors.yellowSoft, colors.ink);
-  page.drawRectangle({ x: MARGIN, y: 690, width: PAGE_WIDTH - MARGIN * 2, height: 48, color: colors.blueSoft });
-  page.drawText("GROWN-UP", { x: MARGIN + 14, y: 721, size: 7, font: fonts.bold, color: colors.blue });
+
+  page.drawRectangle({ x: MARGIN, y: 706, width: PAGE_WIDTH - MARGIN * 2, height: 28, color: colors.blueSoft });
+  page.drawText("GROWN-UP", { x: MARGIN + 12, y: 723, size: 6.5, font: fonts.bold, color: colors.blue });
   drawWrappedText(page, day.slots.beforeYouGo, fonts, {
-    x: MARGIN + 14,
-    y: 706,
-    size: 9,
-    maxWidth: PAGE_WIDTH - MARGIN * 2 - 28,
-    maxLines: 2,
-    lineHeight: 11,
+    x: MARGIN + 78,
+    y: 720,
+    size: 8,
+    maxWidth: PAGE_WIDTH - MARGIN * 2 - 90,
+    maxLines: 1,
     color: colors.muted,
   });
-  drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: 660, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
-  drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: 620, size: 25, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 28 });
-  drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: 575, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
+
+  // Surfaced here (the day's first activity page) because the only other
+  // place this content used to appear was one summary page near the back of
+  // the booklet, never on a page the child actually plays.
+  const cueText = day.interestHook || day.siblingMission;
+  if (cueText) {
+    page.drawRectangle({ x: MARGIN, y: 646, width: PAGE_WIDTH - MARGIN * 2, height: 52, color: colors.greenSoft, borderColor: colors.softLine, borderWidth: 0.8 });
+    page.drawText("FAMILY LENS", { x: MARGIN + 12, y: 684, size: 6.5, font: fonts.bold, color: colors.green });
+    drawWrappedText(page, cueText, fonts, {
+      x: MARGIN + 12,
+      y: 672,
+      size: 8,
+      maxWidth: PAGE_WIDTH - MARGIN * 2 - 24,
+      maxLines: 3,
+      lineHeight: 10,
+      color: colors.ink,
+    });
+  }
+
+  // The cue banner (when present) shifts everything below it down by the
+  // same amount; the rest of the page is positioned relative to this rather
+  // than fixed coordinates so it works with or without the banner.
+  const titleTop = cueText ? 616 : 660;
+  const shift = 660 - titleTop;
+  drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: titleTop, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
+  drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: titleTop - 22, size: 15, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, lineHeight: 17 });
+  drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: titleTop - 42, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 10, color: colors.muted });
+
+  const hasFacts = day.slots.factCard.length === 3;
+
+  if (queue.gameType && queue.items) {
+    // whileYouWait carries a real compact game — requested in the prompt,
+    // but Kimi does not reliably include it, so this path is a bonus when
+    // present rather than the common case.
+    const counterY = titleTop - 76;
+    const count = Math.min(8, queue.countTo);
+    const diameter = 20;
+    const counterGap = 8;
+    for (let index = 0; index < count; index += 1) {
+      page.drawCircle({
+        x: MARGIN + diameter / 2 + index * (diameter + counterGap),
+        y: counterY,
+        size: diameter / 2,
+        borderColor: colors.blue,
+        borderWidth: 1.2,
+        color: colors.white,
+      });
+    }
+    page.drawText(pdfText(queue.countLabel), {
+      x: MARGIN + count * (diameter + counterGap) + 6,
+      y: counterY - 3,
+      size: 7.5,
+      font: fonts.bold,
+      color: colors.blue,
+    });
+
+    const gameBottom = hasFacts ? 108 : 50;
+    drawCompactGame(
+      page,
+      fonts,
+      { title: queue.title, kind: "Quick queue game", body: queue.instruction, prompt: "", gameType: queue.gameType, items: queue.items },
+      { x: MARGIN, y: gameBottom, width: PAGE_WIDTH - MARGIN * 2, height: counterY - diameter / 2 - 14 - gameBottom },
+    );
+
+    if (hasFacts) {
+      page.drawRectangle({ x: MARGIN, y: 46, width: PAGE_WIDTH - MARGIN * 2, height: 56, color: colors.yellowSoft, borderColor: colors.softLine, borderWidth: 0.8 });
+      page.drawText("DID YOU KNOW?", { x: MARGIN + 12, y: 88, size: 7, font: fonts.bold, color: colors.coral });
+      day.slots.factCard.forEach((fact, index) => {
+        const y = 74 - index * 13;
+        drawWrappedText(page, fact, fonts, { x: MARGIN + 12, y, size: 6.8, maxWidth: PAGE_WIDTH - MARGIN * 2 - 24, maxLines: 1, color: colors.ink });
+      });
+    }
+    return;
+  }
 
   const count = Math.min(20, queue.countTo);
   const columns = 5;
@@ -2261,7 +2455,7 @@ function drawQueuePage(
   const gridWidth = columns * diameter + (columns - 1) * gap;
   const startX = (PAGE_WIDTH - gridWidth) / 2 + diameter / 2;
   const rows = Math.ceil(count / columns);
-  const startY = 500;
+  const startY = 500 - shift;
   for (let index = 0; index < count; index += 1) {
     const column = index % columns;
     const row = Math.floor(index / columns);
@@ -2271,8 +2465,8 @@ function drawQueuePage(
   }
   drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: startY - rows * (diameter + 18) + 8, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.blue });
 
-  if (day.slots.factCard.length === 3) {
-    const boxY = 92;
+  if (hasFacts) {
+    const boxY = 92 - shift;
     page.drawRectangle({ x: MARGIN, y: boxY, width: PAGE_WIDTH - MARGIN * 2, height: 190, color: colors.yellowSoft, borderColor: colors.softLine, borderWidth: 0.8 });
     page.drawText("DID YOU KNOW?", { x: MARGIN + 16, y: boxY + 164, size: 8, font: fonts.bold, color: colors.coral });
     day.slots.factCard.forEach((fact, index) => {
@@ -2327,7 +2521,7 @@ function drawAnswerKey(
     color: colors.muted,
   });
   const entries = booklet.dayPlans.flatMap((day) =>
-    day.activities
+    dayGameActivities(day)
       .map((activity, index) => ({ day: day.day, index, activity }))
       .filter((entry) => entry.activity.answerMode === "closed"),
   );

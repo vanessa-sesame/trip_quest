@@ -1,4 +1,4 @@
-import type { DayPlan, GameType } from "./booklet";
+import { compactSafeGameTypes, type DayPlan, type GameType } from "./booklet.ts";
 import {
   familyChildDisplayName,
   type FamilyChild,
@@ -621,6 +621,158 @@ function renameActivityForMechanic(value: string, replacement: string) {
   return `${cleaned || "Local"} ${replacement}`.slice(0, 70);
 }
 
+function validateActivity(
+  activityValue: unknown,
+  activityLabel: number | string,
+  dayIndex: number,
+  expectedAge: number | undefined,
+  usedTitles: Set<string>,
+  mapPuzzleState: { count: number },
+  requiresPresenceStrict: boolean,
+  restrictTo?: GameType[],
+) {
+  const label = typeof activityLabel === "number" ? `Activity ${activityLabel + 1}` : activityLabel;
+  if (!activityValue || typeof activityValue !== "object") {
+    throw new Error(`${label} on day ${dayIndex + 1} is missing.`);
+  }
+
+  const activity = activityValue as Record<string, unknown>;
+  let title = requireText(
+    activity.title,
+    `Activity title on day ${dayIndex + 1}`,
+    3,
+    70,
+  );
+  let kind = requireText(
+    activity.kind,
+    `Activity type on day ${dayIndex + 1}`,
+    2,
+    32,
+  );
+  const rawBody = requireText(
+    activity.body,
+    `Activity instructions on day ${dayIndex + 1}`,
+    15,
+    700,
+  );
+  const body = rawBody
+    .replace(/\s+(?:prompt|response line):[\s\S]*$/i, "")
+    .trim();
+  const declaredGameType = activity.gameType;
+  if (
+    typeof declaredGameType !== "string" ||
+    !supportedGameTypes.includes(declaredGameType as GameType)
+  ) {
+    throw new Error(`${label} on day ${dayIndex + 1} has an invalid game type.`);
+  }
+  if (
+    expectedAge !== undefined &&
+    !allowedGameTypesForAge(expectedAge).includes(declaredGameType as GameType)
+  ) {
+    throw new Error(
+      `${declaredGameType} is not an age-${expectedAge} game type.`,
+    );
+  }
+  if (restrictTo && !restrictTo.includes(declaredGameType as GameType)) {
+    throw new Error(
+      `${declaredGameType} is not a compact enough game type for ${label.toLocaleLowerCase()} on day ${dayIndex + 1}.`,
+    );
+  }
+  if (!Array.isArray(activity.items) || activity.items.length !== 4) {
+    throw new Error(
+      `${label} on day ${dayIndex + 1} must contain exactly four game items.`,
+    );
+  }
+  let items = activity.items.map((itemValue, itemIndex) => {
+    if (!itemValue || typeof itemValue !== "object") {
+      throw new Error(`Game item ${itemIndex + 1} on day ${dayIndex + 1} is missing.`);
+    }
+    const item = itemValue as Record<string, unknown>;
+    return {
+      label: requireText(
+        item.label,
+        `Game item label on day ${dayIndex + 1}`,
+        1,
+        36,
+      ),
+      clue: requireText(
+        item.clue,
+        `Game item clue on day ${dayIndex + 1}`,
+        4,
+        120,
+      ),
+    };
+  });
+
+  let gameType = declaredGameType as GameType;
+  if (
+    gameType === "crossword"
+    && !createCrossword(items.map((item) => item.label)).complete
+  ) {
+    gameType = "word_search";
+    title = renameActivityForMechanic(title, "Word Search");
+    kind = "Connected word search";
+  }
+  if (gameType === "crossword") {
+    items = items.map((item) => ({
+      ...item,
+      clue: item.clue.replace(/^\s*(?:across|down)\s*[:.-]\s*/i, ""),
+    }));
+  }
+  if (gameType === "map_puzzle") {
+    if (mapPuzzleState.count > 0) {
+      gameType = "scavenger_hunt";
+      title = renameActivityForMechanic(title, "Field Hunt");
+      kind = "On-location field hunt";
+    } else {
+      mapPuzzleState.count += 1;
+      if (/\bsudoku\b/i.test(title)) title = renameActivityForMechanic(title, "Route Challenge");
+      if (/\bsudoku\b/i.test(kind)) kind = "Route-planning logic";
+    }
+  }
+
+  const normalizedTitle = title.toLocaleLowerCase();
+  if (usedTitles.has(normalizedTitle)) {
+    throw new Error(`The activity title “${title}” was repeated.`);
+  }
+  usedTitles.add(normalizedTitle);
+
+  return {
+    title,
+    kind,
+    body: requireText(
+      gameInstructions(gameType, items, body),
+      `Activity instructions on day ${dayIndex + 1}`,
+      15,
+      360,
+    ),
+    prompt: requireText(
+      gamePrompt(
+        gameType,
+        items,
+        requireText(
+          activity.prompt,
+          `Activity prompt on day ${dayIndex + 1}`,
+          2,
+          180,
+        ),
+      ),
+      `Activity prompt on day ${dayIndex + 1}`,
+      2,
+      180,
+    ),
+    gameType,
+    items,
+    requiresPresence: requiresPresenceStrict
+      ? activity.requiresPresence === true
+      : Boolean(activity.requiresPresence),
+    answerMode: activity.answerMode === "closed" ? "closed" : "open",
+    ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
+      ? { illustrationPath: activity.illustrationPath }
+      : {}),
+  };
+}
+
 export function validateBookletDraft(
   value: unknown,
   expectedDays: number,
@@ -649,7 +801,7 @@ export function validateBookletDraft(
   }
 
   const usedTitles = new Set<string>();
-  let mapPuzzleCount = 0;
+  const mapPuzzleState = { count: 0 };
   const dayPlans = draft.dayPlans.map((dayValue, dayIndex): DayPlan => {
     if (!dayValue || typeof dayValue !== "object") {
       throw new Error(`Day ${dayIndex + 1} is missing.`);
@@ -666,144 +818,29 @@ export function validateBookletDraft(
       throw new Error(`Day ${dayIndex + 1} must contain an in-place and a sit-down activity.`);
     }
 
-    const activities = rawActivities.map((activityValue, activityIndex) => {
-      if (!activityValue || typeof activityValue !== "object") {
-        throw new Error(
-          `Activity ${activityIndex + 1} on day ${dayIndex + 1} is missing.`,
-        );
-      }
+    const activities = rawActivities.map((activityValue, activityIndex) => validateActivity(
+      activityValue,
+      activityIndex,
+      dayIndex,
+      expectedAge,
+      usedTitles,
+      mapPuzzleState,
+      activityIndex === 0 && Boolean(slotValue),
+    ));
 
-      const activity = activityValue as Record<string, unknown>;
-      let title = requireText(
-        activity.title,
-        `Activity title on day ${dayIndex + 1}`,
-        3,
-        70,
-      );
-      let kind = requireText(
-        activity.kind,
-        `Activity type on day ${dayIndex + 1}`,
-        2,
-        32,
-      );
-      const rawBody = requireText(
-        activity.body,
-        `Activity instructions on day ${dayIndex + 1}`,
-        15,
-        700,
-      );
-      const body = rawBody
-        .replace(/\s+(?:prompt|response line):[\s\S]*$/i, "")
-        .trim();
-      const declaredGameType = activity.gameType;
-      if (
-        typeof declaredGameType !== "string" ||
-        !supportedGameTypes.includes(declaredGameType as GameType)
-      ) {
-        throw new Error(`Activity ${activityIndex + 1} on day ${dayIndex + 1} has an invalid game type.`);
-      }
-      if (
-        expectedAge !== undefined &&
-        !allowedGameTypesForAge(expectedAge).includes(declaredGameType as GameType)
-      ) {
-        throw new Error(
-          `${declaredGameType} is not an age-${expectedAge} game type.`,
-        );
-      }
-      if (!Array.isArray(activity.items) || activity.items.length !== 4) {
-        throw new Error(
-          `Activity ${activityIndex + 1} on day ${dayIndex + 1} must contain exactly four game items.`,
-        );
-      }
-      let items = activity.items.map((itemValue, itemIndex) => {
-        if (!itemValue || typeof itemValue !== "object") {
-          throw new Error(`Game item ${itemIndex + 1} on day ${dayIndex + 1} is missing.`);
-        }
-        const item = itemValue as Record<string, unknown>;
-        return {
-          label: requireText(
-            item.label,
-            `Game item label on day ${dayIndex + 1}`,
-            1,
-            36,
-          ),
-          clue: requireText(
-            item.clue,
-            `Game item clue on day ${dayIndex + 1}`,
-            4,
-            120,
-          ),
-        };
-      });
-
-      let gameType = declaredGameType as GameType;
-      if (
-        gameType === "crossword"
-        && !createCrossword(items.map((item) => item.label)).complete
-      ) {
-        gameType = "word_search";
-        title = renameActivityForMechanic(title, "Word Search");
-        kind = "Connected word search";
-      }
-      if (gameType === "crossword") {
-        items = items.map((item) => ({
-          ...item,
-          clue: item.clue.replace(/^\s*(?:across|down)\s*[:.-]\s*/i, ""),
-        }));
-      }
-      if (gameType === "map_puzzle") {
-        if (mapPuzzleCount > 0) {
-          gameType = "scavenger_hunt";
-          title = renameActivityForMechanic(title, "Field Hunt");
-          kind = "On-location field hunt";
-        } else {
-          mapPuzzleCount += 1;
-          if (/\bsudoku\b/i.test(title)) title = renameActivityForMechanic(title, "Route Challenge");
-          if (/\bsudoku\b/i.test(kind)) kind = "Route-planning logic";
-        }
-      }
-
-      const normalizedTitle = title.toLocaleLowerCase();
-      if (usedTitles.has(normalizedTitle)) {
-        throw new Error(`The activity title “${title}” was repeated.`);
-      }
-      usedTitles.add(normalizedTitle);
-
-      return {
-        title,
-        kind,
-        body: requireText(
-          gameInstructions(gameType, items, body),
-          `Activity instructions on day ${dayIndex + 1}`,
-          15,
-          360,
-        ),
-        prompt: requireText(
-          gamePrompt(
-            gameType,
-            items,
-            requireText(
-              activity.prompt,
-              `Activity prompt on day ${dayIndex + 1}`,
-              2,
-              180,
-            ),
-          ),
-          `Activity prompt on day ${dayIndex + 1}`,
-          2,
-          180,
-        ),
-        gameType,
-        items,
-        requiresPresence: activityIndex === 0 && Boolean(slotValue)
-          ? activity.requiresPresence === true
-          : Boolean(activity.requiresPresence),
-        answerMode: activity.answerMode === "closed" ? "closed" : "open",
-        ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
-          ? { illustrationPath: activity.illustrationPath }
-          : {}),
-      };
-    });
+    const secondValue = slotValue?.inThePlaceSecond;
+    const inThePlaceSecond = secondValue
+      ? validateActivity(
+          secondValue,
+          "Second in-place activity",
+          dayIndex,
+          expectedAge,
+          usedTitles,
+          mapPuzzleState,
+          true,
+          compactSafeGameTypes,
+        )
+      : undefined;
 
     const landmarkValue = day.landmark && typeof day.landmark === "object"
       ? day.landmark as Record<string, unknown>
@@ -822,6 +859,44 @@ export function validateBookletDraft(
     const queueValue = slotValue?.whileYouWait && typeof slotValue.whileYouWait === "object"
       ? slotValue.whileYouWait as Record<string, unknown>
       : null;
+    const queueGameValue = queueValue?.game && typeof queueValue.game === "object"
+      ? queueValue.game as Record<string, unknown>
+      : null;
+    const queueItemsRaw = queueGameValue && Array.isArray(queueGameValue.items) ? queueGameValue.items : null;
+    const queueGameTypeRaw = queueGameValue?.gameType;
+    let queueGame: { gameType: GameType; items: { label: string; clue: string }[] } | undefined;
+    if (queueItemsRaw && queueGameTypeRaw) {
+      if (typeof queueGameTypeRaw !== "string" || !supportedGameTypes.includes(queueGameTypeRaw as GameType)) {
+        throw new Error(`Day ${dayIndex + 1} queue game has an invalid game type.`);
+      }
+      if (!compactSafeGameTypes.includes(queueGameTypeRaw as GameType)) {
+        throw new Error(
+          `${queueGameTypeRaw} is not a compact enough game type for the queue page on day ${dayIndex + 1}.`,
+        );
+      }
+      if (
+        expectedAge !== undefined &&
+        !allowedGameTypesForAge(expectedAge).includes(queueGameTypeRaw as GameType)
+      ) {
+        throw new Error(`${queueGameTypeRaw} is not an age-${expectedAge} game type.`);
+      }
+      if (queueItemsRaw.length !== 4) {
+        throw new Error(`Day ${dayIndex + 1} queue game must contain exactly four game items.`);
+      }
+      queueGame = {
+        gameType: queueGameTypeRaw as GameType,
+        items: queueItemsRaw.map((itemValue, itemIndex) => {
+          if (!itemValue || typeof itemValue !== "object") {
+            throw new Error(`Queue game item ${itemIndex + 1} on day ${dayIndex + 1} is missing.`);
+          }
+          const item = itemValue as Record<string, unknown>;
+          return {
+            label: requireText(item.label, `Queue game item label on day ${dayIndex + 1}`, 1, 36),
+            clue: requireText(item.clue, `Queue game item clue on day ${dayIndex + 1}`, 4, 120),
+          };
+        }),
+      };
+    }
     const rawFacts = slotValue && Array.isArray(slotValue.factCard)
       ? slotValue.factCard.filter((fact): fact is string => typeof fact === "string")
       : [];
@@ -847,6 +922,7 @@ export function validateBookletDraft(
               ? Number(queueValue.countTo)
               : 5,
             required: queueValue.required === true,
+            ...queueGame,
           }
         : {
             title: "Count While You Wait",
@@ -856,6 +932,7 @@ export function validateBookletDraft(
             required: false,
           },
       inThePlace: activities[0],
+      ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
       sitDown: activities[1],
       factCard,
     };

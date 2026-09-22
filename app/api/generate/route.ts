@@ -1,5 +1,5 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
-import { getAgeBand } from "../../booklet";
+import { compactSafeGameTypes, getAgeBand } from "../../booklet";
 import {
   type BookletDraft,
   type BookletSource,
@@ -688,6 +688,30 @@ function bookletSchema(days: number, age: number) {
     required: ["title", "kind", "body", "prompt", "gameType", "items", "requiresPresence", "answerMode"],
   };
 
+  const compactGameTypesForAge = allowedGameTypesForAge(age)
+    .filter((gameType) => compactSafeGameTypes.includes(gameType));
+  const compactActivitySchema = {
+    ...activitySchema,
+    properties: {
+      ...activitySchema.properties,
+      gameType: { type: "string", enum: compactGameTypesForAge },
+    },
+  };
+  const compactItemsSchema = {
+    type: "array",
+    minItems: 4,
+    maxItems: 4,
+    items: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        label: { type: "string" },
+        clue: { type: "string" },
+      },
+      required: ["label", "clue"],
+    },
+  };
+
   return {
     type: "object",
     additionalProperties: false,
@@ -741,10 +765,25 @@ function bookletSchema(days: number, age: number) {
                     countLabel: { type: "string" },
                     countTo: { type: "integer", minimum: 1, maximum: 20 },
                     required: { type: "boolean" },
+                    // Nested (not gameType/items alongside "required") because
+                    // this object already has its own property named
+                    // "required" next to the JSON-Schema "required" keyword;
+                    // that collision measurably made Kimi drop these two
+                    // fields when they sat at the same level.
+                    game: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        gameType: { type: "string", enum: compactGameTypesForAge },
+                        items: compactItemsSchema,
+                      },
+                      required: ["gameType", "items"],
+                    },
                   },
-                  required: ["title", "instruction", "countLabel", "countTo", "required"],
+                  required: ["title", "instruction", "countLabel", "countTo", "required", "game"],
                 },
                 inThePlace: activitySchema,
+                inThePlaceSecond: compactActivitySchema,
                 sitDown: activitySchema,
                 factCard: {
                   type: "array",
@@ -753,7 +792,7 @@ function bookletSchema(days: number, age: number) {
                   items: { type: "string" },
                 },
               },
-              required: ["beforeYouGo", "whileYouWait", "inThePlace", "sitDown", "factCard"],
+              required: ["beforeYouGo", "whileYouWait", "inThePlace", "inThePlaceSecond", "sitDown", "factCard"],
             },
           },
           required: ["day", "theme", "focusLabel", "mission", "siblingMission", "landmark", "slots"],
@@ -835,7 +874,7 @@ Use the listed mechanics as the intended mix. Do not use the same mechanic as th
 
 EXACT PRINTABLE GAME SCHEDULE
 ${exactGameSchedule}
-Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format.
+Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format. For inThePlaceSecond, choose a different compact game type than inThePlace, from this list only: ${compactSafeGameTypes.join(", ")}.
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
@@ -846,11 +885,11 @@ An interest may contain a brand, character, franchise, logo, or protected title.
 
 CREATIVE DIRECTION
 - Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
-- Every day must return exactly five named slots in this order: beforeYouGo, whileYouWait, inThePlace, sitDown, factCard. These are the day architecture, not two free-floating games.
+- Every day must return exactly six named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
-- whileYouWait must be a countable queue activity needing no table and no child reading. Set required=true whenever research or common visitor flow indicates a queue. Use a visible physical target and a countTo suitable for the age.
-- inThePlace must be impossible to solve before arrival. Set requiresPresence=true and make the answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there.
+- whileYouWait is now a real, quick game, not a plain counting line: give it its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${compactSafeGameTypes.join(", ")}. Still set required=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age alongside the game.
+- inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${compactSafeGameTypes.join(", ")}.
 - sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.
 - factCard contains exactly three facts or zero facts. Drop the entire list when research does not support three. Every fact must be concrete, under 15 words, and never an instruction. Do not repeat a fact sentence anywhere else that day.
 - Follow the DAILY ITINERARY exactly on every day with a family plan. Build that day's theme, mission, facts, vocabulary, and games around those named stops. For an open day, choose a strong subject from the research.
@@ -894,7 +933,10 @@ ${research.notes}`,
       const payload = await kimiRequest("/chat/completions", apiKey, {
         model,
         ...modelOptions,
-        max_completion_tokens: Math.max(5000, days * 900),
+        // A day now returns a third game-bearing activity plus a real queue
+        // game (was a one-line instruction), roughly 50% more content per
+        // day than before.
+        max_completion_tokens: Math.max(6500, days * 1300),
         messages: correction
           ? [...messages, { role: "user", content: correction }]
           : messages,
@@ -906,7 +948,7 @@ ${research.notes}`,
             schema: bookletSchema(days, age),
           },
         },
-      }, Math.min(240_000, 105_000 + days * 10_000));
+      }, Math.min(240_000, 105_000 + days * 13_000));
 
       const choices = Array.isArray(payload.choices) ? payload.choices : [];
       const firstChoice = choices[0] as Record<string, unknown> | undefined;
@@ -920,6 +962,14 @@ ${research.notes}`,
         days,
         age,
       );
+      // whileYouWait's gameType/items are requested in the schema and prompt
+      // but Kimi does not reliably include them (confirmed live, 4/4
+      // generations, even after an explicit correction demanding it).
+      // Enforcing them here just burns the correction budget and fails the
+      // whole batch for something Kimi structurally won't comply with, so
+      // this stays optional like validateBookletDraft treats it: when
+      // present it renders as a real game, when absent the queue page falls
+      // back to its plain counting instruction.
       return applySiblingPlan(
         applyInterestPlan(draft, assignedInterests, dayOffset),
         hasSiblings,

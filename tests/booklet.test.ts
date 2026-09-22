@@ -263,6 +263,7 @@ test("AI booklet validation repairs optional queue presentation labels", () => {
     { label: "MARKET", clue: "A place where local goods are sold." },
   ];
   raw.dayPlans[0].slots.sitDown.items = structuredClone(raw.dayPlans[0].slots.inThePlace.items);
+  delete raw.dayPlans[0].slots.inThePlaceSecond;
   delete raw.dayPlans[0].slots.whileYouWait.title;
   delete raw.dayPlans[0].slots.whileYouWait.instruction;
   delete raw.dayPlans[0].slots.whileYouWait.countLabel;

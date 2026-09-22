@@ -16,6 +16,22 @@ export const gameTypes = [
 
 export type GameType = (typeof gameTypes)[number];
 
+// Game types whose PDF/preview layout still reads cleanly at roughly half a
+// page's width, for a second in-place game or a real queue-page game sharing
+// space with other content. word_search/scavenger_hunt use fixed pixel
+// offsets that go negative at that width; coloring/drawing use fixed-height
+// bands that don't compact; crossword/map_puzzle are workable but cramped
+// and carry extra plumbing (crossword's clue column, map_puzzle's
+// once-per-booklet dedupe) for little payoff at this size.
+export const compactSafeGameTypes: GameType[] = [
+  "matching",
+  "bingo",
+  "spot_the_difference",
+  "codebreaker",
+  "quiz",
+  "story",
+];
+
 export type GameItem = {
   label: string;
   clue: string;
@@ -45,12 +61,20 @@ export type QueueSlot = {
   countLabel: string;
   countTo: number;
   required: boolean;
+  // A real compact game a child can play without a table. Optional so that
+  // older cached/purchased editions (generated before this existed) keep
+  // rendering with the plain counting instruction above.
+  gameType?: GameType;
+  items?: GameItem[];
 };
 
 export type DaySlots = {
   beforeYouGo: string;
   whileYouWait: QueueSlot;
   inThePlace: Activity;
+  // A second, different on-site observation game sharing the in-place page.
+  // Optional for the same backward-compatibility reason as QueueSlot's game.
+  inThePlaceSecond?: Activity;
   sitDown: Activity;
   factCard: string[];
 };
@@ -1107,6 +1131,7 @@ function buildDaySlots(
 ): DaySlots {
   const sitDownBase = activities[0];
   const inPlaceBase = activities[1] || activities[0];
+  const inPlaceSecondBase = activities[2];
   const inThePlace: Activity = {
     ...inPlaceBase,
     body: age <= 6
@@ -1115,6 +1140,16 @@ function buildDaySlots(
     requiresPresence: true,
     answerMode: "open",
   };
+  const inThePlaceSecond: Activity | undefined = inPlaceSecondBase
+    ? {
+        ...inPlaceSecondBase,
+        body: age <= 6
+          ? `Look around ${names.short} for something different to point at.`
+          : `Find a second real detail at ${names.place}, different from your first answer.`,
+        requiresPresence: true,
+        answerMode: "open",
+      }
+    : undefined;
   const sitDown: Activity = {
     ...sitDownBase,
     body: age <= 4
@@ -1134,15 +1169,23 @@ function buildDaySlots(
         ? `Grown-up: point out ${names.short} first and promise one close look.`
         : `Notice ${names.short} before explaining it; let the child form a first theory.`,
     whileYouWait: {
-      title: "Count While You Wait",
+      title: "Spot It While You Wait",
       instruction: age <= 6
         ? `How many moving things can you see near ${names.short}?`
         : `Count one repeated feature near ${names.short}; compare your total with a grown-up.`,
       countLabel: "I counted",
       countTo: age <= 4 ? 5 : age <= 6 ? 10 : 20,
       required: queueIsExpected(`${primary} ${names.place}`),
+      gameType: "matching",
+      items: [
+        { label: "A shape", clue: `Something shaped like part of ${names.short}.` },
+        { label: "A colour", clue: `A colour you can point to near ${names.short}.` },
+        { label: "A sound", clue: `Something you can hear while you wait here.` },
+        { label: "A person", clue: `Someone doing a job near ${names.short}.` },
+      ],
     },
     inThePlace,
+    ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
     sitDown,
     factCard: landmarkFacts(names),
   };

@@ -41,10 +41,22 @@ Current public release: https://tripquestkids.com, source branch `main`.
   deterministic fallback and the composer prompt; official characters, logos,
   slogans, and artwork are not generated.
 - Game formats follow an age-safe schedule to reduce repetition.
-- Every generated day follows one shared five-slot structure: a short adult
-  briefing, a queue activity, an in-place observation game, a sit-down page,
-  and an optional three-fact card. Preview and PDF page order come from the
-  same manifest, so the purchased file matches the edition shown on screen.
+- Every generated day follows one shared architecture: a short adult briefing,
+  a queue activity, an in-place observation game, a second in-place game
+  (optional; present on every freshly generated booklet, absent on editions
+  generated before 2026-09-21), a sit-down page, and an optional three-fact
+  card. The two in-place games render as two smaller games sharing one
+  physical page rather than each getting a full page, in both the PDF and the
+  web preview; this keeps the printable page count at 3 pages per day
+  (unchanged) instead of adding a page. Preview and PDF page order come from
+  the same manifest, so the purchased file matches the edition shown on
+  screen.
+- The queue page's family-relay/interest content (previously only visible on
+  one summary page near the back of the booklet, where it could also get
+  truncated) now also appears directly on the day's first activity page.
+  Composition additionally asks Kimi to give the queue activity a real
+  compact game instead of a plain counting instruction, but this is not
+  reliable; see Known Gaps.
 - Landmark content stores separate display, short, and place names. Display
   names are reserved for headers and cannot leak into awkward sentences.
 - Composition prompts still ask for age-appropriate instruction and page
@@ -124,9 +136,22 @@ Stripe credentials before charging customers:
 - Research uses web search and asks for source-backed landmarks, culture,
   transport, food, nature, etiquette, and itinerary verification.
 - Composition returns structured JSON and is validated before storage.
-- Composition now returns landmark naming fields and the five daily slots.
-  Facts are kept only when there are exactly three concrete facts under 15
-  words; otherwise the fact card is omitted instead of inventing filler.
+- Composition now returns landmark naming fields and the daily slots,
+  including a second in-place activity (`inThePlaceSecond`) and, when Kimi
+  complies, a real game on the queue slot instead of a plain counting
+  instruction. Both are optional at the validation layer so older
+  cached/purchased editions (generated before 2026-09-21) keep rendering with
+  their original two-activity shape. Facts are kept only when there are
+  exactly three concrete facts under 15 words; otherwise the fact card is
+  omitted instead of inventing filler.
+- The second in-place game and the queue game are restricted to
+  `compactSafeGameTypes` (`app/booklet.ts`: matching, bingo,
+  spot_the_difference, codebreaker, quiz, story) — the other game types use
+  fixed layouts that break or badly degrade at the half-page/short-page sizes
+  these two slots render at. `inThePlace` itself is not restricted this way
+  and can still be assigned coloring or drawing, which need the full page for
+  their illustration; when it is, the second in-place game is not shown that
+  day rather than forcing it into a broken half-page layout.
 - Composition returns an `interestHook` only on scheduled interest days and a
   `siblingMission` for each day. Both appear in the web preview and on the
   first printable activity page of each day.
@@ -326,6 +351,20 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
     the youngest ages, reintroduce a budget sized around real generated
     content (the two live diagnostics ran ~60-65 words per activity) rather
     than the original estimate.
+- The queue page's real game (`whileYouWait.gameType`/`.items`, added
+  2026-09-21) is requested in both the JSON schema (marked required, nested
+  under a `game` sub-object specifically to rule out a schema naming
+  collision as the cause) and the prompt, but Kimi does not reliably return
+  it — confirmed live, 4/4 fresh generations, including one where composition
+  explicitly retried after a targeted correction message and still omitted
+  it. Enforcing it as a hard requirement was tried and reverted: it burned
+  the full correction budget and then failed the whole request, which is
+  worse than the soft fallback. It stays optional at validation; when absent
+  the queue page shows its original plain counting instruction. The second
+  in-place game (`inThePlaceSecond`) does not have this problem — Kimi
+  included it in every live test (6/6) — the difference appears to be
+  specific to adding fields to an existing nested schema object rather than
+  a new one, though this is not fully confirmed.
 - Stripe remains in sandbox mode. Live product/price, live credentials, account
   activation, payouts, receipts, refunds, and purchase restoration still need a
   launch pass.

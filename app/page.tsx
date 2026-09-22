@@ -1693,18 +1693,35 @@ function GeneratedPage({
   const pageEntry = activityPages[page - 2];
   if (pageEntry.kind === "queue") {
     const { day } = pageEntry;
+    const queue = day.slots.whileYouWait;
+    // Surfaced here (the day's first activity page) rather than only on the
+    // family-relay summary page near the back, which is the only place this
+    // content used to appear.
+    const cueText = day.interestHook || day.siblingMission;
     return (
       <article className="generated-sheet generated-day generated-queue-page">
         <span>Day {day.day} · Before you go</span>
         <p className="grown-up-line">{day.slots.beforeYouGo}</p>
+        {cueText ? (
+          <p className="family-cue">
+            <strong>Family lens</strong> {cueText}
+          </p>
+        ) : null}
         <p className="game-place">{day.landmark.display}</p>
-        <h3>{day.slots.whileYouWait.title}</h3>
-        <p className="game-instructions">{day.slots.whileYouWait.instruction}</p>
-        <div className="queue-counter" aria-label={`${day.slots.whileYouWait.countLabel}, up to ${day.slots.whileYouWait.countTo}`}>
-          {Array.from({ length: Math.min(20, day.slots.whileYouWait.countTo) }, (_, index) => (
+        <h3>{queue.title}</h3>
+        <p className="game-instructions">{queue.instruction}</p>
+        <div className="queue-counter" aria-label={`${queue.countLabel}, up to ${queue.countTo}`}>
+          {Array.from({ length: Math.min(20, queue.countTo) }, (_, index) => (
             <span key={index} aria-hidden="true" />
           ))}
         </div>
+        {queue.gameType && queue.items ? (
+          <ActivityGame
+            activity={{ title: queue.title, kind: "Quick queue game", body: queue.instruction, prompt: "", gameType: queue.gameType, items: queue.items }}
+            age={age}
+            context={`${day.theme} - day ${day.day} - queue game`}
+          />
+        ) : null}
         {day.slots.factCard.length === 3 ? (
           <section className="fact-card">
             <strong>Did you know?</strong>
@@ -1715,6 +1732,31 @@ function GeneratedPage({
     );
   }
   const { activity, activityIndex, day } = pageEntry;
+  // Coloring/drawing needs the full page for its illustration and is not
+  // paired with a second game; inThePlace is free to be any age-appropriate
+  // type (including coloring), so this only pairs when it is not.
+  const secondActivity = activityIndex === 0
+    && activity.gameType !== "coloring"
+    && activity.gameType !== "drawing"
+    ? day.slots.inThePlaceSecond
+    : undefined;
+  if (secondActivity) {
+    return (
+      <article className="generated-sheet generated-day generated-game-page generated-game-page-paired">
+        <span>Day {day.day} · In the place</span>
+        <p className="game-place">{day.landmark.place}</p>
+        <div className="game-pair">
+          {[activity, secondActivity].map((pairedActivity, index) => (
+            <div className="game-pair-item" key={pairedActivity.title}>
+              <h4>{pairedActivity.title}</h4>
+              <p className="game-instructions">{pairedActivity.body}</p>
+              <ActivityGame activity={pairedActivity} age={age} context={`${day.theme} - day ${day.day} - game ${index + 1}`} />
+            </div>
+          ))}
+        </div>
+      </article>
+    );
+  }
   return (
     <article className="generated-sheet generated-day generated-game-page">
       <span>Day {day.day} · {activityIndex === 0 ? "In the place" : "Sit-down page"}</span>

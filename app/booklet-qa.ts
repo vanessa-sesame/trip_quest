@@ -32,9 +32,13 @@ function visibleDayText(day: DayPlan) {
     day.slots.beforeYouGo,
     day.slots.whileYouWait.title,
     day.slots.whileYouWait.instruction,
+    ...(day.slots.whileYouWait.items?.map((item) => item.clue) || []),
     day.slots.inThePlace.title,
     day.slots.inThePlace.body,
     day.slots.inThePlace.prompt,
+    day.slots.inThePlaceSecond?.title || "",
+    day.slots.inThePlaceSecond?.body || "",
+    day.slots.inThePlaceSecond?.prompt || "",
     day.slots.sitDown.title,
     day.slots.sitDown.body,
     day.slots.sitDown.prompt,
@@ -75,10 +79,14 @@ function assertLandmarkVariables(day: DayPlan) {
     day.slots.whileYouWait.instruction,
     day.slots.inThePlace.body,
     day.slots.inThePlace.prompt,
+    day.slots.inThePlaceSecond?.body || "",
+    day.slots.inThePlaceSecond?.prompt || "",
     day.slots.sitDown.body,
     day.slots.sitDown.prompt,
     ...(day.slots.inThePlace.items?.map((item) => item.clue) || []),
+    ...(day.slots.inThePlaceSecond?.items?.map((item) => item.clue) || []),
     ...(day.slots.sitDown.items?.map((item) => item.clue) || []),
+    ...(day.slots.whileYouWait.items?.map((item) => item.clue) || []),
   ]
     .some((value) => normalizedSentence(value).includes(display));
   if (forbidden) {
@@ -106,6 +114,9 @@ export function assertBookletQa(booklet: GeneratedBookletData) {
     }
     if (!day.slots.inThePlace.requiresPresence) {
       throw new Error(`Day ${day.day} in-place puzzle can be completed before arrival.`);
+    }
+    if (day.slots.inThePlaceSecond && !day.slots.inThePlaceSecond.requiresPresence) {
+      throw new Error(`Day ${day.day} second in-place puzzle can be completed before arrival.`);
     }
     if (/\bYour child\b|THIS BOOK BELONGS TO/i.test(visibleDayText(day).join(" "))) {
       throw new Error(`Day ${day.day} contains an unresolved child-name placeholder.`);

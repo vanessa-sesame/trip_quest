@@ -34,6 +34,23 @@ test("five-slot day architecture passes the age-five export contract", () => {
   assert.equal(assertBookletQa(booklet), booklet);
 });
 
+test("a second in-place game requires presence and joins the landmark-leak scan", () => {
+  const booklet = strictBooklet();
+  const day = booklet.dayPlans[0];
+  assert.ok(day.slots.inThePlaceSecond, "buildBooklet should produce a second in-place activity");
+  assert.equal(day.slots.inThePlaceSecond.requiresPresence, true);
+  assert.doesNotThrow(() => assertBookletQa(booklet));
+
+  const remoteSecond = strictBooklet();
+  remoteSecond.dayPlans[0].slots.inThePlaceSecond.requiresPresence = false;
+  assert.throws(() => assertBookletQa(remoteSecond), /second in-place puzzle can be completed before arrival/i);
+
+  const leakedSecond = strictBooklet();
+  const leakDay = leakedSecond.dayPlans[0];
+  leakDay.slots.inThePlaceSecond.body = `Look closely at ${leakDay.landmark.display}.`;
+  assert.throws(() => assertBookletQa(leakedSecond), /display string/i);
+});
+
 test("word counts ignore standalone punctuation but keep hyphenated and accented words", () => {
   assert.equal(wordCount("Colour it with broken-tile patches — no straight lines allowed!"), 9);
   assert.equal(wordCount("Gaudí's bench... amazing!"), 3);

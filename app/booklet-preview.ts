@@ -50,6 +50,13 @@ export function createBookletPreview(
         inThePlace: isBookletPageLocked(3 + dayIndex * 3, false)
           ? lockedActivity()
           : day.slots.inThePlace,
+        ...(day.slots?.inThePlaceSecond
+          ? {
+              inThePlaceSecond: isBookletPageLocked(3 + dayIndex * 3, false)
+                ? lockedActivity()
+                : day.slots.inThePlaceSecond,
+            }
+          : {}),
         sitDown: isBookletPageLocked(4 + dayIndex * 3, false)
           ? lockedActivity()
           : day.slots.sitDown,

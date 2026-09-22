@@ -187,11 +187,13 @@ export async function addBookletIllustrations(
 }
 
 // Generates one real photo-style image per booklet, for the first day whose
-// slots have both questReveal and whileYouWait.targetLabel (the "Found It!"
-// reveal page). Deliberately separate from addBookletIllustrations above:
-// it does not share or count against that function's up-to-3-image cap, so
-// this always costs at most one extra image generation call per booklet,
-// regardless of trip length.
+// questReveal has a targetLabel (the "Found It!" reveal page itself shows
+// for any day with questReveal, even without a targetLabel, but a photo
+// needs a concrete subject to depict, so this is a stricter subset).
+// Deliberately separate from addBookletIllustrations above: it does not
+// share or count against that function's up-to-3-image cap, so this always
+// costs at most one extra image generation call per booklet, regardless of
+// trip length.
 export async function addRevealPhoto(
   runtime: IllustrationRuntime,
   input: { destination: string; age: number; dayPlans: DayPlan[] },
@@ -202,12 +204,10 @@ export async function addRevealPhoto(
   if (!storage || !apiKey) return input.dayPlans;
   const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
 
-  const dayIndex = input.dayPlans.findIndex(
-    (day) => day.slots?.questReveal && day.slots?.whileYouWait?.targetLabel,
-  );
+  const dayIndex = input.dayPlans.findIndex((day) => day.slots?.questReveal?.targetLabel);
   if (dayIndex === -1) return input.dayPlans;
   const day = input.dayPlans[dayIndex];
-  const targetLabel = day.slots.whileYouWait.targetLabel as string;
+  const targetLabel = day.slots.questReveal?.targetLabel as string;
 
   const identity = JSON.stringify({
     version: ILLUSTRATION_VERSION,

@@ -88,7 +88,7 @@ test("a second in-place activity is locked with its page, not left exposed", () 
 
 test("a reveal page shifts every later lock boundary by one, day by day", () => {
   // buildBooklet's offline fallback (app/booklet.ts's buildDaySlots) always
-  // sets questReveal + whileYouWait.targetLabel, so day 1 here is 4 pages
+  // sets questReveal (with a nested targetLabel), so day 1 here is 4 pages
   // (queue, reveal, in-place, sit-down) instead of 3 — proving the lock
   // logic derives indices from bookletDayPageEntries rather than assuming a
   // fixed stride, which would silently misalign every day after the first.
@@ -118,9 +118,13 @@ test("a reveal page shifts every later lock boundary by one, day by day", () => 
   // the first locked page now that a reveal page exists, one earlier than
   // it would be without this feature.
   assert.equal(preview.dayPlans[0].slots.questReveal?.revealText, "Included in the printable booklet.");
+  // targetLabel stays visible even though the day is locked — it's the
+  // queue page's own teaser content (like whileYouWait always was), not
+  // part of the paid reveal payoff.
+  assert.equal(preview.dayPlans[0].slots.questReveal?.targetLabel, booklet.dayPlans[0].slots.questReveal?.targetLabel);
   assert.equal(preview.dayPlans[0].slots.inThePlace.title, "Locked printable page");
   // Day 2's queue page (index 6: cover, guide, day1 queue/reveal/inThePlace/
-  // sitDown, day2 queue) keeps its own targetLabel visible — whileYouWait is
-  // never content-locked, matching today's behavior for day 1's queue page.
-  assert.equal(preview.dayPlans[1].slots.whileYouWait.targetLabel, booklet.dayPlans[1].slots.whileYouWait.targetLabel);
+  // sitDown, day2 queue) keeps its own targetLabel visible too, for the
+  // same reason.
+  assert.equal(preview.dayPlans[1].slots.questReveal?.targetLabel, booklet.dayPlans[1].slots.questReveal?.targetLabel);
 });

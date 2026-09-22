@@ -23,8 +23,15 @@ function lockedActivity(): Activity {
   };
 }
 
-function lockedQuestReveal(): NonNullable<DayPlan["slots"]["questReveal"]> {
+// Only the payoff (revealText/chatPrompts) is locked — targetLabel/
+// targetKind/bonusQuest stay visible as a teaser, matching how whileYouWait
+// itself has never been content-locked (it's the queue page's own visible
+// content, not the paid reveal page).
+function lockedQuestReveal(
+  reveal: NonNullable<DayPlan["slots"]["questReveal"]>,
+): NonNullable<DayPlan["slots"]["questReveal"]> {
   return {
+    ...reveal,
     revealText: "Included in the printable booklet.",
     chatPrompts: ["Unlock the printable booklet to continue.", "Unlock the printable booklet to continue."],
   };
@@ -87,7 +94,7 @@ export function createBookletPreview(
             : {}),
           sitDown: sitDownLocked ? lockedActivity() : day.slots.sitDown,
           ...(day.slots?.questReveal
-            ? { questReveal: revealLocked ? lockedQuestReveal() : day.slots.questReveal }
+            ? { questReveal: revealLocked ? lockedQuestReveal(day.slots.questReveal) : day.slots.questReveal }
             : {}),
         },
         activities: [

@@ -8,10 +8,13 @@ export type DayPageEntry =
 export function bookletDayPageEntries(dayPlans: DayPlan[]): DayPageEntry[] {
   return dayPlans.flatMap((day) => [
     { kind: "queue" as const, day, title: day.slots?.whileYouWait.title || "Count While You Wait" },
-    // Only present when Kimi (or the offline fallback) supplied both halves
-    // of the mystery/reveal pair; absent for older editions and any
-    // generation that didn't comply, so those stay at today's 3 pages/day.
-    ...(day.slots?.questReveal && day.slots?.whileYouWait.targetLabel
+    // Only present when Kimi (or the offline fallback) supplied questReveal;
+    // absent for older editions and any generation that didn't comply, so
+    // those stay at today's 3 pages/day. Deliberately not also gated on
+    // questReveal.targetLabel: live testing found Kimi reliably returns
+    // revealText/chatPrompts here even when it drops targetLabel, and the
+    // reveal page reads fine without a preceding badge on the queue page.
+    ...(day.slots?.questReveal
       ? [{ kind: "reveal" as const, day, title: "Found It!" }]
       : []),
     {

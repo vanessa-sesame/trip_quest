@@ -1716,6 +1716,7 @@ function GeneratedPage({
     // family-relay summary page near the back, which is the only place this
     // content used to appear.
     const cueText = day.interestHook || day.siblingMission;
+    const reveal = day.slots.questReveal;
     return (
       <article className="generated-sheet generated-day generated-queue-page">
         <span>Day {day.day} · Before you go</span>
@@ -1728,15 +1729,15 @@ function GeneratedPage({
         <p className="game-place">{day.landmark.display}</p>
         <h3>{queue.title}</h3>
         <p className="game-instructions">{queue.instruction}</p>
-        {queue.targetLabel ? (
+        {reveal?.targetLabel ? (
           <p className="queue-target">
-            <strong>{queueTargetKindPrefix[queue.targetKind || ""] || "Your secret target:"}</strong>
-            <span>{queue.targetLabel.toUpperCase()}</span>
+            <strong>{queueTargetKindPrefix[reveal.targetKind || ""] || "Your secret target:"}</strong>
+            <span>{reveal.targetLabel.toUpperCase()}</span>
           </p>
         ) : null}
-        {queue.bonusQuest ? (
+        {reveal?.bonusQuest ? (
           <p className="queue-bonus-quest">
-            <strong>Bonus quest</strong> {queue.bonusQuest}
+            <strong>Bonus quest</strong> {reveal.bonusQuest}
           </p>
         ) : null}
         <div className="queue-counter" aria-label={`${queue.countLabel}, up to ${queue.countTo}`}>

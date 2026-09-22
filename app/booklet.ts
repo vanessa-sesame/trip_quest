@@ -81,14 +81,6 @@ export type QueueSlot = {
   // rendering with the plain counting instruction above.
   gameType?: GameType;
   items?: GameItem[];
-  // The mystery target shown as a badge on the queue page, and the category
-  // used to pick its label prefix/accent color. Optional and paired with
-  // DaySlots.questReveal below — both must be present for the two-page
-  // mystery/reveal treatment; either missing falls back to today's plain
-  // instruction-only page.
-  targetLabel?: string;
-  targetKind?: QueueTargetKind;
-  bonusQuest?: string;
 };
 
 export type DaySlots = {
@@ -100,12 +92,19 @@ export type DaySlots = {
   inThePlaceSecond?: Activity;
   sitDown: Activity;
   factCard: string[];
-  // The "Found it!" payoff page for whileYouWait's mystery target, shown
-  // once the family has arrived. Optional/backward-compatible like the
-  // fields above; only rendered as its own page when whileYouWait.targetLabel
-  // is also present. photoPath is set post-generation (not by Kimi), the
-  // same way Activity.illustrationPath is.
+  // The mystery/reveal pair: a secret target badge shown on the queue page
+  // (targetLabel/targetKind/bonusQuest) plus the "Found it!" payoff page
+  // once the family has arrived (revealText/chatPrompts), shown only when
+  // targetLabel is present. Live compliance testing (2026-09-22) found Kimi
+  // reliably returns this whole object when present but not the earlier
+  // shape where target fields lived on whileYouWait instead — grouping them
+  // here, in the same object as revealText/chatPrompts, tracks that.
+  // Optional/backward-compatible like the fields above. photoPath is set
+  // post-generation (not by Kimi), the same way Activity.illustrationPath is.
   questReveal?: {
+    targetLabel?: string;
+    targetKind?: QueueTargetKind;
+    bonusQuest?: string;
     revealText: string;
     chatPrompts: [string, string];
     photoPath?: string;
@@ -1216,15 +1215,15 @@ function buildDaySlots(
         { label: "A sound", clue: `Something you can hear while you wait here.` },
         { label: "A person", clue: `Someone doing a job near ${names.short}.` },
       ],
-      targetLabel: age <= 6 ? "Something that moves" : `Something shaped like ${names.short}`,
-      targetKind: age <= 6 ? "object" : "shape",
-      bonusQuest: "Find the one that surprises you most.",
     },
     inThePlace,
     ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
     sitDown,
     factCard: landmarkFacts(names),
     questReveal: {
+      targetLabel: age <= 6 ? "Something that moves" : `Something shaped like ${names.short}`,
+      targetKind: age <= 6 ? "object" : "shape",
+      bonusQuest: "Find the one that surprises you most.",
       revealText: `Here it is! What you were counting is part of ${names.short} itself — now you can see it up close.`,
       chatPrompts: [
         `What did you notice about ${names.short} while you were counting?`,

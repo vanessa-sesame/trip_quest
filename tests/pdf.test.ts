@@ -49,9 +49,6 @@ test("a second in-place game and a real queue game do not add pages", async () =
     // independently-gated feature (see "a wide game paired..." below), so
     // strip it here to keep this test isolated to its original claim.
     delete day.slots.questReveal;
-    delete day.slots.whileYouWait.targetLabel;
-    delete day.slots.whileYouWait.targetKind;
-    delete day.slots.whileYouWait.bonusQuest;
   });
   const booklet: GeneratedBookletData = {
     destination: "Paris",
@@ -99,12 +96,11 @@ test("a queue mystery with a reveal adds exactly one page for that day, and only
     }
     day.activities = [day.slots.inThePlace, day.slots.sitDown];
   });
-  // buildBooklet's offline fallback already populates targetLabel/questReveal
-  // on every day (see app/booklet.ts's buildDaySlots) — strip day 2's so only
-  // day 1 gets the reveal page, proving the extra page is per-day, not
-  // whole-booklet.
+  // buildBooklet's offline fallback already populates questReveal (with a
+  // nested targetLabel) on every day (see app/booklet.ts's buildDaySlots) —
+  // strip day 2's so only day 1 gets the reveal page, proving the extra
+  // page is per-day, not whole-booklet.
   delete dayPlans[1].slots.questReveal;
-  delete dayPlans[1].slots.whileYouWait.targetLabel;
 
   const booklet: GeneratedBookletData = {
     destination: "Rome",

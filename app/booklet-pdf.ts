@@ -2535,6 +2535,7 @@ function drawQueuePage(
 ) {
   const day = booklet.dayPlans[dayIndex];
   const queue = day.slots.whileYouWait;
+  const reveal = day.slots.questReveal;
   const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, colors.yellow);
   drawPill(page, `DAY ${day.day} / BEFORE YOU GO`, fonts, MARGIN, 765, colors.yellowSoft, colors.ink);
 
@@ -2575,21 +2576,21 @@ function drawQueuePage(
   // their own fixed band below the instruction text, on top of the cue
   // banner's shift, so everything below (counter, game/grid, facts) still
   // lines up correctly whichever combination is present.
-  const badgeHeight = queue.targetLabel ? 34 : 0;
-  const bonusHeight = queue.bonusQuest ? 26 : 0;
+  const badgeHeight = reveal?.targetLabel ? 34 : 0;
+  const bonusHeight = reveal?.bonusQuest ? 26 : 0;
   const shift = (660 - titleTop) + badgeHeight + bonusHeight;
   drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: titleTop, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
   drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: titleTop - 22, size: 15, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, lineHeight: 17 });
   drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: titleTop - 42, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 10, color: colors.muted });
 
   let bandTop = titleTop - 64;
-  if (queue.targetLabel) {
-    const kindCopy = queueTargetKindCopy[queue.targetKind || ""] || defaultQueueTargetKindCopy;
+  if (reveal?.targetLabel) {
+    const kindCopy = queueTargetKindCopy[reveal.targetKind || ""] || defaultQueueTargetKindCopy;
     const badgeY = bandTop;
     page.drawRectangle({ x: MARGIN, y: badgeY - 26, width: PAGE_WIDTH - MARGIN * 2, height: 28, color: kindCopy.soft, borderColor: kindCopy.accent, borderWidth: 1 });
     page.drawText(pdfText(kindCopy.prefix).toUpperCase(), { x: MARGIN + 12, y: badgeY - 10, size: 6.5, font: fonts.bold, color: kindCopy.accent });
-    const labelSize = fitWrappedTextSize(queue.targetLabel, fonts.bold, PAGE_WIDTH - MARGIN * 2 - 24, 13, 10, 1);
-    drawWrappedText(page, queue.targetLabel.toUpperCase(), fonts, {
+    const labelSize = fitWrappedTextSize(reveal.targetLabel, fonts.bold, PAGE_WIDTH - MARGIN * 2 - 24, 13, 10, 1);
+    drawWrappedText(page, reveal.targetLabel.toUpperCase(), fonts, {
       x: MARGIN + 12,
       y: badgeY - 22,
       size: labelSize,
@@ -2600,11 +2601,11 @@ function drawQueuePage(
     });
     bandTop -= badgeHeight;
   }
-  if (queue.bonusQuest) {
+  if (reveal?.bonusQuest) {
     const bonusY = bandTop;
     page.drawRectangle({ x: MARGIN, y: bonusY - 20, width: PAGE_WIDTH - MARGIN * 2, height: 22, color: colors.yellowSoft });
     page.drawText("BONUS QUEST", { x: MARGIN + 12, y: bonusY - 12, size: 6.5, font: fonts.bold, color: colors.coral });
-    drawWrappedText(page, queue.bonusQuest, fonts, {
+    drawWrappedText(page, reveal.bonusQuest, fonts, {
       x: MARGIN + 96,
       y: bonusY - 12,
       size: 7.5,
@@ -2695,11 +2696,12 @@ function drawQueuePage(
   }
 }
 
-// The payoff page for whileYouWait's mystery target (see queueTargetKindCopy
+// The payoff page for the queue's mystery target (see queueTargetKindCopy
 // above), shown once the family has arrived. Only reached when
 // bookletDayPageEntries emitted a "reveal" entry for this day, which itself
-// only happens when both questReveal and whileYouWait.targetLabel are
-// present — so this function can assume both exist.
+// only happens when questReveal is present — so this function can assume
+// revealText/chatPrompts exist, though targetLabel (shown on the earlier
+// queue page, not here) may still be absent.
 function drawRevealPage(
   document: PDFDocument,
   fonts: Fonts,

@@ -899,31 +899,35 @@ export function validateBookletDraft(
         }),
       };
     }
-    // Mystery-target badge fields, soft-validated: never throw if absent,
-    // since Kimi compliance on newly-added fields is unproven (unlike
-    // inThePlaceSecond, a whole new top-level object, which had 6/6 live
-    // compliance this session). If present, the values must be sane.
-    const targetLabelRaw = typeof queueValue?.targetLabel === "string" ? queueValue.targetLabel.trim() : "";
-    const targetLabel = targetLabelRaw
-      ? requireText(targetLabelRaw, `Day ${dayIndex + 1} queue target label`, 2, 40)
-      : undefined;
-    const targetKindRaw = queueValue?.targetKind;
-    const targetKind = typeof targetKindRaw === "string" && supportedQueueTargetKinds.includes(targetKindRaw as QueueTargetKind)
-      ? targetKindRaw as QueueTargetKind
-      : undefined;
-    const bonusQuestRaw = typeof queueValue?.bonusQuest === "string" ? queueValue.bonusQuest.trim() : "";
-    const bonusQuest = bonusQuestRaw
-      ? requireText(bonusQuestRaw, `Day ${dayIndex + 1} queue bonus quest`, 4, 120)
-      : undefined;
-
     // questReveal is a new top-level optional slot (same backward-compat
     // pattern as inThePlaceSecond): absent entirely for older editions and
-    // for any generation Kimi doesn't comply on, strict when present.
+    // for any generation Kimi doesn't comply on, strict when present for
+    // revealText/chatPrompts. The mystery-target badge fields live in this
+    // same object (moved here 2026-09-22 from whileYouWait, after live
+    // testing found Kimi reliably returns revealText/chatPrompts here but
+    // not the equivalent flat fields added to the already-crowded
+    // whileYouWait object) and stay individually soft — never throw if
+    // absent, only validate them when present.
     const questRevealValue = slotValue?.questReveal && typeof slotValue.questReveal === "object"
       ? slotValue.questReveal as Record<string, unknown>
       : null;
+    const targetLabelRaw = typeof questRevealValue?.targetLabel === "string" ? questRevealValue.targetLabel.trim() : "";
+    const targetLabel = targetLabelRaw
+      ? requireText(targetLabelRaw, `Day ${dayIndex + 1} queue target label`, 2, 40)
+      : undefined;
+    const targetKindRaw = questRevealValue?.targetKind;
+    const targetKind = typeof targetKindRaw === "string" && supportedQueueTargetKinds.includes(targetKindRaw as QueueTargetKind)
+      ? targetKindRaw as QueueTargetKind
+      : undefined;
+    const bonusQuestRaw = typeof questRevealValue?.bonusQuest === "string" ? questRevealValue.bonusQuest.trim() : "";
+    const bonusQuest = bonusQuestRaw
+      ? requireText(bonusQuestRaw, `Day ${dayIndex + 1} queue bonus quest`, 4, 120)
+      : undefined;
     const questReveal = questRevealValue
       ? {
+          ...(targetLabel ? { targetLabel } : {}),
+          ...(targetKind ? { targetKind } : {}),
+          ...(bonusQuest ? { bonusQuest } : {}),
           revealText: requireText(questRevealValue.revealText, `Day ${dayIndex + 1} quest reveal text`, 10, 260),
           chatPrompts: (() => {
             const rawPrompts = Array.isArray(questRevealValue.chatPrompts) ? questRevealValue.chatPrompts : [];
@@ -965,9 +969,6 @@ export function validateBookletDraft(
               ? Number(queueValue.countTo)
               : 5,
             required: queueValue.required === true,
-            ...(targetLabel ? { targetLabel } : {}),
-            ...(targetKind ? { targetKind } : {}),
-            ...(bonusQuest ? { bonusQuest } : {}),
             ...queueGame,
           }
         : {

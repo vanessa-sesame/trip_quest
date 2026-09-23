@@ -268,3 +268,144 @@ export function drawDestinationMotif(page: PDFPage, box: Box, theme: Destination
   }
   drawCompassMark(page, box, theme.accent);
 }
+
+// ---------------------------------------------------------------------
+// "Japanese stationery" component vocabulary, second pass — the printable
+// counterpart to app/doodles.tsx and the .jt-* classes in app/globals.css.
+// pdf-lib has no native rounded-rectangle or shadow support, so
+// drawRoundedRect below is the one new foundational primitive everything
+// else here builds on (a hand-rolled rounded-corner SVG path); the rest —
+// speech bubbles, illustrated checkboxes, confetti, small doodles — are
+// built from it plus the existing drawCircle/drawSvgPath vocabulary above.
+// ---------------------------------------------------------------------
+
+// A true rounded rectangle (pdf-lib's drawRectangle has no radius option).
+// Built the same way drawHandLine is: anchored at the box's own bottom-left
+// corner, with every other point expressed as a page-space delta from that
+// anchor and Y negated, since drawSvgPath's local coordinate system
+// increases downward while the page's increases upward.
+export function drawRoundedRect(
+  page: PDFPage,
+  box: Box,
+  radius: number,
+  options: { color?: RGB; borderColor?: RGB; borderWidth?: number; opacity?: number } = {},
+) {
+  const r = Math.max(0, Math.min(radius, box.width / 2, box.height / 2));
+  const w = box.width;
+  const h = box.height;
+  const path = [
+    `M ${r},0`,
+    `L ${w - r},0`,
+    `Q ${w},0 ${w},${-r}`,
+    `L ${w},${-(h - r)}`,
+    `Q ${w},${-h} ${w - r},${-h}`,
+    `L ${r},${-h}`,
+    `Q 0,${-h} 0,${-(h - r)}`,
+    `L 0,${-r}`,
+    `Q 0,0 ${r},0`,
+    "Z",
+  ].join(" ");
+  page.drawSvgPath(path, {
+    x: box.x,
+    y: box.y,
+    color: options.color,
+    borderColor: options.borderColor,
+    borderWidth: options.borderWidth,
+    opacity: options.opacity,
+  });
+}
+
+// A rounded card with a small triangular tail — for a chat prompt or an
+// aside that reads as spoken/whispered rather than printed instruction.
+export function drawSpeechBubble(
+  page: PDFPage,
+  box: Box,
+  color: RGB,
+  borderColor: RGB,
+  tailOffset = box.width * 0.18,
+) {
+  drawRoundedRect(page, box, Math.min(14, box.height * 0.3), { color, borderColor, borderWidth: 1.4 });
+  const tailWidth = 12;
+  const tailHeight = 10;
+  page.drawSvgPath(`M 0,0 L ${tailWidth},0 L 0,${tailHeight} Z`, {
+    x: box.x + tailOffset,
+    y: box.y,
+    color,
+    borderColor,
+    borderWidth: 1.4,
+  });
+  // Redraw the seam where the tail meets the card so the border reads as
+  // one continuous outline rather than two overlapping shapes.
+  page.drawLine({ start: { x: box.x + tailOffset, y: box.y }, end: { x: box.x + tailOffset + tailWidth, y: box.y }, thickness: 1.4, color });
+}
+
+// A small rounded checkbox with a tiny accent dot in the corner — an
+// "illustrated" checkbox rather than a plain hollow square, for
+// scavenger-hunt/checklist rows. Deliberately not pre-checked: a printed
+// booklet's checkbox is filled in by the child, not by the page.
+export function drawIllustratedCheckbox(page: PDFPage, x: number, y: number, size: number, color: RGB) {
+  drawRoundedRect(page, { x, y, width: size, height: size }, size * 0.32, { color: palette.white, borderColor: color, borderWidth: 1.6 });
+  page.drawCircle({ x: x + size * 0.8, y: y + size * 0.8, size: size * 0.1, color });
+}
+
+// A small scattered burst of confetti — a celebration accent for
+// completion moments (the certificate, a quest-complete stamp), not a
+// full-page effect. Seeded so the same booklet re-renders identically.
+export function drawConfettiBurst(page: PDFPage, cx: number, cy: number, radius: number, colors: RGB[], seed: string) {
+  const random = seededRandom(seed);
+  const count = 12;
+  for (let index = 0; index < count; index += 1) {
+    const angle = random() * Math.PI * 2;
+    const distance = radius * (0.45 + random() * 0.6);
+    const x = cx + Math.cos(angle) * distance;
+    const y = cy + Math.sin(angle) * distance;
+    const color = colors[index % colors.length];
+    if (index % 3 === 0) {
+      page.drawRectangle({ x: x - 2, y: y - 1.2, width: 4, height: 2.4, color, rotate: degrees(random() * 360) });
+    } else {
+      page.drawCircle({ x, y, size: 1.3 + random() * 1.1, color });
+    }
+  }
+}
+
+// A five-point star outline — a slightly hand-drawn doodle mark, the
+// printable counterpart to app/doodles.tsx's DoodleStar.
+export function drawDoodleStar(page: PDFPage, cx: number, cy: number, radius: number, color: RGB, thickness = 1.4) {
+  const points = 5;
+  const coords: Array<[number, number]> = [];
+  for (let index = 0; index < points * 2; index += 1) {
+    const angle = (Math.PI / points) * index - Math.PI / 2;
+    const pointRadius = index % 2 === 0 ? radius : radius * 0.42;
+    coords.push([Math.cos(angle) * pointRadius, Math.sin(angle) * pointRadius]);
+  }
+  const path = coords.map(([px, py], index) => `${index === 0 ? "M" : "L"} ${px},${-py}`).join(" ");
+  page.drawSvgPath(`${path} Z`, { x: cx, y: cy, borderColor: color, borderWidth: thickness });
+}
+
+// A small four-point sparkle — filled, not outlined, for a lighter touch
+// than drawDoodleStar (a corner accent, not a badge-sized mark).
+export function drawDoodleSparkle(page: PDFPage, cx: number, cy: number, radius: number, color: RGB) {
+  const inner = radius * 0.22;
+  const path = [
+    `M 0,${-radius}`,
+    `L ${inner},${-inner}`,
+    `L ${radius},0`,
+    `L ${inner},${inner}`,
+    `L 0,${radius}`,
+    `L ${-inner},${inner}`,
+    `L ${-radius},0`,
+    `L ${-inner},${-inner}`,
+    "Z",
+  ].join(" ");
+  page.drawSvgPath(path, { x: cx, y: cy, color });
+}
+
+// A soft three-lobe cloud, built from overlapping filled circles rather
+// than an outline (keeps it a simple flat sticker shape, no path arcs).
+export function drawDoodleCloud(page: PDFPage, box: Box, color: RGB) {
+  const baseY = box.y + box.height * 0.35;
+  page.drawCircle({ x: box.x + box.width * 0.28, y: baseY, size: box.height * 0.34, color });
+  page.drawCircle({ x: box.x + box.width * 0.55, y: baseY + box.height * 0.14, size: box.height * 0.46, color });
+  page.drawCircle({ x: box.x + box.width * 0.8, y: baseY, size: box.height * 0.3, color });
+  page.drawRectangle({ x: box.x + box.width * 0.28, y: box.y, width: box.width * 0.52, height: box.height * 0.35, color });
+}

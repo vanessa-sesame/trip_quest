@@ -25,11 +25,18 @@ import {
 import { getDestinationTheme, palette, spacing } from "./pdf-theme.ts";
 import {
   drawAnnotationCircle,
+  drawConfettiBurst,
   drawDestinationMotif,
+  drawDoodleCloud,
+  drawDoodleSparkle,
+  drawDoodleStar,
   drawHandLine,
+  drawIllustratedCheckbox,
   drawJourneyDots,
   drawMosaicFragment,
+  drawRoundedRect,
   drawScrapbookCorner,
+  drawSpeechBubble,
   drawStampCircle,
   drawTicketEdge,
 } from "./pdf-illustrations.ts";
@@ -477,13 +484,15 @@ function drawCover(
   drawHandLine(page, MARGIN, 240, MARGIN + 236, 240, colors.line, 1, "cover-dates-line");
 
   drawHandLine(page, MARGIN, 128, PAGE_WIDTH - MARGIN, 128, theme.accent, 1.4, "cover-tagline-rule");
-  page.drawText("PACK A PENCIL. NOTICE EVERYTHING.", {
+  const tagline = "PACK A PENCIL. NOTICE EVERYTHING.";
+  page.drawText(tagline, {
     x: MARGIN,
     y: 106,
     size: 13,
     font: fonts.display,
     color: theme.accent,
   });
+  drawDoodleSparkle(page, MARGIN + fonts.display.widthOfTextAtSize(tagline, 13) + 14, 112, 7, palette.yellow);
   drawWrappedText(page, "Games, drawing spaces, local clues, and family missions made for this exact trip.", fonts, {
     x: MARGIN,
     y: 86,
@@ -1856,8 +1865,8 @@ function drawChecklist(page: PDFPage, fonts: Fonts, items: GameItem[], box: Box)
   const rowHeight = (box.height - gap * 3) / 4;
   items.forEach((item, index) => {
     const y = box.y + box.height - (index + 1) * rowHeight - index * gap;
-    page.drawRectangle({ x: box.x, y, width: box.width, height: rowHeight, color: index % 2 ? colors.greenSoft : colors.white, borderColor: colors.softLine, borderWidth: 1 });
-    page.drawRectangle({ x: box.x + 13, y: y + rowHeight / 2 - 10, width: 20, height: 20, borderColor: colors.coral, borderWidth: 1.5 });
+    drawRoundedRect(page, { x: box.x, y, width: box.width, height: rowHeight }, 10, { color: index % 2 ? colors.greenSoft : colors.white, borderColor: colors.softLine, borderWidth: 1 });
+    drawIllustratedCheckbox(page, box.x + 13, y + rowHeight / 2 - 10, 20, colors.coral);
     drawWrappedText(page, item.label, fonts, { x: box.x + 48, y: y + rowHeight - 21, size: 10, font: fonts.bold, maxWidth: 130, maxLines: 2, lineHeight: 12 });
     drawWrappedText(page, item.clue, fonts, { x: box.x + 190, y: y + rowHeight - 17, size: 8, maxWidth: box.width - 205, maxLines: 4, lineHeight: 10, color: colors.muted });
   });
@@ -2364,7 +2373,32 @@ function drawQueuePage(
   const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, palette.yellow);
   const kicker = `DAY ${day.day} · BEFORE YOU GO`;
   page.drawText(kicker, { x: MARGIN, y: 768, size: 9, font: fonts.bold, color: palette.yellow });
-  drawHandLine(page, MARGIN, 761, MARGIN + fonts.bold.widthOfTextAtSize(kicker, 9), 761, palette.yellow, 1.2, `queue-kicker-${dayIndex}`);
+  const kickerWidth = fonts.bold.widthOfTextAtSize(kicker, 9);
+  drawHandLine(page, MARGIN, 761, MARGIN + kickerWidth, 761, palette.yellow, 1.2, `queue-kicker-${dayIndex}`);
+
+  // The mission briefing (day.mission — generated content that, before this,
+  // had nowhere on any page a child actually sees) sits inline with the
+  // kicker rather than its own row, so it costs zero vertical space: this
+  // page's layout is a tightly fixed pixel stack (see the shift/titleTop
+  // math below) with no headroom to spare in its worst case.
+  if (day.mission) {
+    const missionLabel = "MISSION";
+    const labelWidth = fonts.bold.widthOfTextAtSize(missionLabel, 6.5) + 12;
+    const missionX = MARGIN + kickerWidth + 16;
+    const missionMaxWidth = PAGE_WIDTH - MARGIN - missionX - labelWidth - 6;
+    if (missionMaxWidth > 80) {
+      drawRoundedRect(page, { x: missionX, y: 764, width: labelWidth, height: 14 }, 7, { color: theme.accentSoft, borderColor: theme.accent, borderWidth: 1 });
+      page.drawText(missionLabel, { x: missionX + 6, y: 768, size: 6.5, font: fonts.bold, color: theme.accent });
+      drawWrappedText(page, day.mission, fonts, {
+        x: missionX + labelWidth + 6,
+        y: 768,
+        size: 7,
+        maxWidth: missionMaxWidth,
+        maxLines: 1,
+        color: colors.muted,
+      });
+    }
+  }
 
   // A quiet parent-only note: a left rule, not a filled banner (see
   // drawGuide's LOCAL WORD/CARE CLUE cards for the same pattern).
@@ -2590,7 +2624,7 @@ function drawRevealPage(
   });
 
   const chatTop = revealTextBottom - 20;
-  page.drawLine({ start: { x: MARGIN, y: chatTop - 74 }, end: { x: MARGIN, y: chatTop - 6 }, thickness: 2, color: palette.teal });
+  drawSpeechBubble(page, { x: MARGIN, y: chatTop - 74, width: PAGE_WIDTH - MARGIN * 2, height: 68 }, palette.tealSoft, palette.teal, 40);
   page.drawText("CHAT ABOUT IT", { x: MARGIN + 14, y: chatTop - 18, size: 8, font: fonts.bold, color: palette.teal });
   reveal.chatPrompts.forEach((prompt, index) => {
     const y = chatTop - 36 - index * 26;
@@ -2603,6 +2637,7 @@ function drawRevealPage(
   const badgeTop = chatTop - 90;
   const stampCx = MARGIN + 24;
   const stampCy = badgeTop - 24;
+  drawConfettiBurst(page, stampCx, stampCy, 34, [theme.accent, palette.teal, palette.yellow, palette.green], `reveal-confetti-${dayIndex}`);
   drawStampCircle(page, fonts, stampCx, stampCy, 24, theme.accent, theme.accentSoft, "DONE");
   page.drawText("QUEST COMPLETE", { x: stampCx + 36, y: stampCy - 4, size: 10, font: fonts.display, color: theme.accent });
 
@@ -2729,9 +2764,10 @@ function drawMemoryPage(
       page.drawRectangle({ x: x + width - 40, y: y + height - 42, width: 26, height: 30, borderColor: accent, borderWidth: 1.2, rotate: degrees(-4) });
       page.drawLine({ start: { x: x + width - 37, y: y + height - 15 }, end: { x: x + width - 17, y: y + height - 34 }, thickness: 0.8, color: accent });
     } else if (index === 1) {
-      // Photo frame: a real double-ruled frame, the one deliberately boxy cell.
-      page.drawRectangle({ x, y, width, height, borderColor: colors.line, borderWidth: 1 });
-      page.drawRectangle({ x: x + 8, y: y + 8, width: width - 16, height: height - 16, borderColor: colors.softLine, borderWidth: 0.8 });
+      // Photo frame: a real double-ruled frame, the one deliberately boxy
+      // cell — softened with rounded corners rather than sharp ones.
+      drawRoundedRect(page, { x, y, width, height }, 12, { borderColor: colors.line, borderWidth: 1 });
+      drawRoundedRect(page, { x: x + 8, y: y + 8, width: width - 16, height: height - 16 }, 8, { borderColor: colors.softLine, borderWidth: 0.8 });
     } else if (index === 2) {
       // Notebook scrap: a torn top edge and faint ruled lines.
       const tornPoints: Array<[number, number]> = [];
@@ -2832,6 +2868,8 @@ function drawCertificate(
   page.drawText(title, { x: centeredX(title, fonts.display, titleSize, fullBox), y: titleY, size: titleSize, font: fonts.display, color: theme.accent });
   const titleWidth = fonts.display.widthOfTextAtSize(title, titleSize);
   drawHandLine(page, PAGE_WIDTH / 2 - titleWidth / 2, titleY - 10, PAGE_WIDTH / 2 + titleWidth / 2, titleY - 10, theme.accent, 1.6, "cert-title-underline");
+  drawDoodleStar(page, PAGE_WIDTH / 2 + titleWidth / 2 + 16, titleY + titleSize * 0.35, 7, palette.yellow);
+  drawDoodleStar(page, PAGE_WIDTH / 2 - titleWidth / 2 - 16, titleY + titleSize * 0.1, 4.5, palette.yellow);
 
   drawWrappedText(page, "Awarded for curious noticing, kind traveling, brave questions, and excellent pencil work.", fonts, { x: 105, y: 300, size: 11, font: fonts.regular, maxWidth: PAGE_WIDTH - 210, maxLines: 3, lineHeight: 15, color: colors.muted });
 

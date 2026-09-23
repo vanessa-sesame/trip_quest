@@ -133,6 +133,62 @@ test("a queue mystery with a reveal adds exactly one page for that day, and only
   assert.equal(document.getPageCount(), 12);
 });
 
+test("a reveal photo path survives re-validation and is actually embedded", async () => {
+  // Regression test: createBookletPdf re-validates the booklet via
+  // validateBookletDraft before rendering, and that validator used to
+  // rebuild slots.questReveal from an explicit field whitelist that did not
+  // include photoPath (unlike Activity.illustrationPath, which does have an
+  // equivalent whitelist entry) — silently dropping any reveal photo
+  // addRevealPhoto had generated, every single time, before the PDF ever
+  // saw it. This went unnoticed because the OpenAI image path had been
+  // failing on quota throughout development; it only surfaced once a
+  // second image provider (Cloudflare Workers AI) started succeeding.
+  const dayPlans = buildBooklet(6, "Rome", 1);
+  const fourItems = [
+    { label: "a", clue: "clue one here" },
+    { label: "b", clue: "clue two here" },
+    { label: "c", clue: "clue three here" },
+    { label: "d", clue: "clue four here" },
+  ];
+  dayPlans[0].slots.inThePlace = { ...dayPlans[0].slots.inThePlace, gameType: "bingo", items: fourItems };
+  dayPlans[0].slots.sitDown = { ...dayPlans[0].slots.sitDown, gameType: "story", items: fourItems };
+  if (dayPlans[0].slots.inThePlaceSecond) {
+    dayPlans[0].slots.inThePlaceSecond = { ...dayPlans[0].slots.inThePlaceSecond, gameType: "matching", items: fourItems };
+  }
+  dayPlans[0].activities = [dayPlans[0].slots.inThePlace, dayPlans[0].slots.sitDown];
+  const photoPath = `/api/illustration?key=${encodeURIComponent(`illustrations/v2/${"a".repeat(64)}/artwork.png`)}`;
+  dayPlans[0].slots.questReveal = {
+    ...dayPlans[0].slots.questReveal!,
+    photoPath,
+  };
+  const booklet: GeneratedBookletData = {
+    destination: "Rome",
+    age: 6,
+    days: 1,
+    itinerary: [""],
+    profile: getDestinationProfile("Rome"),
+    dayPlans,
+    sources: [],
+    generatedAt: "2026-09-22T00:00:00.000Z",
+  };
+  assert.equal(booklet.dayPlans[0].slots.questReveal?.photoPath, photoPath, "photoPath should be set on the input booklet");
+
+  const requestedPaths: string[] = [];
+  const resolver = async (path: string) => {
+    requestedPaths.push(path);
+    return new Uint8Array(await readFile("public/illustrations/market-coloring-v1.png"));
+  };
+  const bytesWithPhoto = await createBookletPdf(booklet, undefined, resolver);
+  const bytesWithoutPhoto = await createBookletPdf(
+    { ...booklet, dayPlans: [{ ...dayPlans[0], slots: { ...dayPlans[0].slots, questReveal: { ...dayPlans[0].slots.questReveal!, photoPath: undefined } } }] },
+    undefined,
+    resolver,
+  );
+
+  assert.ok(requestedPaths.includes(photoPath), "the reveal photo path should have survived validation and reached the image resolver");
+  assert.ok(bytesWithPhoto.length > bytesWithoutPhoto.length, "the PDF with an embedded reveal photo should be larger");
+});
+
 test("a coloring in-place activity keeps its full illustrated page instead of being paired away", async () => {
   const dayPlans = buildBooklet(5, "Singapore", 1);
   const fourItems = [

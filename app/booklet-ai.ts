@@ -928,11 +928,22 @@ export function validateBookletDraft(
     const bonusQuest = bonusQuestRaw
       ? requireText(bonusQuestRaw, `Day ${dayIndex + 1} queue bonus quest`, 4, 120)
       : undefined;
+    const questRevealPhotoPath = typeof questRevealValue?.photoPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(questRevealValue.photoPath)
+      ? questRevealValue.photoPath
+      : undefined;
     const questReveal = questRevealValue
       ? {
           ...(targetLabel ? { targetLabel } : {}),
           ...(targetKind ? { targetKind } : {}),
           ...(bonusQuest ? { bonusQuest } : {}),
+          // photoPath is set post-generation (not by Kimi), the same way
+          // Activity.illustrationPath above is — must be preserved here the
+          // same way, or addRevealPhoto's result gets silently dropped by
+          // this validator on the very next pass (createBookletPdf always
+          // re-validates). Went unnoticed until Cloudflare's free image
+          // provider made addRevealPhoto actually succeed in practice; the
+          // OpenAI path had failed on quota every time before that.
+          ...(questRevealPhotoPath ? { photoPath: questRevealPhotoPath } : {}),
           revealText: requireText(questRevealValue.revealText, `Day ${dayIndex + 1} quest reveal text`, 10, 260),
           chatPrompts: (() => {
             const rawPrompts = Array.isArray(questRevealValue.chatPrompts) ? questRevealValue.chatPrompts : [];

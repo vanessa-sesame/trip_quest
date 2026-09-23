@@ -36,7 +36,11 @@ test("server-renders the TripQuest generator", async () => {
   assert.match(html, /Customize daily plans/i);
   assert.match(html, /Child&#x27;s age|Child's age/i);
   assert.match(html, /Singapore/i);
-  assert.match(html, /Merlion Face Finder/i);
+  // Before any real booklet is generated, the default Singapore/age-5/5-day
+  // trip's outline is rendered live from buildBooklet's deterministic
+  // offline generator (see app/page.tsx's generatedDays) rather than a
+  // hardcoded static sample, so this checks real, current day-1 content.
+  assert.match(html, /Hello, Destination!/i);
   assert.match(html, /S\$0\.99/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });

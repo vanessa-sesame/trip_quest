@@ -66,8 +66,6 @@ import {
   type ItineraryEvent,
 } from "./family";
 
-type SampleAge = 5 | 7;
-
 type Trip = {
   age: number;
   destination: string;
@@ -88,31 +86,6 @@ const destinationSuggestions = [
   "Chongqing",
 ];
 
-const samplePageTitles: Record<SampleAge, string[]> = {
-  5: [
-    "Cover",
-    "Quick note for grown-ups",
-    "Merlion Face Finder",
-    "MRT Color Parade",
-    "Hawker Rainbow Hunt",
-    "Garden Move & Match",
-    "Shophouse Shape Party",
-    "Memory Gallery",
-    "Certificate",
-  ],
-  7: [
-    "Cover",
-    "Quick note for grown-ups",
-    "Merlion Myth Lab",
-    "MRT Route Codebreaker",
-    "Hawker Centre Reporter",
-    "Tropical City Engineer",
-    "Neighborhood Pattern Archive",
-    "Memory Museum",
-    "Certificate",
-  ],
-};
-
 const agePreviewCopy: Record<number, string> = {
   3: "Pointing, naming, movement, and choices with a grown-up reading aloud.",
   4: "Counting, matching, pretend play, tracing, and generous drawing space.",
@@ -127,10 +100,6 @@ const agePreviewCopy: Record<number, string> = {
   13: "Design critique, ethical travel choices, mini journalism, and supported opinions.",
   14: "Cultural context, trade-off analysis, independent research, and lively travel writing.",
 };
-
-function isSampleAge(value: number): value is SampleAge {
-  return value === 5 || value === 7;
-}
 
 function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
@@ -379,29 +348,24 @@ export default function Home() {
   }, [paidPdfObjectUrl]);
 
   const destinationName = trip.destination.trim() || "Your destination";
-  const sampleTitles = isSampleAge(trip.age)
-    ? samplePageTitles[trip.age]
-    : null;
-  const isSingaporeSample =
-    generatedBooklet === null &&
-    destinationName.toLowerCase() === "singapore" &&
-    trip.days === 5 &&
-    sampleTitles !== null;
   const destinationProfile = useMemo(
     () => generatedBooklet?.profile ?? getDestinationProfile(destinationName),
     [destinationName, generatedBooklet],
   );
+  // Before a real booklet exists, this falls back to buildBooklet's
+  // deterministic offline generator — the same live GeneratedPage
+  // component and current page/CSS styling render either way, so the
+  // pre-generation preview always matches what generating for real would
+  // produce, instead of drifting out of sync the way a hardcoded static
+  // sample (this used to special-case Singapore with pre-baked PNGs) does
+  // the moment the page architecture or design changes.
   const generatedDays = useMemo(
     () =>
       generatedBooklet?.dayPlans ??
       buildBooklet(trip.age, destinationName, trip.days),
     [generatedBooklet, trip.age, destinationName, trip.days],
   );
-  const pageTitles = isSingaporeSample && sampleTitles
-    ? sampleTitles.map((title, index) =>
-        isBookletPageLocked(index) ? "Locked printable page" : title,
-      )
-    : bookletCorePageTitles(generatedDays);
+  const pageTitles = bookletCorePageTitles(generatedDays);
   const familyPageTitles = [
     "Family relay & interest lens",
     "Family mission map",
@@ -410,10 +374,7 @@ export default function Home() {
   ];
   const familyPageStart = pageTitles.length;
   const reportPageTitles = [...pageTitles, ...familyPageTitles];
-  const outlineItems = (isSingaporeSample && sampleTitles
-    ? sampleTitles.slice(2, 7)
-    : generatedDays.map((day) => day.theme)
-  ).map((title, index) => ({
+  const outlineItems = generatedDays.map((day) => day.theme).map((title, index) => ({
     title:
       !FULL_PREVIEW_FOR_TESTERS && index > 0
         ? "Included in full booklet"
@@ -1079,16 +1040,6 @@ export default function Home() {
                   days={trip.days}
                   dayPlans={generatedDays}
                 />
-              ) : isSingaporeSample ? (
-                <Image
-                  key={`sample-${currentPage}`}
-                  src={`/booklets/singapore-age-${trip.age}-page-${currentPage + 1}.png`}
-                  alt={`${reportPageTitles[currentPage]}, page ${currentPage + 1} of the Singapore booklet for age ${trip.age}`}
-                  fill
-                  priority={currentPage === 0}
-                  sizes="(max-width: 760px) 340px, 400px"
-                  unoptimized
-                />
               ) : (
                 <GeneratedPage
                   key={`generated-${currentPage}`}
@@ -1157,17 +1108,7 @@ export default function Home() {
                   aria-current={index === currentPage ? "page" : undefined}
                   onClick={() => setPage(index)}
                 >
-                  {isSingaporeSample && index < familyPageStart && !locked ? (
-                    <Image
-                      src={`/booklets/singapore-age-${trip.age}-page-${index + 1}.png`}
-                      alt=""
-                      fill
-                      sizes="43px"
-                      unoptimized
-                    />
-                  ) : (
-                    <span>{index + 1}</span>
-                  )}
+                  <span>{index + 1}</span>
                   {locked ? <LockKeyhole size={12} aria-hidden="true" /> : null}
                 </button>
               );

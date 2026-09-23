@@ -495,6 +495,11 @@ export type GeneratedBookletData = BookletDraft & {
   editionFingerprint?: string;
   family?: FamilyChild[];
   events?: ItineraryEvent[];
+  // Set by addCoverIllustration (app/illustration-ai.ts) when an AI-generated
+  // hero image is available; the cover falls back to the hand-drawn
+  // destination motif (app/pdf-illustrations.ts) when absent, the same way
+  // every other AI-illustrated element in the booklet degrades gracefully.
+  coverIllustrationPath?: string;
 };
 
 export function normalizeItinerary(value: unknown, expectedDays: number) {

@@ -9,7 +9,14 @@ export type IllustrationRuntime = {
   BOOKLET_FILES?: BookletObjectStorage;
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
+  // Which style addCoverIllustration asks for. Unset/unrecognized falls back
+  // to "line-art" — kept switchable by env var (rather than a hardcoded
+  // choice) so both styles can be generated and compared before picking one
+  // for good.
+  OPENAI_COVER_STYLE?: string;
 };
+
+export type CoverArtStyle = "line-art" | "photo";
 
 function bytesFromBase64(value: string) {
   const decoded = atob(value);
@@ -50,9 +57,37 @@ function printableRevealPhotoPrompt(targetLabel: string, destination: string, da
   ].join(" ");
 }
 
+// The cover's hero illustration, in one of two candidate styles (see
+// CoverArtStyle) so a real generated example of each can be compared before
+// committing to one — see addCoverIllustration below. "line-art" matches the
+// same editorial coloring-book language as the activity-page illustrations
+// (printableArtPrompt) so it sits comfortably with the hand-drawn cover
+// typography and mascot it would replace; "photo" instead matches the
+// reveal page's warm travel-photography style.
+function printableCoverArtPrompt(destination: string, style: CoverArtStyle) {
+  if (style === "photo") {
+    return [
+      "Create a warm, beautiful travel photograph for the cover of a children's travel activity booklet.",
+      `The exact destination is ${destination}.`,
+      "Show one iconic, immediately recognizable landmark or scene from this exact destination, geographically accurate, not a generic substitute.",
+      "Bright natural daylight, inviting and joyful, shot like a beloved family travel photo — not a stock-photo cliche.",
+      "No identifiable faces, no text, no watermark, no logo, no decorative frame or border, no UI.",
+      "Landscape composition with generous open sky or open ground so it can sit next to bold cover typography without feeling cramped.",
+    ].join(" ");
+  }
+  return [
+    "Create a premium editorial children's-book illustration for the cover of a printable travel activity booklet.",
+    `The exact destination is ${destination}.`,
+    "Show one beautiful, immediately recognizable landmark or scene from this exact destination, geographically accurate, not a generic substitute.",
+    "Hand-drawn editorial line-art style: confident ink outlines, a few flat contemporary colour accents (terracotta, teal, warm yellow, muted green), warm cream paper background — like a beautifully illustrated explorer's field journal, not a cartoon and not photorealistic.",
+    "No large saturated ink fills, no dark background, no gradient, no glow, no shadow.",
+    "Landscape composition with generous open space so it can sit next to bold cover typography without feeling cramped. No decorative frame, no text, no letters, no logos, no watermark.",
+  ].join(" ");
+}
+
 // Exported for scripts/generate-coloring-library.ts, which reuses this
 // same call to batch-generate curated scene art offline.
-export async function generatePng(apiKey: string, model: string, prompt: string) {
+export async function generatePng(apiKey: string, model: string, prompt: string, size: "1024x1536" | "1536x1024" = "1024x1536") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
@@ -66,7 +101,7 @@ export async function generatePng(apiKey: string, model: string, prompt: string)
         model,
         prompt,
         n: 1,
-        size: "1024x1536",
+        size,
         quality: "medium",
         background: "opaque",
         output_format: "png",
@@ -256,6 +291,59 @@ export async function addRevealPhoto(
       },
     };
   });
+}
+
+// Generates one hero illustration for the cover page, cached per
+// destination+style (not per-booklet, so every booklet for the same
+// destination reuses it — unlike the per-activity art, a cover does not
+// depend on the day's researched content). Deliberately separate from
+// addBookletIllustrations/addRevealPhoto: it does not share or count
+// against addBookletIllustrations' up-to-3-image cap, so this always costs
+// at most one extra image generation call per NEW destination+style pair,
+// not per booklet.
+export async function addCoverIllustration(
+  runtime: IllustrationRuntime,
+  input: { destination: string },
+  publish?: (message: string) => void,
+): Promise<string | undefined> {
+  const storage = runtime.BOOKLET_FILES;
+  const apiKey = runtime.OPENAI_API_KEY?.trim();
+  if (!storage || !apiKey) return undefined;
+  const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
+  const style: CoverArtStyle = runtime.OPENAI_COVER_STYLE?.trim() === "photo" ? "photo" : "line-art";
+
+  const identity = JSON.stringify({
+    version: ILLUSTRATION_VERSION,
+    kind: "cover-art",
+    style,
+    destination: input.destination.toLocaleLowerCase(),
+  });
+  const hash = await digest(identity);
+  const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
+
+  let available = false;
+  try {
+    available = Boolean(await storage.get(key));
+  } catch (error) {
+    console.error("[TripQuest illustration cache] cover art", error);
+  }
+
+  if (!available) {
+    publish?.("Illustrating the cover…");
+    try {
+      const prompt = printableCoverArtPrompt(input.destination, style);
+      const png = await generatePng(apiKey, model, prompt, "1536x1024");
+      await storage.put(key, png, {
+        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" },
+        customMetadata: { destination: input.destination, title: `Cover art (${style})`, model },
+      });
+      available = true;
+    } catch (error) {
+      console.error("[TripQuest illustration] cover art", error);
+    }
+  }
+
+  return available ? `/api/illustration?key=${encodeURIComponent(key)}` : undefined;
 }
 
 export function illustrationStorageKey(path: string) {

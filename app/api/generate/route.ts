@@ -54,7 +54,7 @@ import {
   createGenerationStreamResponse,
   createGenerationTask,
 } from "../../generation-stream";
-import { addBookletIllustrations, addRevealPhoto } from "../../illustration-ai";
+import { addBookletIllustrations, addCoverIllustration, addRevealPhoto } from "../../illustration-ai";
 import { assertBookletQa } from "../../booklet-qa";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +65,7 @@ type RuntimeEnvironment = {
   KIMI_COMPOSER_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
+  OPENAI_COVER_STYLE?: string;
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
 };
@@ -1436,10 +1437,10 @@ export async function POST(request: Request) {
             }
             stageStartedAt = Date.now();
             // Run in parallel, not chained: each generates a disjoint set of
-            // images (coloring/drawing activities vs. one reveal photo) and
-            // touches disjoint fields, so there is no reason to pay the
-            // reveal photo's latency on top of the illustration batch's.
-            const [illustratedDayPlans, revealPhotoDayPlans] = await Promise.all([
+            // images (coloring/drawing activities vs. one reveal photo vs.
+            // one cover hero image) and touches disjoint fields, so there is
+            // no reason to pay any one's latency on top of another's.
+            const [illustratedDayPlans, revealPhotoDayPlans, coverIllustrationPath] = await Promise.all([
               addBookletIllustrations(runtime, {
                 destination,
                 age,
@@ -1450,6 +1451,7 @@ export async function POST(request: Request) {
                 age,
                 dayPlans: preparedDraft.dayPlans,
               }, publish),
+              addCoverIllustration(runtime, { destination }, publish),
             ]);
             const revealedDayPlans = illustratedDayPlans.map((day, index) => {
               const photoPath = revealPhotoDayPlans[index]?.slots?.questReveal?.photoPath;
@@ -1464,6 +1466,7 @@ export async function POST(request: Request) {
             const result: GeneratedBookletData = {
               ...provisionalResult,
               dayPlans: revealedDayPlans,
+              coverIllustrationPath,
             };
             assertBookletQa(result);
             const edition = await withEditionFingerprint(result);

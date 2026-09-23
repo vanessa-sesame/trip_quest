@@ -337,6 +337,7 @@ function drawCover(
   booklet: GeneratedBookletData,
   totalPages: number,
   familyPack?: FamilyPackContext,
+  coverImage?: PDFImage,
 ) {
   const theme = getDestinationTheme(booklet.destination);
   const page = drawPageBase(document, fonts, "Cover", 1, totalPages, theme.accent);
@@ -408,21 +409,37 @@ function drawCover(
     );
   }
 
-  // The one big destination-specific illustration: a single mascot scene
-  // (Barcelona's El Drac, or a generic destination mark) sitting on its own
-  // strip of ground, with a small sun overhead and a journey line leading
-  // the eye toward it — one composed scene, not scattered pieces.
+  // The one big destination-specific illustration. When a real AI-generated
+  // hero image is available (see addCoverIllustration in illustration-ai.ts)
+  // it replaces the hand-drawn mascot scene entirely, rather than layering
+  // the schematic sun/mascot on top of art that already has its own
+  // scenery; without one, the mascot scene is the permanent, zero-cost
+  // fallback — never leave the cover without a hero illustration.
   const heroBox = { x: 315, y: 280, width: 215, height: 145 };
-  const sunX = heroBox.x + heroBox.width * 0.85;
-  const sunY = heroBox.y + heroBox.height * 0.98;
-  page.drawCircle({ x: sunX, y: sunY, size: 14, color: palette.yellowSoft, borderColor: palette.yellow, borderWidth: 1.6 });
-  [20, 65, 115, 160].forEach((angle) => {
-    const radians = (angle * Math.PI) / 180;
-    const start = { x: sunX + Math.cos(radians) * 18, y: sunY + Math.sin(radians) * 18 };
-    const end = { x: sunX + Math.cos(radians) * 24, y: sunY + Math.sin(radians) * 24 };
-    page.drawLine({ start, end, thickness: 1.4, color: palette.yellow });
-  });
-  drawDestinationMotif(page, heroBox, theme, `cover-${booklet.destination}`);
+  if (coverImage) {
+    const dims = coverImage.scale(1);
+    const scale = Math.min(heroBox.width / dims.width, heroBox.height / dims.height);
+    const drawWidth = dims.width * scale;
+    const drawHeight = dims.height * scale;
+    page.drawImage(coverImage, {
+      x: heroBox.x + (heroBox.width - drawWidth) / 2,
+      y: heroBox.y + (heroBox.height - drawHeight) / 2,
+      width: drawWidth,
+      height: drawHeight,
+    });
+    drawScrapbookCorner(page, heroBox, colors.line, 14);
+  } else {
+    const sunX = heroBox.x + heroBox.width * 0.85;
+    const sunY = heroBox.y + heroBox.height * 0.98;
+    page.drawCircle({ x: sunX, y: sunY, size: 14, color: palette.yellowSoft, borderColor: palette.yellow, borderWidth: 1.6 });
+    [20, 65, 115, 160].forEach((angle) => {
+      const radians = (angle * Math.PI) / 180;
+      const start = { x: sunX + Math.cos(radians) * 18, y: sunY + Math.sin(radians) * 18 };
+      const end = { x: sunX + Math.cos(radians) * 24, y: sunY + Math.sin(radians) * 24 };
+      page.drawLine({ start, end, thickness: 1.4, color: palette.yellow });
+    });
+    drawDestinationMotif(page, heroBox, theme, `cover-${booklet.destination}`);
+  }
   drawJourneyDots(
     page,
     [
@@ -3089,6 +3106,7 @@ export async function createBookletPdf(
   };
   const coloringArtwork: ColoringArtwork = {};
   const revealArtwork: Record<number, PDFImage> = {};
+  let coverArtwork: PDFImage | undefined;
   if (resolveColoringImage) {
     const imageRequests = new Map<string, string>();
     // Curated static art (unlike AI-generated art, which is unique per
@@ -3138,6 +3156,12 @@ export async function createBookletPdf(
         return { dayIndex, bytes: null };
       }
     }));
+    const coverBytes = booklet.coverIllustrationPath
+      ? await resolveColoringImage(booklet.coverIllustrationPath).catch((error) => {
+        console.error("[TripQuest illustration] cover art", error);
+        return null;
+      })
+      : null;
     // Network/object-storage reads run together; PDF mutation stays sequential.
     for (const { key, bytes } of resolvedImages) {
       if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
@@ -3145,6 +3169,7 @@ export async function createBookletPdf(
     for (const { dayIndex, bytes } of resolvedRevealPhotos) {
       if (bytes) revealArtwork[dayIndex] = await document.embedPng(bytes);
     }
+    if (coverBytes) coverArtwork = await document.embedPng(coverBytes);
   }
   const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));
   document.setTitle(`${pdfText(booklet.destination)} Explorer - Age ${booklet.age}`);
@@ -3156,7 +3181,7 @@ export async function createBookletPdf(
   document.setCreationDate(new Date(booklet.generatedAt));
   document.setModificationDate(new Date());
 
-  drawCover(document, fonts, booklet, totalPages, familyPack);
+  drawCover(document, fonts, booklet, totalPages, familyPack, coverArtwork);
   drawGuide(document, fonts, booklet, totalPages, familyPack);
   let pageNumber = 3;
   bookletDayPageEntries(booklet.dayPlans).forEach((entry) => {

@@ -1,4 +1,12 @@
-import { pairEligibleGameTypes, queueEligibleGameTypes, type DayPlan, type GameType, type QueueTargetKind } from "./booklet.ts";
+import {
+  pairEligibleGameTypes,
+  queueEligibleGameTypes,
+  type Activity,
+  type DayPlan,
+  type GameItem,
+  type GameType,
+  type QueueTargetKind,
+} from "./booklet.ts";
 import {
   familyChildDisplayName,
   type FamilyChild,
@@ -230,6 +238,76 @@ export function balancedGameTypePlanForTrip(
     day: index + 1,
     gameTypes,
   }));
+}
+
+// Generic clue items for a preview activity that doesn't have real,
+// researched ones yet — only ever used by enrichOfflinePreviewGameplay
+// below, the same role app/activity-game.tsx's own fallbackItems plays for
+// the web board renderer, kept here too so the PDF path (which has no such
+// fallback and expects real items on any gameType that needs them) gets
+// something sane as well.
+const previewFallbackItems: GameItem[] = [
+  { label: "Look", clue: "Spot one real detail nearby." },
+  { label: "Listen", clue: "Notice one local sound." },
+  { label: "Compare", clue: "Find two things that look alike." },
+  { label: "Share", clue: "Tell your family what surprised you." },
+];
+
+function seededPick<T>(options: T[], seed: string): T {
+  let hash = 0;
+  for (const character of seed) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return options[hash % options.length];
+}
+
+// buildBooklet's offline generator (app/booklet.ts) — the deterministic
+// fallback used for the web preview before a real booklet has been
+// generated — varies each day's theme, landmark, and activity titles, but
+// never assigns inThePlace/inThePlaceSecond/sitDown a gameType or items at
+// all (every test that renders one through createBookletPdf has to patch
+// this in by hand first). Left as-is, every activity falls back to the
+// same "story" board (see activity-game.tsx's `activity.gameType ||
+// "story"), so the pre-generation preview shows no game variety
+// whatsoever regardless of how varied the surrounding titles/themes are.
+// This stamps the same destination-rotated variety a real generation gets
+// (balancedGameTypePlanForTrip) onto that offline output, so the preview
+// actually demonstrates the range of games a real booklet would use.
+export function enrichOfflinePreviewGameplay(
+  dayPlans: DayPlan[],
+  age: number,
+  destination: string,
+): DayPlan[] {
+  const gameTypePlan = balancedGameTypePlanForTrip(age, dayPlans.length, undefined, destination);
+  const allowed = allowedGameTypesForAge(age);
+  return dayPlans.map((day, index) => {
+    const [inPlaceType, sitDownType] = gameTypePlan[index]?.gameTypes || ["story", "story"];
+    const withGameplay = (activity: Activity, gameType: GameType): Activity => ({
+      ...activity,
+      gameType,
+      items: activity.items?.length ? activity.items : previewFallbackItems.map((item) => ({ ...item })),
+    });
+    const inThePlace = withGameplay(day.slots.inThePlace, inPlaceType);
+    const sitDown = withGameplay(day.slots.sitDown, sitDownType);
+    let inThePlaceSecond: Activity | undefined;
+    if (day.slots.inThePlaceSecond) {
+      const secondCandidates = pairEligibleGameTypes.filter(
+        (type) => allowed.includes(type) && type !== inPlaceType && type !== sitDownType,
+      );
+      const secondType = secondCandidates.length
+        ? seededPick(secondCandidates, `${destination}-${day.day}-second`)
+        : inPlaceType;
+      inThePlaceSecond = withGameplay(day.slots.inThePlaceSecond, secondType);
+    }
+    return {
+      ...day,
+      slots: {
+        ...day.slots,
+        inThePlace,
+        ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
+        sitDown,
+      },
+      activities: [inThePlace, sitDown],
+    };
+  });
 }
 
 export type BookletSource = {

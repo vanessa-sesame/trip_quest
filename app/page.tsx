@@ -32,6 +32,7 @@ import {
   sanitizeDays,
 } from "./booklet";
 import {
+  enrichOfflinePreviewGameplay,
   type GeneratedBookletData,
   type GeneratedBookletProfile,
   isGeneratedBookletData,
@@ -362,7 +363,16 @@ export default function Home() {
   const generatedDays = useMemo(
     () =>
       generatedBooklet?.dayPlans ??
-      buildBooklet(trip.age, destinationName, trip.days),
+      // buildBooklet varies each day's theme/landmark/titles but never
+      // assigns a gameType or items to inThePlace/sitDown — enrich it with
+      // the same destination-rotated variety a real generation gets so the
+      // preview actually shows different games, not every activity
+      // silently falling back to the same "story" board.
+      enrichOfflinePreviewGameplay(
+        buildBooklet(trip.age, destinationName, trip.days),
+        trip.age,
+        destinationName,
+      ),
     [generatedBooklet, trip.age, destinationName, trip.days],
   );
   const pageTitles = bookletCorePageTitles(generatedDays);

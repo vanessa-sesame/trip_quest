@@ -2536,11 +2536,15 @@ function drawQueuePage(
 
   const count = Math.min(20, queue.countTo);
   const columns = 5;
-  const gap = 18;
-  const diameter = 40;
+  const rows = Math.ceil(count / columns);
+  // Bigger, more tactile circles when there are fewer of them to count —
+  // a "count to 5" page shouldn't use the same small dots designed for
+  // "count to 20", and it fills the space a short grid would otherwise
+  // leave empty above it.
+  const diameter = rows <= 1 ? 60 : rows === 2 ? 50 : rows === 3 ? 44 : 40;
+  const gap = rows <= 1 ? 22 : 18;
   const gridWidth = columns * diameter + (columns - 1) * gap;
   const startX = (PAGE_WIDTH - gridWidth) / 2 + diameter / 2;
-  const rows = Math.ceil(count / columns);
   const startY = 500 - shift;
   for (let index = 0; index < count; index += 1) {
     const column = index % columns;
@@ -2549,10 +2553,15 @@ function drawQueuePage(
     const y = startY - row * (diameter + 18);
     page.drawCircle({ x, y, size: diameter / 2, borderColor: colors.blue, borderWidth: 1.5, color: colors.white });
   }
-  drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: startY - rows * (diameter + 18) + 8, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: palette.teal });
+  const countedLabelY = startY - rows * (diameter + 18) + 8;
+  drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: countedLabelY, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: palette.teal });
 
   if (hasFacts) {
-    const boxY = 92 - shift;
+    // Anchored just below the counting grid when it's short (so a
+    // "count to 5" page doesn't leave a dead gap in the middle), but never
+    // pulled lower than the original fixed position, which is already
+    // tuned for the tallest (4-row) grid.
+    const boxY = Math.max(countedLabelY - 212, 92 - shift);
     drawHandLine(page, MARGIN, boxY + 176, MARGIN + 160, boxY + 176, colors.line, 1, `queue-facts-rule2-${dayIndex}`);
     page.drawText("DID YOU KNOW?", { x: MARGIN, y: boxY + 164, size: 8, font: fonts.bold, color: theme.accent });
     day.slots.factCard.forEach((fact, index) => {

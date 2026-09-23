@@ -66,6 +66,10 @@ type RuntimeEnvironment = {
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
   OPENAI_COVER_STYLE?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_AI_IMAGE_MODEL?: string;
+  IMAGE_PROVIDER?: string;
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
 };

@@ -14,6 +14,18 @@ export type IllustrationRuntime = {
   // choice) so both styles can be generated and compared before picking one
   // for good.
   OPENAI_COVER_STYLE?: string;
+  // Cloudflare Workers AI credentials for the free image-generation path
+  // (see resolveImageProvider below). This project's hosting platform only
+  // provisions D1/R2 as Worker *bindings*, not Workers AI, so this goes
+  // through Cloudflare's plain REST API instead — a Cloudflare account and
+  // an API token with Workers AI Read+Edit, not a binding.
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_AI_IMAGE_MODEL?: string;
+  // Forces a provider instead of the default auto-detect (Cloudflare first
+  // when configured, since it's free, else OpenAI). Set to "openai" or
+  // "cloudflare"; any other value is ignored.
+  IMAGE_PROVIDER?: string;
 };
 
 export type CoverArtStyle = "line-art" | "photo";
@@ -23,6 +35,16 @@ function bytesFromBase64(value: string) {
   const bytes = new Uint8Array(decoded.length);
   for (let index = 0; index < decoded.length; index += 1) bytes[index] = decoded.charCodeAt(index);
   return bytes;
+}
+
+// Both providers can return either format (OpenAI's output_format is forced
+// to png below, but Cloudflare's flux-1-schnell returns JPEG bytes despite
+// the shared "artwork.png" R2 key name, which is just a storage convention,
+// not a format guarantee) — sniff the real format from magic bytes rather
+// than trusting the source, so storage metadata and PDF embedding
+// (app/booklet-pdf.ts) always match what's actually there.
+export function sniffImageContentType(bytes: Uint8Array): "image/png" | "image/jpeg" {
+  return bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg" : "image/png";
 }
 
 async function digest(value: string) {
@@ -121,15 +143,90 @@ export async function generatePng(apiKey: string, model: string, prompt: string,
   }
 }
 
+// Cloudflare Workers AI's plain REST API (not a Worker binding — see
+// IllustrationRuntime above for why). flux-1-schnell has no width/height
+// input (fixed square output), unlike OpenAI's generatePng, so there is no
+// size parameter here; callers that need a specific aspect ratio rely on
+// the PDF's existing contain-fit image placement instead.
+async function generatePngCloudflare(accountId: string, apiToken: string, model: string, prompt: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt, steps: 8 }),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(`Cloudflare image generation failed (${response.status}): ${message.slice(0, 240)}`);
+    }
+    const body = await response.json() as {
+      result?: { image?: string };
+      image?: string;
+      errors?: Array<{ message?: string }>;
+    };
+    const image = body.result?.image || body.image;
+    if (!image) {
+      const detail = body.errors?.[0]?.message;
+      throw new Error(`Cloudflare image generation returned no image.${detail ? ` ${detail}` : ""}`);
+    }
+    return bytesFromBase64(image);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+type ImageProvider =
+  | { kind: "cloudflare"; accountId: string; apiToken: string; model: string }
+  | { kind: "openai"; apiKey: string; model: string };
+
+// Picks which image provider to use, or null when neither is configured
+// (every caller below already degrades gracefully to "no illustration" in
+// that case). Cloudflare wins when both are configured and IMAGE_PROVIDER
+// does not force a choice, since it is the free option — flip
+// IMAGE_PROVIDER=openai to prefer the paid one instead (e.g. for quality
+// comparison) without unsetting credentials.
+function resolveImageProvider(runtime: IllustrationRuntime): ImageProvider | null {
+  const forced = runtime.IMAGE_PROVIDER?.trim().toLowerCase();
+  const cloudflare = (): ImageProvider | null => {
+    const accountId = runtime.CLOUDFLARE_ACCOUNT_ID?.trim();
+    const apiToken = runtime.CLOUDFLARE_API_TOKEN?.trim();
+    if (!accountId || !apiToken) return null;
+    return {
+      kind: "cloudflare",
+      accountId,
+      apiToken,
+      model: runtime.CLOUDFLARE_AI_IMAGE_MODEL?.trim() || "@cf/black-forest-labs/flux-1-schnell",
+    };
+  };
+  const openai = (): ImageProvider | null => {
+    const apiKey = runtime.OPENAI_API_KEY?.trim();
+    if (!apiKey) return null;
+    return { kind: "openai", apiKey, model: runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini" };
+  };
+  if (forced === "openai") return openai() || cloudflare();
+  if (forced === "cloudflare") return cloudflare() || openai();
+  return cloudflare() || openai();
+}
+
+async function generateIllustrationPng(provider: ImageProvider, prompt: string, size: "1024x1536" | "1536x1024" = "1024x1536") {
+  if (provider.kind === "cloudflare") return generatePngCloudflare(provider.accountId, provider.apiToken, provider.model, prompt);
+  return generatePng(provider.apiKey, provider.model, prompt, size);
+}
+
 export async function addBookletIllustrations(
   runtime: IllustrationRuntime,
   input: { destination: string; age: number; dayPlans: DayPlan[] },
   publish?: (message: string) => void,
 ) {
   const storage = runtime.BOOKLET_FILES;
-  const apiKey = runtime.OPENAI_API_KEY?.trim();
-  if (!storage || !apiKey) return input.dayPlans;
-  const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
+  const provider = resolveImageProvider(runtime);
+  if (!storage || !provider) return input.dayPlans;
   const candidates: Array<{
     dayIndex: number;
     activityIndex: number;
@@ -187,10 +284,10 @@ export async function addBookletIllustrations(
     publish?.(`Illustrating ${missing.length} custom page${missing.length === 1 ? "" : "s"}…`);
     await Promise.all(missing.map(async ({ candidate }) => {
       try {
-        const png = await generatePng(apiKey, model, candidate.prompt);
+        const png = await generateIllustrationPng(provider, candidate.prompt);
         await storage.put(candidate.key, png, {
-          httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" },
-          customMetadata: { destination: input.destination, title: candidate.title, model },
+          httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
+          customMetadata: { destination: input.destination, title: candidate.title, model: provider.model },
         });
         availableKeys.add(candidate.key);
       } catch (error) {
@@ -237,9 +334,8 @@ export async function addRevealPhoto(
   publish?: (message: string) => void,
 ) {
   const storage = runtime.BOOKLET_FILES;
-  const apiKey = runtime.OPENAI_API_KEY?.trim();
-  if (!storage || !apiKey) return input.dayPlans;
-  const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
+  const provider = resolveImageProvider(runtime);
+  if (!storage || !provider) return input.dayPlans;
 
   const dayIndex = input.dayPlans.findIndex((day) => day.slots?.questReveal?.targetLabel);
   if (dayIndex === -1) return input.dayPlans;
@@ -267,10 +363,10 @@ export async function addRevealPhoto(
     publish?.("Finding a photo for the reveal page…");
     try {
       const prompt = printableRevealPhotoPrompt(targetLabel, input.destination, day);
-      const png = await generatePng(apiKey, model, prompt);
+      const png = await generateIllustrationPng(provider, prompt);
       await storage.put(key, png, {
-        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" },
-        customMetadata: { destination: input.destination, title: `Reveal: ${targetLabel}`, model },
+        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
+        customMetadata: { destination: input.destination, title: `Reveal: ${targetLabel}`, model: provider.model },
       });
       available = true;
     } catch (error) {
@@ -307,9 +403,8 @@ export async function addCoverIllustration(
   publish?: (message: string) => void,
 ): Promise<string | undefined> {
   const storage = runtime.BOOKLET_FILES;
-  const apiKey = runtime.OPENAI_API_KEY?.trim();
-  if (!storage || !apiKey) return undefined;
-  const model = runtime.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-1-mini";
+  const provider = resolveImageProvider(runtime);
+  if (!storage || !provider) return undefined;
   const style: CoverArtStyle = runtime.OPENAI_COVER_STYLE?.trim() === "photo" ? "photo" : "line-art";
 
   const identity = JSON.stringify({
@@ -332,10 +427,10 @@ export async function addCoverIllustration(
     publish?.("Illustrating the cover…");
     try {
       const prompt = printableCoverArtPrompt(input.destination, style);
-      const png = await generatePng(apiKey, model, prompt, "1536x1024");
+      const png = await generateIllustrationPng(provider, prompt, "1536x1024");
       await storage.put(key, png, {
-        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" },
-        customMetadata: { destination: input.destination, title: `Cover art (${style})`, model },
+        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
+        customMetadata: { destination: input.destination, title: `Cover art (${style})`, model: provider.model },
       });
       available = true;
     } catch (error) {

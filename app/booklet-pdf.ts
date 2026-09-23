@@ -34,6 +34,7 @@ import {
   drawTicketEdge,
 } from "./pdf-illustrations.ts";
 import { getAgeBand } from "./booklet.ts";
+import { sniffImageContentType } from "./illustration-ai.ts";
 import {
   type GeneratedBookletData,
   validateBookletDraft,
@@ -3084,6 +3085,14 @@ async function loadFont(
   return document.embedFont(fallback);
 }
 
+// AI-illustrated images may come from either provider (see
+// resolveImageProvider in illustration-ai.ts) and the two return different
+// formats — sniff rather than assume PNG so a Cloudflare-sourced JPEG still
+// embeds correctly.
+function embedIllustration(document: PDFDocument, bytes: Uint8Array) {
+  return sniffImageContentType(bytes) === "image/jpeg" ? document.embedJpg(bytes) : document.embedPng(bytes);
+}
+
 export async function createBookletPdf(
   inputBooklet: GeneratedBookletData,
   familyPack?: FamilyPackContext,
@@ -3164,12 +3173,12 @@ export async function createBookletPdf(
       : null;
     // Network/object-storage reads run together; PDF mutation stays sequential.
     for (const { key, bytes } of resolvedImages) {
-      if (bytes) coloringArtwork[key] = await document.embedPng(bytes);
+      if (bytes) coloringArtwork[key] = await embedIllustration(document, bytes);
     }
     for (const { dayIndex, bytes } of resolvedRevealPhotos) {
-      if (bytes) revealArtwork[dayIndex] = await document.embedPng(bytes);
+      if (bytes) revealArtwork[dayIndex] = await embedIllustration(document, bytes);
     }
-    if (coverBytes) coverArtwork = await document.embedPng(coverBytes);
+    if (coverBytes) coverArtwork = await embedIllustration(document, coverBytes);
   }
   const totalPages = bookletPdfPageCount(booklet, Boolean(familyPack));
   document.setTitle(`${pdfText(booklet.destination)} Explorer - Age ${booklet.age}`);

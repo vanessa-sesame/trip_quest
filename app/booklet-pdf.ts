@@ -1408,7 +1408,7 @@ function drawColoringActivityBoard(
     const isChallenge = cell.kind === "challenge";
     const cellColor = isFree ? colors.coral : isChallenge ? palette.yellow : palette.teal;
     page.drawRectangle({ x: cellX, y: cellY, width: cellWidth, height: cellHeight, borderColor: colors.softLine, borderWidth: 0.8 });
-    page.drawCircle({ x: cellX + 7, y: cellY + cellHeight - 8, size: 3, color: cellColor });
+    page.drawCircle({ x: cellX + 7, y: cellY + cellHeight - 10, size: 3, color: cellColor });
     page.drawText(isFree ? "FREE" : isChallenge ? "TRY" : "SPOT", {
       x: cellX + 14,
       y: cellY + cellHeight - 11,
@@ -1465,7 +1465,7 @@ function drawColoringActivityBoard(
   page.drawText("LOCAL CLUES", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: palette.teal });
   spec.facts.slice(0, 3).forEach((fact, index) => {
     const factY = notesY + notesHeight - 28 - index * 13;
-    page.drawCircle({ x: box.x + 12, y: factY + 2, size: 2, color: palette.teal });
+    page.drawCircle({ x: box.x + 12, y: factY + 6, size: 2, color: palette.teal });
     drawWrappedText(page, pdfText(fact), fonts, {
       x: box.x + 18,
       y: factY + 4,
@@ -2276,7 +2276,7 @@ function drawActivityPage(
     maxLines: 2,
   });
   const kindLabel = pdfText(activity.gameType === "coloring" ? "SPOT · COLOR · TRACE" : activity.kind).toUpperCase();
-  page.drawCircle({ x: MARGIN + 2.5, y: 631, size: 2.5, color: accent });
+  page.drawCircle({ x: MARGIN + 2.5, y: 628.5, size: 2.5, color: accent });
   page.drawText(kindLabel, { x: MARGIN + 12, y: 626, size: 8, font: fonts.bold, color: accent });
   drawWrappedText(page, activity.body, fonts, {
     x: MARGIN,
@@ -2317,7 +2317,7 @@ function drawActivityPage(
     if (clues.length) {
       clues.forEach((item, index) => {
         const clueY = 89 - index * 15;
-        page.drawCircle({ x: MARGIN + 15, y: clueY + 2, size: 2.2, color: accent });
+        page.drawCircle({ x: MARGIN + 15, y: clueY + 7, size: 2.2, color: accent });
         drawWrappedText(page, `${item.label}: ${item.clue}`, fonts, {
           x: MARGIN + 23,
           y: clueY + 5,
@@ -2557,7 +2557,7 @@ function drawQueuePage(
     page.drawText("DID YOU KNOW?", { x: MARGIN, y: boxY + 164, size: 8, font: fonts.bold, color: theme.accent });
     day.slots.factCard.forEach((fact, index) => {
       const y = boxY + 132 - index * 43;
-      page.drawCircle({ x: MARGIN + 4, y: y + 3, size: 3, color: theme.accent });
+      page.drawCircle({ x: MARGIN + 4, y: y + 10, size: 3, color: theme.accent });
       drawWrappedText(page, fact, fonts, { x: MARGIN + 17, y: y + 7, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2 - 24, maxLines: 2, lineHeight: 12, color: colors.ink });
     });
   }
@@ -2628,7 +2628,7 @@ function drawRevealPage(
   page.drawText("CHAT ABOUT IT", { x: MARGIN + 14, y: chatTop - 18, size: 8, font: fonts.bold, color: palette.teal });
   reveal.chatPrompts.forEach((prompt, index) => {
     const y = chatTop - 36 - index * 26;
-    page.drawCircle({ x: MARGIN + 18, y: y + 3, size: 3, color: palette.teal });
+    page.drawCircle({ x: MARGIN + 18, y: y + 10, size: 3, color: palette.teal });
     drawWrappedText(page, prompt, fonts, { x: MARGIN + 30, y: y + 7, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 42, maxLines: 2, lineHeight: 11, color: colors.ink });
   });
 

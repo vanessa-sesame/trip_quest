@@ -1254,41 +1254,47 @@ function drawTraceBoard(
     color: colors.muted,
   });
 
-  page.drawText(coloring ? "COLORING REFERENCE" : "OBSERVATION REFERENCE", {
-    x: box.x,
-    y: box.y + box.height - 52,
-    size: 7,
-    font: fonts.bold,
-    color: colors.coral,
-  });
+  // The point of a "drawing" activity is a real blank canvas — the
+  // reference is something to glance at, not the thing filling the page.
+  // A small inset thumbnail in the canvas's own corner, rather than a
+  // full-width reference panel eating most of the box, so almost the
+  // whole board is actually open to draw on.
+  const canvasTop = box.y + box.height - 46;
+  const canvasBottom = box.y + 50;
+  const canvas = { x: box.x, y: canvasBottom, width: box.width, height: canvasTop - canvasBottom };
+  drawScrapbookCorner(page, canvas, colors.line, 20);
+  page.drawText("FIELD SKETCH", { x: box.x, y: canvasTop + 8, size: 7, font: fonts.bold, color: colors.muted });
+
+  const refWidth = Math.min(150, box.width * 0.3);
+  const refHeight = 92;
+  const refBox = { x: canvas.x + canvas.width - refWidth - 10, y: canvas.y + canvas.height - refHeight - 10, width: refWidth, height: refHeight };
+  page.drawRectangle({ ...refBox, color: colors.paper, borderColor: colors.softLine, borderWidth: 1 });
   const sceneLabel = pdfText(coloringIllustrationSpecs[variant].label).toUpperCase();
-  const sceneLabelSize = fitTextSize(sceneLabel, fonts.bold, box.width - 170, 7, 5.5);
+  const sceneLabelSize = fitTextSize(sceneLabel, fonts.bold, refBox.width - 10, 6, 5);
+  page.drawText("LOOK CLOSELY", { x: refBox.x, y: refBox.y + refBox.height + 4, size: 6, font: fonts.bold, color: colors.coral });
   page.drawText(sceneLabel, {
-    x: box.x + box.width - fonts.bold.widthOfTextAtSize(sceneLabel, sceneLabelSize),
-    y: box.y + box.height - 52,
+    x: refBox.x + refBox.width - fonts.bold.widthOfTextAtSize(sceneLabel, sceneLabelSize),
+    y: refBox.y + refBox.height + 4,
     size: sceneLabelSize,
     font: fonts.bold,
-    color: colors.blue,
-  });
-
-  const scene = { x: box.x, y: box.y + 64, width: box.width, height: box.height - 134 };
-  page.drawRectangle({
-    ...scene,
-    borderColor: colors.line,
-    borderWidth: 1.2,
+    color: colors.muted,
   });
   const image = artwork[coloringArtworkKey(activity, context)];
-  if (image) drawEmbeddedColoringImage(page, image, scene);
-  else drawColoringScene(page, scene, variant, variation);
+  const refInset = { x: refBox.x + 5, y: refBox.y + 5, width: refBox.width - 10, height: refBox.height - 10 };
+  if (image) drawEmbeddedColoringImage(page, image, refInset);
+  else {
+    const artWidth = 320;
+    const artHeight = 200;
+    const artScale = Math.min(refInset.width / artWidth, refInset.height / artHeight);
+    page.pushOperators(
+      pushGraphicsState(),
+      concatTransformationMatrix(artScale, 0, 0, artScale, refInset.x, refInset.y),
+    );
+    drawColoringScene(page, { x: 0, y: 0, width: artWidth, height: artHeight }, variant, variation);
+    page.pushOperators(popGraphicsState());
+  }
 
-  page.drawText(coloring ? "TRACE AND COLOR" : "FIELD SKETCH", {
-    x: box.x,
-    y: box.y + 44,
-    size: 8,
-    font: fonts.bold,
-    color: colors.coral,
-  });
-  const traceSize = fitTextSize(label, fonts.bold, box.width - 66, 20, 12);
+  const traceSize = fitTextSize(label, fonts.bold, box.width - 66, 18, 11);
   page.drawText(label, {
     x: box.x + 58,
     y: box.y + 22,
@@ -1297,6 +1303,7 @@ function drawTraceBoard(
     color: rgb(0.77, 0.79, 0.76),
     opacity: 0.55,
   });
+  page.drawText("TRACE", { x: box.x, y: box.y + 26, size: 7, font: fonts.bold, color: colors.muted });
   drawDottedLine(page, box.x + 58, box.x + box.width, box.y + 14, colors.line, 2, 3);
 }
 

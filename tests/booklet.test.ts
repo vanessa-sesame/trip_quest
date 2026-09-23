@@ -315,6 +315,35 @@ test("AI game schedules maximize variety and never repeat the four-stop map", ()
   }
 });
 
+test("a rotation key spreads short trips across different day-1 game pairs", () => {
+  // Without a rotation key every trip of a given age/length starts at
+  // the exact same table entry (e.g. every 5-year-old's 1-day trip always
+  // got ["coloring", "bingo"], regardless of destination) — a rotation key
+  // (the destination, in production) should shift the starting slice so
+  // different trips see different games, while staying a pure function of
+  // that key so the same trip still regenerates identically for caching.
+  const destinations = ["Barcelona", "Tokyo", "Rome", "Amsterdam", "Paris", "Singapore", "Berlin", "Lisbon"];
+  const plans = destinations.map((destination) => balancedGameTypePlanForTrip(5, 1, undefined, destination));
+  const firstDayPairs = plans.map((plan) => plan[0].gameTypes.join("+"));
+  assert.ok(new Set(firstDayPairs).size >= 3, "expected at least 3 distinct day-1 pairs across 8 destinations");
+  assert.ok(
+    plans.every((plan) => plan[0].gameTypes.every((game) => allowedGameTypesForAge(5).includes(game))),
+    "every rotated game type must still be age-appropriate",
+  );
+
+  // Deterministic: the same destination (and thus the same cache key)
+  // always produces the same plan, so a preview and its later purchase
+  // never diverge.
+  assert.deepEqual(
+    balancedGameTypePlanForTrip(5, 3, undefined, "Barcelona"),
+    balancedGameTypePlanForTrip(5, 3, undefined, "Barcelona"),
+  );
+
+  // No rotation key (the pre-existing call shape, still used by tests and
+  // any other caller) keeps the original unrotated behavior.
+  assert.deepEqual(balancedGameTypePlanForTrip(5, 1)[0].gameTypes, ["coloring", "bingo"]);
+});
+
 test("family interests decide whether drawing is included and where it lands", () => {
   const noDrawing = balancedGameTypePlanForTrip(5, 6, [{ day: 1, childNumber: 1, interest: "dinosaurs" }]);
   assert.equal(noDrawing.some((day) => day.gameTypes.includes("drawing")), false);

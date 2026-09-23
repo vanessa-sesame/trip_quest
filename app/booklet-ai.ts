@@ -151,10 +151,29 @@ function replaceUnwantedDrawing(gameTypes: [GameType, GameType], age: number, pr
   return replacement || replacements.find((candidate) => allowedGameTypesForAge(age).includes(candidate)) || gameTypes[0];
 }
 
+// Every one of these per-age tables is fixed and always sliced from index 0
+// (see below), so without a rotation, every single booklet for a given
+// age band starts on the exact same day-1 game pair, forever — a 5-year-old's
+// 1-day Barcelona trip and a 5-year-old's 1-day Tokyo trip both always land
+// on ["coloring", "bingo"], and short trips (well under 14 days, the
+// overwhelming majority of real bookings) can never reach the later,
+// otherwise-unused entries. rotationKey lets a caller (the destination, in
+// practice) shift which slice of the table a given trip starts from, so
+// variety exists both across different bookings and within what a short
+// trip can surface — while staying a pure function of that key, not
+// Math.random(), so the same request still deterministically regenerates
+// the same booklet (required for the preview/purchase cache).
+function rotationOffset(key: string, length: number) {
+  let hash = 0;
+  for (const character of key) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return hash % length;
+}
+
 export function balancedGameTypePlanForTrip(
   age: number,
   days: number,
   interestPlan?: InterestPlanItem[],
+  rotationKey?: string,
 ): GameTypePlanItem[] {
   const plan = age <= 5
     ? YOUNG_GAME_PLAN
@@ -163,7 +182,9 @@ export function balancedGameTypePlanForTrip(
       : age <= 11
         ? INVESTIGATOR_GAME_PLAN
         : TEEN_GAME_PLAN;
-  const selected = plan.slice(0, Math.max(0, Math.min(14, days))).map((gameTypes) => [...gameTypes] as [GameType, GameType]);
+  const offset = rotationKey ? rotationOffset(rotationKey, plan.length) : 0;
+  const rotatedPlan = offset ? [...plan.slice(offset), ...plan.slice(0, offset)] : plan;
+  const selected = rotatedPlan.slice(0, Math.max(0, Math.min(14, days))).map((gameTypes) => [...gameTypes] as [GameType, GameType]);
   // The default helper remains age-balanced for older callers. Generated family
   // editions pass the interest plan so a drawing page is intentional, not filler.
   if (interestPlan) {

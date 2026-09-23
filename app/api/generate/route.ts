@@ -1182,7 +1182,10 @@ export async function POST(request: Request) {
       .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
       .join("\n");
     const interestPlan = interestPlanForTrip(family, days);
-    const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan);
+    // Rotated by destination so different trips don't all land on the exact
+    // same day-1 game pair for a given age band — see
+    // balancedGameTypePlanForTrip's own comment for why.
+    const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan, destination);
     const runtime = await getRuntimeEnvironment();
     const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
     const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";

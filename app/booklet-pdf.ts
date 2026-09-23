@@ -21,6 +21,17 @@ import {
   curatedColoringImagePath,
   type ColoringScene,
 } from "./coloring.ts";
+import { getDestinationTheme, palette, spacing } from "./pdf-theme.ts";
+import {
+  drawAnnotationCircle,
+  drawDestinationMotif,
+  drawHandLine,
+  drawJourneyDots,
+  drawMosaicFragment,
+  drawScrapbookCorner,
+  drawStampCircle,
+  drawTicketEdge,
+} from "./pdf-illustrations.ts";
 import { getAgeBand } from "./booklet.ts";
 import {
   type GeneratedBookletData,
@@ -343,132 +354,101 @@ function drawCover(
   totalPages: number,
   familyPack?: FamilyPackContext,
 ) {
-  const page = drawPageBase(document, fonts, "Cover", 1, totalPages, colors.coral);
-  page.drawRectangle({
-    x: MARGIN,
-    y: 706,
-    width: 168,
-    height: 30,
-    color: colors.ink,
-  });
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, "Cover", 1, totalPages, theme.accent);
+
   page.drawText("TRIPQUEST EXPLORER BOOK", {
-    x: MARGIN + 12,
-    y: 716,
+    x: MARGIN,
+    y: 733,
     size: 9,
     font: fonts.bold,
-    color: colors.white,
+    color: colors.muted,
   });
+  drawHandLine(page, MARGIN, 726, MARGIN + 150, 726, theme.accent, 1.6, "cover-kicker");
 
   page.drawText("A trip made for curious hands", {
     x: MARGIN,
-    y: 665,
-    size: 13,
-    font: fonts.regular,
-    color: colors.coral,
+    y: 695,
+    size: 15,
+    font: fonts.display,
+    color: theme.accent,
   });
   const destination = pdfText(booklet.destination);
   const destinationSize = fitTextSize(
     destination,
-    fonts.bold,
+    fonts.display,
     PAGE_WIDTH - MARGIN * 2,
-    38,
-    27,
+    64,
+    40,
   );
   drawWrappedText(page, destination, fonts, {
     x: MARGIN,
-    y: 615,
+    y: 630,
     size: destinationSize,
-    font: fonts.bold,
+    font: fonts.display,
     color: colors.ink,
     maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 2,
-    lineHeight: destinationSize * 1.04,
+    lineHeight: destinationSize * 0.98,
   });
   drawWrappedText(page, booklet.profile.style, fonts, {
     x: MARGIN,
-    y: 520,
-    size: 18,
+    y: 540,
+    size: 15,
     font: fonts.bold,
-    color: colors.blue,
-    maxWidth: 390,
+    color: colors.muted,
+    maxWidth: 340,
     maxLines: 2,
-    lineHeight: 22,
+    lineHeight: 19,
   });
 
-  drawPill(page, `AGE ${booklet.age}`, fonts, MARGIN, 446, colors.yellowSoft);
-  drawPill(
+  // Small travel-stamp badges rather than rectangular UI pills.
+  drawStampCircle(page, fonts, MARGIN + 30, 465, 30, theme.accent, theme.accentSoft, `AGE ${booklet.age}`);
+  drawStampCircle(
     page,
-    `${booklet.days} ADVENTURE ${booklet.days === 1 ? "DAY" : "DAYS"}`,
     fonts,
-    MARGIN + 86,
-    446,
-    colors.greenSoft,
+    MARGIN + 100,
+    465,
+    30,
+    palette.teal,
+    palette.tealSoft,
+    booklet.days === 1 ? "1 DAY" : `${booklet.days} DAYS`,
   );
   if (familyPack?.children.length) {
-    page.drawText("FAMILY EXPLORERS", {
-      x: MARGIN,
-      y: 414,
-      size: 8,
-      font: fonts.bold,
-      color: colors.blue,
-    });
-    drawWrappedText(page, familyPack.children.map((child, index) => `${pdfText(familyChildDisplayName(child, index))} (age ${child.age})`).join(" / "), fonts, {
-      x: MARGIN,
-      y: 395,
-      size: 9,
-      font: fonts.bold,
-      maxWidth: 245,
-      maxLines: 2,
-      lineHeight: 12,
-      color: colors.ink,
-    });
+    page.drawText("FAMILY EXPLORERS", { x: MARGIN + 150, y: 472, size: 8, font: fonts.bold, color: colors.muted });
+    drawWrappedText(
+      page,
+      familyPack.children.map((child, index) => `${pdfText(familyChildDisplayName(child, index))} (age ${child.age})`).join(" / "),
+      fonts,
+      { x: MARGIN + 150, y: 456, size: 9, font: fonts.bold, maxWidth: 190, maxLines: 2, lineHeight: 12, color: colors.ink },
+    );
   }
 
-  page.drawRectangle({
-    x: 318,
-    y: 270,
-    width: 220,
-    height: 205,
-    color: colors.blueSoft,
+  // The one big destination-specific illustration: a single mascot scene
+  // (Barcelona's El Drac, or a generic destination mark) sitting on its own
+  // strip of ground, with a small sun overhead and a journey line leading
+  // the eye toward it — one composed scene, not scattered pieces.
+  const heroBox = { x: 315, y: 280, width: 215, height: 145 };
+  const sunX = heroBox.x + heroBox.width * 0.85;
+  const sunY = heroBox.y + heroBox.height * 0.98;
+  page.drawCircle({ x: sunX, y: sunY, size: 14, color: palette.yellowSoft, borderColor: palette.yellow, borderWidth: 1.6 });
+  [20, 65, 115, 160].forEach((angle) => {
+    const radians = (angle * Math.PI) / 180;
+    const start = { x: sunX + Math.cos(radians) * 18, y: sunY + Math.sin(radians) * 18 };
+    const end = { x: sunX + Math.cos(radians) * 24, y: sunY + Math.sin(radians) * 24 };
+    page.drawLine({ start, end, thickness: 1.4, color: palette.yellow });
   });
-  page.drawCircle({ x: 487, y: 423, size: 31, color: colors.yellow });
-  page.drawRectangle({
-    x: 350,
-    y: 301,
-    width: 46,
-    height: 91,
-    borderColor: colors.ink,
-    borderWidth: 2,
-  });
-  page.drawLine({
-    start: { x: 346, y: 392 },
-    end: { x: 373, y: 426 },
-    color: colors.ink,
-    thickness: 2,
-  });
-  page.drawLine({
-    start: { x: 400, y: 392 },
-    end: { x: 373, y: 426 },
-    color: colors.ink,
-    thickness: 2,
-  });
-  page.drawRectangle({
-    x: 426,
-    y: 301,
-    width: 72,
-    height: 57,
-    borderColor: colors.ink,
-    borderWidth: 2,
-  });
-  for (let index = 0; index < 4; index += 1) {
-    page.drawCircle({
-      x: 354 + index * 39,
-      y: 284 + (index % 2) * 9,
-      size: 4,
-      color: index % 2 ? colors.coral : colors.green,
-    });
-  }
-  drawDottedLine(page, 360, 500, 280, colors.ink, 3, 8);
+  drawDestinationMotif(page, heroBox, theme, `cover-${booklet.destination}`);
+  drawJourneyDots(
+    page,
+    [
+      { x: MARGIN, y: heroBox.y + 10 },
+      { x: heroBox.x - 20, y: heroBox.y + 20 },
+    ],
+    theme.accent,
+    1.8,
+    "cover-journey",
+  );
 
   const coverExplorerNames = familyPack?.children.length
     ? familyPack.children.map((child, index) => pdfText(familyChildDisplayName(child, index))).join(" / ")
@@ -481,40 +461,29 @@ function drawCover(
     color: colors.muted,
   });
   if (coverExplorerNames) {
-    drawWrappedText(page, coverExplorerNames, fonts, { x: MARGIN, y: 322, size: 11, font: fonts.bold, maxWidth: 236, maxLines: 2, lineHeight: 13, color: colors.ink });
+    drawWrappedText(page, coverExplorerNames, fonts, { x: MARGIN, y: 322, size: 13, font: fonts.display, maxWidth: 236, maxLines: 2, lineHeight: 16, color: colors.ink });
   } else {
-    drawDottedLine(page, MARGIN, 280, 316, colors.line, 5, 4);
+    drawScrapbookCorner(page, { x: MARGIN, y: 280, width: 236, height: 40 }, colors.line, 12);
+    drawHandLine(page, MARGIN + 16, 292, MARGIN + 220, 292, colors.line, 1, "cover-sign-here");
   }
-  page.drawText("TRIP DATES", {
-    x: MARGIN,
-    y: 267,
-    size: 9,
-    font: fonts.bold,
-    color: colors.muted,
-  });
-  drawDottedLine(page, MARGIN, 280, 238, colors.line, 5, 4);
+  page.drawText("TRIP DATES", { x: MARGIN, y: 267, size: 9, font: fonts.bold, color: colors.muted });
+  drawHandLine(page, MARGIN, 240, MARGIN + 236, 240, colors.line, 1, "cover-dates-line");
 
-  page.drawRectangle({
-    x: MARGIN,
-    y: 84,
-    width: PAGE_WIDTH - MARGIN * 2,
-    height: 90,
-    color: colors.coralSoft,
-  });
+  drawHandLine(page, MARGIN, 128, PAGE_WIDTH - MARGIN, 128, theme.accent, 1.4, "cover-tagline-rule");
   page.drawText("PACK A PENCIL. NOTICE EVERYTHING.", {
-    x: MARGIN + 18,
-    y: 140,
-    size: 11,
-    font: fonts.bold,
-    color: colors.coral,
+    x: MARGIN,
+    y: 106,
+    size: 13,
+    font: fonts.display,
+    color: theme.accent,
   });
   drawWrappedText(page, "Games, drawing spaces, local clues, and family missions made for this exact trip.", fonts, {
-    x: MARGIN + 18,
-    y: 116,
+    x: MARGIN,
+    y: 86,
     size: 10,
-    maxWidth: PAGE_WIDTH - MARGIN * 2 - 36,
+    maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 2,
-    color: colors.ink,
+    color: colors.muted,
   });
 }
 
@@ -2356,9 +2325,12 @@ function drawActivityPage(
     && pairEligibleGameTypes.includes(activity.gameType)
     ? day.slots.inThePlaceSecond
     : undefined;
-  const accent = activityIndex === 0 ? colors.coral : colors.blue;
+  const theme = getDestinationTheme(booklet.destination);
+  const accent = activityIndex === 0 ? theme.accent : palette.teal;
   const page = drawPageBase(document, fonts, `Day ${day.day}`, pageNumber, totalPages, accent);
-  drawPill(page, `DAY ${day.day} / ${activityIndex === 0 ? "IN THE PLACE" : "SIT-DOWN PAGE"}`, fonts, MARGIN, 765, activityIndex === 0 ? colors.coralSoft : colors.blueSoft, accent);
+  const kicker = `DAY ${day.day} · ${activityIndex === 0 ? "IN THE PLACE" : "SIT-DOWN PAGE"}`;
+  page.drawText(kicker, { x: MARGIN, y: 768, size: 9, font: fonts.bold, color: accent });
+  drawHandLine(page, MARGIN, 761, MARGIN + fonts.bold.widthOfTextAtSize(kicker, 9), 761, accent, 1.2, `activity-kicker-${dayIndex}-${activityIndex}`);
   drawWrappedText(page, day.theme, fonts, {
     x: MARGIN,
     y: 735,
@@ -2384,36 +2356,30 @@ function drawActivityPage(
 
   const titleSize = fitWrappedTextSize(
     activity.title,
-    fonts.bold,
+    fonts.display,
     PAGE_WIDTH - MARGIN * 2,
-    24,
-    17,
+    30,
+    20,
     2,
   );
   drawWrappedText(page, activity.title, fonts, {
     x: MARGIN,
-    y: 697,
+    y: 700,
     size: titleSize,
-    font: fonts.bold,
+    font: fonts.display,
     color: colors.ink,
-    lineHeight: titleSize * 1.12,
+    lineHeight: titleSize * 1.08,
     maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 2,
   });
-  drawPill(
-    page,
-    activity.gameType === "coloring" ? "SPOT · COLOR · TRACE" : activity.kind,
-    fonts,
-    MARGIN,
-    623,
-    colors.yellowSoft,
-    colors.ink,
-  );
+  const kindLabel = pdfText(activity.gameType === "coloring" ? "SPOT · COLOR · TRACE" : activity.kind).toUpperCase();
+  page.drawCircle({ x: MARGIN + 2.5, y: 631, size: 2.5, color: accent });
+  page.drawText(kindLabel, { x: MARGIN + 12, y: 626, size: 8, font: fonts.bold, color: accent });
   drawWrappedText(page, activity.body, fonts, {
     x: MARGIN,
-    y: 599,
-    size: 9,
-    lineHeight: 12,
+    y: 601,
+    size: 9.5,
+    lineHeight: 13,
     maxWidth: PAGE_WIDTH - MARGIN * 2,
     maxLines: 4,
     color: colors.muted,
@@ -2433,36 +2399,21 @@ function drawActivityPage(
   );
 
   if (activity.gameType !== "coloring") {
-    const noteGap = 10;
+    const noteGap = 18;
     const noteWidth = PAGE_WIDTH - MARGIN * 2;
-    const clueWidth = noteWidth * 0.56;
+    const clueWidth = noteWidth * 0.54;
     const responseX = MARGIN + clueWidth + noteGap;
     const responseWidth = noteWidth - clueWidth - noteGap;
-    page.drawRectangle({
-      x: MARGIN,
-      y: 61,
-      width: clueWidth,
-      height: 64,
-      color: activityIndex === 0 ? colors.coralSoft : colors.greenSoft,
-    });
-    page.drawRectangle({
-      x: responseX,
-      y: 61,
-      width: responseWidth,
-      height: 64,
-      color: colors.yellowSoft,
-    });
-    page.drawText("LOCAL CLUES", {
-      x: MARGIN + 14,
-      y: 109,
-      size: 7,
-      font: fonts.bold,
-      color: accent,
-    });
+    drawHandLine(page, MARGIN, 128, PAGE_WIDTH - MARGIN, 128, colors.softLine, 1, `activity-notes-rule-${dayIndex}-${activityIndex}`);
+
+    // Local clues: a marginal annotation (thin accent rule, no fill) rather
+    // than a solid coloured panel.
+    page.drawLine({ start: { x: MARGIN, y: 61 }, end: { x: MARGIN, y: 112 }, thickness: 2, color: accent });
+    page.drawText("LOCAL CLUES", { x: MARGIN + 12, y: 104, size: 7, font: fonts.bold, color: accent });
     const clues = (activity.items ?? []).slice(0, 2);
     if (clues.length) {
       clues.forEach((item, index) => {
-        const clueY = 94 - index * 15;
+        const clueY = 89 - index * 15;
         page.drawCircle({ x: MARGIN + 15, y: clueY + 2, size: 2.2, color: accent });
         drawWrappedText(page, `${item.label}: ${item.clue}`, fonts, {
           x: MARGIN + 23,
@@ -2476,32 +2427,30 @@ function drawActivityPage(
       });
     } else {
       drawWrappedText(page, activity.body, fonts, {
-        x: MARGIN + 14,
-        y: 91,
+        x: MARGIN + 12,
+        y: 86,
         size: 7.5,
-        maxWidth: clueWidth - 28,
+        maxWidth: clueWidth - 24,
         maxLines: 2,
         lineHeight: 9,
         color: colors.ink,
       });
     }
-    page.drawText("MY FIELD NOTE", {
-      x: responseX + 12,
-      y: 109,
-      size: 7,
-      font: fonts.bold,
-      color: accent,
-    });
+
+    // Field note: an open writing space with light corner marks instead of
+    // a filled box — somewhere to write, not a form field.
+    drawScrapbookCorner(page, { x: responseX, y: 61, width: responseWidth, height: 51 }, colors.line, 10);
+    page.drawText("MY FIELD NOTE", { x: responseX + 12, y: 104, size: 7, font: fonts.bold, color: accent });
     drawWrappedText(page, activity.prompt, fonts, {
       x: responseX + 12,
-      y: 96,
+      y: 91,
       size: 7.5,
       maxWidth: responseWidth - 24,
       maxLines: 1,
       color: colors.ink,
     });
-    drawDottedLine(page, responseX + 12, responseX + responseWidth - 12, 78, colors.line, 2, 3);
-    drawDottedLine(page, responseX + 12, responseX + responseWidth - 12, 69, colors.line, 2, 3);
+    drawHandLine(page, responseX + 12, 76, responseX + responseWidth - 12, 76, colors.line, 1, `activity-note-line1-${dayIndex}-${activityIndex}`);
+    drawHandLine(page, responseX + 12, 67, responseX + responseWidth - 12, 67, colors.line, 1, `activity-note-line2-${dayIndex}-${activityIndex}`);
   }
 }
 
@@ -2877,38 +2826,81 @@ function drawCertificate(
   pageNumber: number,
   totalPages: number,
 ) {
-  const page = drawPageBase(document, fonts, "Certificate", pageNumber, totalPages, colors.coral);
-  page.drawRectangle({ x: 38, y: 62, width: PAGE_WIDTH - 76, height: PAGE_HEIGHT - 116, borderColor: colors.coral, borderWidth: 2 });
-  page.drawRectangle({ x: 47, y: 71, width: PAGE_WIDTH - 94, height: PAGE_HEIGHT - 134, borderColor: colors.yellow, borderWidth: 1 });
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, "Certificate", pageNumber, totalPages, theme.accent);
+  const fullBox = { x: 0, y: 0, width: PAGE_WIDTH, height: 0 };
+
+  // A single thin frame rather than two nested rectangles, with a small
+  // destination-specific tile fragment tucked into each corner — a
+  // collectible border detail instead of a plain double ruled box.
+  page.drawRectangle({ x: 40, y: 64, width: PAGE_WIDTH - 80, height: PAGE_HEIGHT - 118, borderColor: theme.accent, borderWidth: 1.6 });
+  const cornerSize = 22;
+  [
+    { x: 44, y: PAGE_HEIGHT - 90 },
+    { x: PAGE_WIDTH - 44 - cornerSize, y: PAGE_HEIGHT - 90 },
+    { x: 44, y: 68 },
+    { x: PAGE_WIDTH - 44 - cornerSize, y: 68 },
+  ].forEach((corner, index) => drawMosaicFragment(page, { ...corner, width: cornerSize, height: cornerSize }, `cert-corner-${index}`));
+
   page.drawText("OFFICIAL TRIPQUEST CERTIFICATE", {
-    x: centeredX("OFFICIAL TRIPQUEST CERTIFICATE", fonts.bold, 10, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }),
-    y: 724,
+    x: centeredX("OFFICIAL TRIPQUEST CERTIFICATE", fonts.bold, 10, fullBox),
+    y: 720,
     size: 10,
     font: fonts.bold,
-    color: colors.coral,
+    color: theme.accent,
   });
-  page.drawCircle({ x: PAGE_WIDTH / 2, y: 630, size: 52, color: colors.yellowSoft, borderColor: colors.yellow, borderWidth: 2 });
-  page.drawCircle({ x: PAGE_WIDTH / 2, y: 630, size: 34, color: colors.coral });
+
+  // The one consistent explorer seal, dressed up with a ring of small
+  // mosaic-coloured marks so it reads as a wax/travel seal rather than a
+  // plain badge — the same mark used at every completion moment.
+  const sealCx = PAGE_WIDTH / 2;
+  const sealCy = 622;
+  drawStampCircle(page, fonts, sealCx, sealCy, 46, theme.accent, theme.accentSoft, "");
+  page.drawCircle({ x: sealCx, y: sealCy, size: 30, color: theme.accent });
   page.drawText("TQ", {
-    x: PAGE_WIDTH / 2 - fonts.bold.widthOfTextAtSize("TQ", 22) / 2,
-    y: 622,
-    size: 22,
-    font: fonts.bold,
+    x: sealCx - fonts.display.widthOfTextAtSize("TQ", 24) / 2,
+    y: sealCy - 9,
+    size: 24,
+    font: fonts.display,
     color: colors.white,
   });
-  page.drawText("CERTIFIES THAT", { x: centeredX("CERTIFIES THAT", fonts.bold, 9, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 538, size: 9, font: fonts.bold, color: colors.muted });
-  drawDottedLine(page, 112, PAGE_WIDTH - 112, 487, colors.line, 5, 4);
-  page.drawText("EXPLORER NAME", { x: centeredX("EXPLORER NAME", fonts.regular, 8, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 467, size: 8, font: fonts.regular, color: colors.muted });
-  page.drawText("IS NOW A", { x: centeredX("IS NOW A", fonts.bold, 9, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 418, size: 9, font: fonts.bold, color: colors.muted });
+  const sealDotColors = [theme.accent, palette.teal, palette.yellow, palette.green];
+  [0, 45, 90, 135, 180, 225, 270, 315].forEach((angle, index) => {
+    const radians = (angle * Math.PI) / 180;
+    page.drawCircle({
+      x: sealCx + Math.cos(radians) * 56,
+      y: sealCy + Math.sin(radians) * 56,
+      size: 2.2,
+      color: sealDotColors[index % sealDotColors.length],
+    });
+  });
+  page.drawText("TRIPQUEST EXPLORER SEAL", { x: centeredX("TRIPQUEST EXPLORER SEAL", fonts.bold, 7, fullBox), y: sealCy - 78, size: 7, font: fonts.bold, color: colors.muted });
+
+  page.drawText("CERTIFIES THAT", { x: centeredX("CERTIFIES THAT", fonts.bold, 9, fullBox), y: 512, size: 9, font: fonts.bold, color: colors.muted });
+  drawHandLine(page, 112, 470, PAGE_WIDTH - 112, 470, colors.line, 1.2, "cert-name-line");
+  page.drawText("EXPLORER NAME", { x: centeredX("EXPLORER NAME", fonts.regular, 8, fullBox), y: 452, size: 8, font: fonts.regular, color: colors.muted });
+  page.drawText("IS NOW A", { x: centeredX("IS NOW A", fonts.bold, 9, fullBox), y: 406, size: 9, font: fonts.bold, color: colors.muted });
+
   const title = `${pdfText(booklet.destination)} Explorer`;
-  const titleSize = fitTextSize(title, fonts.bold, PAGE_WIDTH - 130, 30, 20);
-  page.drawText(title, { x: centeredX(title, fonts.bold, titleSize, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 371, size: titleSize, font: fonts.bold, color: colors.ink });
-  drawWrappedText(page, "Awarded for curious noticing, kind traveling, brave questions, and excellent pencil work.", fonts, { x: 105, y: 320, size: 11, font: fonts.regular, maxWidth: PAGE_WIDTH - 210, maxLines: 3, lineHeight: 15, color: colors.muted });
-  drawDottedLine(page, 82, 250, 192, colors.line, 5, 4);
-  drawDottedLine(page, PAGE_WIDTH - 250, PAGE_WIDTH - 82, 192, colors.line, 5, 4);
-  page.drawText("GROWN-UP SIGNATURE", { x: 102, y: 173, size: 7, font: fonts.bold, color: colors.muted });
-  page.drawText("DATE", { x: PAGE_WIDTH - 190, y: 173, size: 7, font: fonts.bold, color: colors.muted });
-  page.drawText(`AGE ${booklet.age} EDITION  /  ${booklet.days} ${booklet.days === 1 ? "DAY" : "DAYS"}`, { x: centeredX(`AGE ${booklet.age} EDITION  /  ${booklet.days} ${booklet.days === 1 ? "DAY" : "DAYS"}`, fonts.bold, 8, { x: 0, y: 0, width: PAGE_WIDTH, height: 0 }), y: 111, size: 8, font: fonts.bold, color: colors.green });
+  const titleSize = fitTextSize(title, fonts.display, PAGE_WIDTH - 160, 40, 24);
+  const titleY = 348;
+  page.drawText(title, { x: centeredX(title, fonts.display, titleSize, fullBox), y: titleY, size: titleSize, font: fonts.display, color: theme.accent });
+  const titleWidth = fonts.display.widthOfTextAtSize(title, titleSize);
+  drawHandLine(page, PAGE_WIDTH / 2 - titleWidth / 2, titleY - 10, PAGE_WIDTH / 2 + titleWidth / 2, titleY - 10, theme.accent, 1.6, "cert-title-underline");
+
+  drawWrappedText(page, "Awarded for curious noticing, kind traveling, brave questions, and excellent pencil work.", fonts, { x: 105, y: 300, size: 11, font: fonts.regular, maxWidth: PAGE_WIDTH - 210, maxLines: 3, lineHeight: 15, color: colors.muted });
+
+  // A subtle, smaller repeat of the destination mascot rather than leaving
+  // this stretch of the certificate empty.
+  drawDestinationMotif(page, { x: PAGE_WIDTH / 2 - 75, y: 188, width: 150, height: 62 }, theme, `cert-motif-${booklet.destination}`);
+
+  drawHandLine(page, 82, 172, 250, 172, colors.line, 1, "cert-sign-line");
+  drawHandLine(page, PAGE_WIDTH - 250, 172, PAGE_WIDTH - 82, 172, colors.line, 1, "cert-date-line");
+  page.drawText("GROWN-UP SIGNATURE", { x: 102, y: 158, size: 7, font: fonts.bold, color: colors.muted });
+  page.drawText("DATE", { x: PAGE_WIDTH - 190, y: 158, size: 7, font: fonts.bold, color: colors.muted });
+
+  const editionLine = `AGE ${booklet.age} EDITION  /  ${booklet.days} ${booklet.days === 1 ? "DAY" : "DAYS"}`;
+  page.drawText(editionLine, { x: centeredX(editionLine, fonts.bold, 8, fullBox), y: 100, size: 8, font: fonts.bold, color: theme.accent });
 }
 
 function drawFamilyRelayPage(

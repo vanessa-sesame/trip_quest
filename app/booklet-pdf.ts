@@ -2,6 +2,7 @@ import {
   PDFDocument,
   StandardFonts,
   concatTransformationMatrix,
+  degrees,
   popGraphicsState,
   pushGraphicsState,
   rgb,
@@ -330,23 +331,6 @@ function drawPageBase(
   return page;
 }
 
-function drawPill(
-  page: PDFPage,
-  text: string,
-  fonts: Fonts,
-  x: number,
-  y: number,
-  fill: RGB,
-  ink = colors.ink,
-) {
-  const safe = pdfText(text).toUpperCase();
-  const width = Math.min(260, fonts.bold.widthOfTextAtSize(safe, 8) + 22);
-  const textSize = fitTextSize(safe, fonts.bold, width - 22, 8, 6);
-  page.drawRectangle({ x, y, width, height: 22, color: fill });
-  page.drawText(safe, { x: x + 11, y: y + (22 - textSize) / 2 - 1, size: textSize, font: fonts.bold, color: ink });
-  return width;
-}
-
 function drawCover(
   document: PDFDocument,
   fonts: Fonts,
@@ -494,24 +478,30 @@ function drawGuide(
   totalPages: number,
   familyPack?: FamilyPackContext,
 ) {
-  const page = drawPageBase(document, fonts, "Quick note for grown-ups", 2, totalPages, colors.green);
+  // Parent-only pages use the same system, quieter: a smaller, less
+  // colourful kicker, plain rules instead of filled cards, and outline
+  // rather than solid day markers.
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, "Quick note for grown-ups", 2, totalPages, palette.green);
   page.drawText("A QUICK NOTE FOR GROWN-UPS", {
     x: MARGIN,
     y: 775,
-    size: 10,
+    size: 9,
     font: fonts.bold,
-    color: colors.green,
+    color: palette.green,
   });
-  page.drawText(`A thoughtful pace for age ${booklet.age}`, {
+  drawWrappedText(page, `A thoughtful pace for age ${booklet.age}`, fonts, {
     x: MARGIN,
-    y: 735,
-    size: 27,
-    font: fonts.bold,
+    y: 738,
+    size: 24,
+    font: fonts.display,
     color: colors.ink,
+    maxWidth: PAGE_WIDTH - MARGIN * 2,
+    maxLines: 1,
   });
   drawWrappedText(page, booklet.profile.intro, fonts, {
     x: MARGIN,
-    y: 696,
+    y: 700,
     size: 11,
     lineHeight: 15,
     maxWidth: PAGE_WIDTH - MARGIN * 2,
@@ -521,62 +511,49 @@ function drawGuide(
 
   const cardWidth = (PAGE_WIDTH - MARGIN * 2 - 14) / 2;
   const cards = [
-    {
-      title: "LOCAL WORD",
-      body: booklet.profile.word,
-      fill: colors.yellowSoft,
-      accent: colors.coral,
-    },
-    {
-      title: "LOCAL CARE CLUE",
-      body: booklet.profile.etiquette,
-      fill: colors.greenSoft,
-      accent: colors.green,
-    },
+    { title: "LOCAL WORD", body: booklet.profile.word, accent: theme.accent },
+    { title: "LOCAL CARE CLUE", body: booklet.profile.etiquette, accent: palette.green },
   ];
   cards.forEach((card, index) => {
     const x = MARGIN + index * (cardWidth + 14);
-    page.drawRectangle({ x, y: 535, width: cardWidth, height: 118, color: card.fill });
-    page.drawText(card.title, {
-      x: x + 15,
-      y: 625,
-      size: 8,
-      font: fonts.bold,
-      color: card.accent,
-    });
+    page.drawLine({ start: { x, y: 546 }, end: { x, y: 638 }, thickness: 2, color: card.accent });
+    page.drawText(card.title, { x: x + 14, y: 622, size: 8, font: fonts.bold, color: card.accent });
     drawWrappedText(page, card.body, fonts, {
-      x: x + 15,
-      y: 602,
+      x: x + 14,
+      y: 600,
       size: 10,
       lineHeight: 13,
-      maxWidth: cardWidth - 30,
+      maxWidth: cardWidth - 24,
       maxLines: 5,
+      color: colors.ink,
     });
   });
 
   page.drawText("YOUR ADVENTURE AT A GLANCE", {
     x: MARGIN,
-    y: 497,
+    y: 505,
     size: 9,
     font: fonts.bold,
-    color: colors.blue,
+    color: colors.muted,
   });
+  drawHandLine(page, MARGIN, 498, MARGIN + 150, 498, colors.line, 1, "guide-glance-rule");
   const rowsPerColumn = Math.ceil(booklet.dayPlans.length / 2);
-  const overviewTop = 463;
+  const overviewTop = 468;
   const rowHeight = Math.min(43, 300 / Math.max(1, rowsPerColumn));
   booklet.dayPlans.forEach((day, index) => {
     const column = Math.floor(index / rowsPerColumn);
     const row = index % rowsPerColumn;
     const x = MARGIN + column * (cardWidth + 14);
     const y = overviewTop - row * rowHeight;
-    page.drawCircle({ x: x + 13, y: y + 3, size: 11, color: index % 2 ? colors.blue : colors.coral });
+    const markerColor = index % 2 ? palette.teal : theme.accent;
+    page.drawCircle({ x: x + 13, y: y + 3, size: 11, borderColor: markerColor, borderWidth: 1.6 });
     const number = String(day.day);
     page.drawText(number, {
       x: x + 13 - fonts.bold.widthOfTextAtSize(number, 8) / 2,
       y,
       size: 8,
       font: fonts.bold,
-      color: colors.white,
+      color: markerColor,
     });
     drawWrappedText(page, day.theme, fonts, {
       x: x + 32,
@@ -586,6 +563,7 @@ function drawGuide(
       lineHeight: 11,
       maxWidth: cardWidth - 35,
       maxLines: 2,
+      color: colors.ink,
     });
   });
 
@@ -594,17 +572,8 @@ function drawGuide(
   // stays below that with the same ~15pt cushion the original single-line
   // box used, just taller to fit what-to-bring / how-it-works / why-it's-worth-it.
   const packTop = 148;
-  const packBottom = 52;
-  page.drawRectangle({
-    x: MARGIN,
-    y: packBottom,
-    width: PAGE_WIDTH - MARGIN * 2,
-    height: packTop - packBottom,
-    borderColor: colors.softLine,
-    borderWidth: 1,
-    color: colors.white,
-  });
-  page.drawText(familyPack?.children.length ? "FAMILY EXPLORERS" : "PACK", { x: MARGIN + 15, y: packTop - 22, size: 8, font: fonts.bold, color: colors.coral });
+  drawHandLine(page, MARGIN, packTop, PAGE_WIDTH - MARGIN, packTop, colors.softLine, 1, "guide-pack-rule");
+  page.drawText(familyPack?.children.length ? "FAMILY EXPLORERS" : "PACK", { x: MARGIN, y: packTop - 22, size: 8, font: fonts.bold, color: theme.accent });
   drawWrappedText(
     page,
     familyPack?.children.length
@@ -612,10 +581,10 @@ function drawGuide(
       : `What to bring: pencils or colored pencils, this booklet, and about ${getAgeBand(booklet.age).minutes} unhurried minutes at each stop.`,
     fonts,
     {
-      x: MARGIN + 15,
+      x: MARGIN,
       y: packTop - 35,
       size: 8.5,
-      maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
+      maxWidth: PAGE_WIDTH - MARGIN * 2,
       maxLines: 1,
       color: colors.muted,
     },
@@ -625,11 +594,11 @@ function drawGuide(
     "How it works: a quick game while you wait in line, two hands-on games once you arrive, then a calm page to unwind after — no reading required until your child is ready.",
     fonts,
     {
-      x: MARGIN + 15,
+      x: MARGIN,
       y: packTop - 51,
       size: 8,
       lineHeight: 11,
-      maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
+      maxWidth: PAGE_WIDTH - MARGIN * 2,
       maxLines: 2,
       color: colors.ink,
     },
@@ -639,46 +608,31 @@ function drawGuide(
     "Real places become real adventures — that's the whole idea.",
     fonts,
     {
-      x: MARGIN + 15,
+      x: MARGIN,
       y: packTop - 78,
       size: 8.5,
       font: fonts.bold,
-      maxWidth: PAGE_WIDTH - MARGIN * 2 - 30,
+      maxWidth: PAGE_WIDTH - MARGIN * 2,
       maxLines: 1,
       color: colors.green,
     },
   );
 }
 
+// A section label, not a box: the game board underneath supplies its own
+// structure (grid lines, cells, a maze wall), so wrapping the whole thing
+// in a filled banner + bordered panel was a box with nothing functional to
+// contain — see app/pdf-illustrations.ts for the shared vocabulary this
+// (and drawEditorialBoardChrome, drawCompactGameFrame) draw from.
 function drawGameFrame(page: PDFPage, fonts: Fonts, label: string, box: Box) {
-  page.drawRectangle({
+  const labelText = pdfText(label).toUpperCase();
+  page.drawText(labelText, { x: box.x, y: box.y + box.height - 13, size: 8.5, font: fonts.bold, color: colors.muted });
+  drawHandLine(page, box.x, box.y + box.height - 20, box.x + fonts.bold.widthOfTextAtSize(labelText, 8.5), box.y + box.height - 20, colors.line, 1, `frame-${label}`);
+  return {
     x: box.x,
     y: box.y,
     width: box.width,
-    height: box.height,
-    color: colors.white,
-    borderColor: colors.softLine,
-    borderWidth: 1,
-  });
-  page.drawRectangle({
-    x: box.x,
-    y: box.y + box.height - 34,
-    width: box.width,
-    height: 34,
-    color: colors.blueSoft,
-  });
-  page.drawText(pdfText(label).toUpperCase(), {
-    x: box.x + 15,
-    y: box.y + box.height - 22,
-    size: 8,
-    font: fonts.bold,
-    color: colors.blue,
-  });
-  return {
-    x: box.x + 17,
-    y: box.y + 17,
-    width: box.width - 34,
-    height: box.height - 67,
+    height: box.height - 30,
   };
 }
 
@@ -1346,34 +1300,22 @@ function drawColoringActivityBoard(
   const top = box.y + box.height;
 
   const howY = top - howHeight;
-  page.drawRectangle({ x: box.x, y: howY, width: box.width, height: howHeight, color: colors.blueSoft });
-  page.drawText("SPOT / COLOR / TRACE", {
-    x: box.x + 10,
-    y: howY + 13,
-    size: 7,
-    font: fonts.bold,
-    color: colors.coral,
-  });
-  page.drawText("HOW TO PLAY", {
-    x: box.x + box.width - 158,
-    y: howY + 14,
-    size: 6,
-    font: fonts.bold,
-    color: colors.blue,
-  });
+  page.drawText("SPOT · COLOR · TRACE", { x: box.x, y: howY + 12, size: 7, font: fonts.bold, color: colors.muted });
+  page.drawText("HOW TO PLAY", { x: box.x + box.width - 158, y: howY + 14, size: 6, font: fonts.bold, color: colors.muted });
   drawWrappedText(page, spec.howToPlay, fonts, {
     x: box.x + box.width - 158,
     y: howY + 5,
     size: 6,
-    maxWidth: 148,
+    maxWidth: 158,
     maxLines: 1,
     color: colors.ink,
   });
+  drawHandLine(page, box.x, howY - 2, box.x + box.width, howY - 2, colors.softLine, 1, `coloring-how-rule-${activity.title}`);
 
   const sceneY = howY - gap - sceneHeight;
   const sceneWidth = box.width * 0.52;
   const sceneBox = { x: box.x, y: sceneY, width: sceneWidth, height: sceneHeight };
-  page.drawRectangle({ ...sceneBox, color: colors.paper, borderColor: colors.line, borderWidth: 1 });
+  drawScrapbookCorner(page, sceneBox, colors.line, 14);
   page.drawText(`COLOR THE ${pdfText(spec.illustration.label).toUpperCase()}`, {
     x: sceneBox.x + 9,
     y: sceneBox.y + sceneBox.height - 15,
@@ -1403,24 +1345,21 @@ function drawColoringActivityBoard(
 
   const gridX = box.x + sceneWidth + gap;
   const gridWidth = box.width - sceneWidth - gap;
-  page.drawText("CAN YOU SPOT...", {
-    x: gridX,
-    y: sceneY + sceneHeight - 11,
-    size: 8,
-    font: fonts.bold,
-    color: colors.ink,
-  });
+  page.drawText("CAN YOU SPOT...", { x: gridX, y: sceneY + sceneHeight - 11, size: 8, font: fonts.bold, color: colors.ink });
   page.drawText("B · I · N · G · O", {
     x: gridX + gridWidth - fonts.bold.widthOfTextAtSize("B · I · N · G · O", 5.5),
     y: sceneY + sceneHeight - 10,
     size: 5.5,
     font: fonts.bold,
-    color: colors.blue,
+    color: colors.muted,
   });
   const gridTop = sceneY + sceneHeight - 18;
   const cellGap = 4;
   const cellWidth = (gridWidth - cellGap * 2) / 3;
   const cellHeight = (sceneHeight - 18 - cellGap * 2) / 3;
+  // Thin outlines and a small coloured dot per cell kind rather than a
+  // fully filled pastel spreadsheet cell — still an unmistakable 3x3 grid,
+  // much less ink.
   spec.cells.forEach((cell, index) => {
     const column = index % 3;
     const row = Math.floor(index / 3);
@@ -1428,31 +1367,24 @@ function drawColoringActivityBoard(
     const cellY = gridTop - (row + 1) * cellHeight - row * cellGap;
     const isFree = cell.kind === "free";
     const isChallenge = cell.kind === "challenge";
-    page.drawRectangle({
-      x: cellX,
-      y: cellY,
-      width: cellWidth,
-      height: cellHeight,
-      color: isFree ? colors.coral : isChallenge ? colors.yellowSoft : colors.white,
-      borderColor: isFree ? colors.coral : colors.line,
-      borderWidth: 0.8,
-    });
-    const cellColor = isFree ? colors.white : isChallenge ? colors.coral : colors.blue;
+    const cellColor = isFree ? colors.coral : isChallenge ? palette.yellow : palette.teal;
+    page.drawRectangle({ x: cellX, y: cellY, width: cellWidth, height: cellHeight, borderColor: colors.softLine, borderWidth: 0.8 });
+    page.drawCircle({ x: cellX + 7, y: cellY + cellHeight - 8, size: 3, color: cellColor });
     page.drawText(isFree ? "FREE" : isChallenge ? "TRY" : "SPOT", {
-      x: cellX + 5,
-      y: cellY + cellHeight - 9,
+      x: cellX + 14,
+      y: cellY + cellHeight - 11,
       size: 4.5,
       font: fonts.bold,
       color: cellColor,
     });
     drawWrappedText(page, pdfText(cell.label), fonts, {
       x: cellX + 5,
-      y: cellY + cellHeight - 19,
+      y: cellY + cellHeight - 21,
       size: 6.3,
       font: fonts.bold,
       maxWidth: cellWidth - 10,
       maxLines: 1,
-      color: isFree ? colors.white : colors.ink,
+      color: colors.ink,
     });
     drawWrappedText(page, pdfText(cell.clue), fonts, {
       x: cellX + 5,
@@ -1461,19 +1393,12 @@ function drawColoringActivityBoard(
       maxWidth: cellWidth - 10,
       maxLines: 2,
       lineHeight: 5.5,
-      color: isFree ? colors.white : colors.muted,
+      color: colors.muted,
     });
   });
 
   const traceY = sceneY - gap - traceHeight;
-  page.drawRectangle({ x: box.x, y: traceY, width: box.width, height: traceHeight, color: colors.blueSoft });
-  page.drawText("TRACE THE NAME", {
-    x: box.x + 10,
-    y: traceY + 17,
-    size: 6,
-    font: fonts.bold,
-    color: colors.blue,
-  });
+  page.drawText("TRACE THE NAME", { x: box.x, y: traceY + 17, size: 6, font: fonts.bold, color: colors.muted });
   const traceWord = pdfText(spec.traceWord);
   const traceSize = fitTextSize(traceWord, fonts.bold, box.width - 180, 18, 11);
   page.drawText(traceWord, {
@@ -1497,12 +1422,11 @@ function drawColoringActivityBoard(
   const notesY = traceY - gap - notesHeight;
   const noteGap = 8;
   const noteWidth = (box.width - noteGap) / 2;
-  page.drawRectangle({ x: box.x, y: notesY, width: noteWidth, height: notesHeight, color: colors.yellowSoft });
-  page.drawRectangle({ x: box.x + noteWidth + noteGap, y: notesY, width: noteWidth, height: notesHeight, color: colors.coralSoft });
-  page.drawText("LOCAL CLUES", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.blue });
+  page.drawLine({ start: { x: box.x, y: notesY + 4 }, end: { x: box.x, y: notesY + notesHeight - 2 }, thickness: 1.6, color: palette.teal });
+  page.drawText("LOCAL CLUES", { x: box.x + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: palette.teal });
   spec.facts.slice(0, 3).forEach((fact, index) => {
     const factY = notesY + notesHeight - 28 - index * 13;
-    page.drawCircle({ x: box.x + 12, y: factY + 2, size: 2, color: colors.coral });
+    page.drawCircle({ x: box.x + 12, y: factY + 2, size: 2, color: palette.teal });
     drawWrappedText(page, pdfText(fact), fonts, {
       x: box.x + 18,
       y: factY + 4,
@@ -1513,6 +1437,7 @@ function drawColoringActivityBoard(
     });
   });
   const fieldX = box.x + noteWidth + noteGap;
+  page.drawLine({ start: { x: fieldX, y: notesY + 4 }, end: { x: fieldX, y: notesY + notesHeight - 2 }, thickness: 1.6, color: colors.coral });
   page.drawText("MY FIELD NOTE", { x: fieldX + 10, y: notesY + notesHeight - 15, size: 6, font: fonts.bold, color: colors.coral });
   drawWrappedText(page, pdfText(spec.fieldNote), fonts, {
     x: fieldX + 10,
@@ -1728,29 +1653,27 @@ function drawBingo(page: PDFPage, fonts: Fonts, items: GameItem[], box: Box) {
   const gap = 10;
   const width = (box.width - gap) / 2;
   const height = (box.height - gap) / 2;
+  const accents = [palette.coral, palette.teal, palette.yellow, palette.green];
   items.forEach((item, index) => {
     const column = index % 2;
     const row = Math.floor(index / 2);
     const x = box.x + column * (width + gap);
     const y = box.y + box.height - (row + 1) * height - row * gap;
-    page.drawRectangle({
-      x,
-      y,
-      width,
-      height,
-      color: index % 2 ? colors.greenSoft : colors.yellowSoft,
-      borderColor: colors.line,
-      borderWidth: 1,
-    });
-    page.drawCircle({ x: x + width - 20, y: y + height - 20, size: 9, borderColor: colors.coral, borderWidth: 1.4 });
+    const accent = accents[index % accents.length];
+    // A hand-drawn frame with a small mosaic-tile chip in the corner
+    // instead of a fully filled pastel cell.
+    drawScrapbookCorner(page, { x, y, width, height }, colors.line, 16);
+    drawMosaicFragment(page, { x: x + width - 34, y: y + height - 24, width: 30, height: 24 }, `bingo-${index}-${item.label}`);
+    page.drawCircle({ x: x + width - 20, y: y + height - 38, size: 9, borderColor: accent, borderWidth: 1.4 });
     drawWrappedText(page, item.label, fonts, {
       x: x + 14,
       y: y + height - 30,
       size: 12,
-      font: fonts.bold,
+      font: fonts.display,
       maxWidth: width - 50,
       maxLines: 2,
       lineHeight: 14,
+      color: accent,
     });
     drawWrappedText(page, item.clue, fonts, {
       x: x + 14,
@@ -1979,26 +1902,13 @@ function drawEditorialBoardChrome(
   box: Box,
   boardLabel: string,
 ) {
-  const stripHeight = 39;
+  const stripHeight = 34;
   const gap = 8;
   const stripY = box.y + box.height - stripHeight;
-  page.drawRectangle({
-    x: box.x,
-    y: stripY,
-    width: box.width,
-    height: stripHeight,
-    color: colors.blueSoft,
-  });
-  page.drawText("HOW TO PLAY", {
-    x: box.x + 12,
-    y: stripY + 25,
-    size: 7,
-    font: fonts.bold,
-    color: colors.blue,
-  });
+  page.drawText("HOW TO PLAY", { x: box.x, y: stripY + 21, size: 7, font: fonts.bold, color: colors.muted });
   drawWrappedText(page, gameInstruction(activity), fonts, {
-    x: box.x + 12,
-    y: stripY + 14,
+    x: box.x,
+    y: stripY + 9,
     size: 7.5,
     lineHeight: 9,
     maxWidth: box.width - 150,
@@ -2007,58 +1917,33 @@ function drawEditorialBoardChrome(
   });
   const tag = pdfText(`${boardLabel} board`).toUpperCase();
   const tagWidth = fonts.bold.widthOfTextAtSize(tag, 6.5);
-  page.drawText(tag, {
-    x: box.x + box.width - tagWidth - 12,
-    y: stripY + 25,
-    size: 6.5,
-    font: fonts.bold,
-    color: colors.coral,
-  });
+  page.drawText(tag, { x: box.x + box.width - tagWidth, y: stripY + 21, size: 6.5, font: fonts.bold, color: colors.coral });
   const itemCount = activity.items?.length ?? 0;
   page.drawText(itemCount ? `${itemCount} LOCAL CLUES` : "LOOK CLOSELY", {
     x: box.x + box.width - 98,
-    y: stripY + 13,
+    y: stripY + 9,
     size: 5.5,
     font: fonts.bold,
     color: colors.muted,
   });
+  drawHandLine(page, box.x, stripY - 4, box.x + box.width, stripY - 4, colors.softLine, 1, `board-rule-${activity.title}`);
 
   const boardHeight = box.height - stripHeight - gap;
   const board = { x: box.x, y: box.y, width: box.width, height: boardHeight };
-  page.drawRectangle({
-    ...board,
-    color: colors.white,
-    borderColor: colors.line,
-    borderWidth: 1,
-  });
-  page.drawRectangle({
-    x: board.x,
-    y: board.y + board.height - 22,
-    width: board.width,
-    height: 22,
-    color: colors.paper,
-  });
-  page.drawText("GAME BOARD", {
-    x: board.x + 12,
-    y: board.y + board.height - 14,
-    size: 6.5,
-    font: fonts.bold,
-    color: colors.muted,
-  });
   const boardTitle = pdfText(activity.title).toUpperCase();
   const boardTitleSize = fitTextSize(boardTitle, fonts.bold, board.width - 150, 6.5, 5);
   page.drawText(boardTitle, {
-    x: board.x + board.width - fonts.bold.widthOfTextAtSize(boardTitle, boardTitleSize) - 12,
-    y: board.y + board.height - 14,
+    x: board.x + board.width - fonts.bold.widthOfTextAtSize(boardTitle, boardTitleSize),
+    y: board.y + board.height - 10,
     size: boardTitleSize,
     font: fonts.bold,
-    color: colors.blue,
+    color: colors.muted,
   });
   return {
-    x: board.x + 12,
-    y: board.y + 10,
-    width: board.width - 24,
-    height: board.height - 38,
+    x: board.x,
+    y: board.y,
+    width: board.width,
+    height: board.height - 22,
   };
 }
 
@@ -2097,35 +1982,14 @@ const defaultQueueTargetKindCopy = { prefix: "Your secret target:", accent: colo
 // disproportionate share of a much smaller budget, so this keeps only a
 // single label strip and hands almost the whole box to the actual board.
 function drawCompactGameFrame(page: PDFPage, fonts: Fonts, label: string, box: Box) {
-  page.drawRectangle({
+  const labelText = pdfText(label).toUpperCase();
+  page.drawText(labelText, { x: box.x, y: box.y + box.height - 9, size: 6.5, font: fonts.bold, color: colors.muted });
+  drawHandLine(page, box.x, box.y + box.height - 14, box.x + fonts.bold.widthOfTextAtSize(labelText, 6.5), box.y + box.height - 14, colors.line, 1, `compact-frame-${label}`);
+  return {
     x: box.x,
     y: box.y,
     width: box.width,
-    height: box.height,
-    color: colors.white,
-    borderColor: colors.softLine,
-    borderWidth: 1,
-  });
-  const stripHeight = 20;
-  page.drawRectangle({
-    x: box.x,
-    y: box.y + box.height - stripHeight,
-    width: box.width,
-    height: stripHeight,
-    color: colors.blueSoft,
-  });
-  page.drawText(pdfText(label).toUpperCase(), {
-    x: box.x + 8,
-    y: box.y + box.height - 14,
-    size: 6.5,
-    font: fonts.bold,
-    color: colors.blue,
-  });
-  return {
-    x: box.x + 8,
-    y: box.y + 8,
-    width: box.width - 16,
-    height: box.height - stripHeight - 16,
+    height: box.height - 22,
   };
 }
 
@@ -2466,14 +2330,19 @@ function drawQueuePage(
   const day = booklet.dayPlans[dayIndex];
   const queue = day.slots.whileYouWait;
   const reveal = day.slots.questReveal;
-  const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, colors.yellow);
-  drawPill(page, `DAY ${day.day} / BEFORE YOU GO`, fonts, MARGIN, 765, colors.yellowSoft, colors.ink);
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, `Day ${day.day} queue`, pageNumber, totalPages, palette.yellow);
+  const kicker = `DAY ${day.day} · BEFORE YOU GO`;
+  page.drawText(kicker, { x: MARGIN, y: 768, size: 9, font: fonts.bold, color: palette.yellow });
+  drawHandLine(page, MARGIN, 761, MARGIN + fonts.bold.widthOfTextAtSize(kicker, 9), 761, palette.yellow, 1.2, `queue-kicker-${dayIndex}`);
 
-  page.drawRectangle({ x: MARGIN, y: 706, width: PAGE_WIDTH - MARGIN * 2, height: 28, color: colors.blueSoft });
-  page.drawText("GROWN-UP", { x: MARGIN + 12, y: 723, size: 6.5, font: fonts.bold, color: colors.blue });
+  // A quiet parent-only note: a left rule, not a filled banner (see
+  // drawGuide's LOCAL WORD/CARE CLUE cards for the same pattern).
+  page.drawLine({ start: { x: MARGIN, y: 704 }, end: { x: MARGIN, y: 726 }, thickness: 2, color: palette.teal });
+  page.drawText("GROWN-UP", { x: MARGIN + 12, y: 719, size: 6.5, font: fonts.bold, color: palette.teal });
   drawWrappedText(page, day.slots.beforeYouGo, fonts, {
     x: MARGIN + 78,
-    y: 720,
+    y: 716,
     size: 8,
     maxWidth: PAGE_WIDTH - MARGIN * 2 - 90,
     maxLines: 1,
@@ -2485,8 +2354,8 @@ function drawQueuePage(
   // the booklet, never on a page the child actually plays.
   const cueText = day.interestHook || day.siblingMission;
   if (cueText) {
-    page.drawRectangle({ x: MARGIN, y: 646, width: PAGE_WIDTH - MARGIN * 2, height: 52, color: colors.greenSoft, borderColor: colors.softLine, borderWidth: 0.8 });
-    page.drawText("FAMILY LENS", { x: MARGIN + 12, y: 684, size: 6.5, font: fonts.bold, color: colors.green });
+    page.drawLine({ start: { x: MARGIN, y: 644 }, end: { x: MARGIN, y: 692 }, thickness: 2, color: palette.green });
+    page.drawText("FAMILY LENS", { x: MARGIN + 12, y: 684, size: 6.5, font: fonts.bold, color: palette.green });
     drawWrappedText(page, cueText, fonts, {
       x: MARGIN + 12,
       y: 672,
@@ -2517,7 +2386,10 @@ function drawQueuePage(
   if (reveal?.targetLabel) {
     const kindCopy = queueTargetKindCopy[reveal.targetKind || ""] || defaultQueueTargetKindCopy;
     const badgeY = bandTop;
-    page.drawRectangle({ x: MARGIN, y: badgeY - 26, width: PAGE_WIDTH - MARGIN * 2, height: 28, color: kindCopy.soft, borderColor: kindCopy.accent, borderWidth: 1 });
+    // A ticket stub, not a filled banner — this is a small secret to keep,
+    // not a warning.
+    page.drawRectangle({ x: MARGIN, y: badgeY - 26, width: PAGE_WIDTH - MARGIN * 2, height: 28, borderColor: kindCopy.accent, borderWidth: 1.2 });
+    drawTicketEdge(page, { x: MARGIN, y: badgeY + 2, width: PAGE_WIDTH - MARGIN * 2, height: 28 }, kindCopy.accent, 3);
     page.drawText(pdfText(kindCopy.prefix).toUpperCase(), { x: MARGIN + 12, y: badgeY - 10, size: 6.5, font: fonts.bold, color: kindCopy.accent });
     const labelSize = fitWrappedTextSize(reveal.targetLabel, fonts.bold, PAGE_WIDTH - MARGIN * 2 - 24, 13, 10, 1);
     drawWrappedText(page, reveal.targetLabel.toUpperCase(), fonts, {
@@ -2533,8 +2405,8 @@ function drawQueuePage(
   }
   if (reveal?.bonusQuest) {
     const bonusY = bandTop;
-    page.drawRectangle({ x: MARGIN, y: bonusY - 20, width: PAGE_WIDTH - MARGIN * 2, height: 22, color: colors.yellowSoft });
-    page.drawText("BONUS QUEST", { x: MARGIN + 12, y: bonusY - 12, size: 6.5, font: fonts.bold, color: colors.coral });
+    page.drawCircle({ x: MARGIN + 3, y: bonusY - 10, size: 3, color: theme.accent });
+    page.drawText("BONUS QUEST", { x: MARGIN + 12, y: bonusY - 12, size: 6.5, font: fonts.bold, color: theme.accent });
     drawWrappedText(page, reveal.bonusQuest, fonts, {
       x: MARGIN + 96,
       y: bonusY - 12,
@@ -2587,10 +2459,11 @@ function drawQueuePage(
     );
 
     if (hasFacts) {
-      page.drawRectangle({ x: MARGIN, y: 46, width: PAGE_WIDTH - MARGIN * 2, height: 56, color: colors.yellowSoft, borderColor: colors.softLine, borderWidth: 0.8 });
-      page.drawText("DID YOU KNOW?", { x: MARGIN + 12, y: 88, size: 7, font: fonts.bold, color: colors.coral });
+      drawHandLine(page, MARGIN, 94, MARGIN + 140, 94, colors.line, 1, `queue-facts-rule-${dayIndex}`);
+      page.drawText("DID YOU KNOW?", { x: MARGIN, y: 82, size: 7, font: fonts.bold, color: theme.accent });
       day.slots.factCard.forEach((fact, index) => {
-        const y = 74 - index * 13;
+        const y = 68 - index * 13;
+        page.drawCircle({ x: MARGIN + 3, y: y + 3, size: 2, color: theme.accent });
         drawWrappedText(page, fact, fonts, { x: MARGIN + 12, y, size: 6.8, maxWidth: PAGE_WIDTH - MARGIN * 2 - 24, maxLines: 1, color: colors.ink });
       });
     }
@@ -2612,16 +2485,16 @@ function drawQueuePage(
     const y = startY - row * (diameter + 18);
     page.drawCircle({ x, y, size: diameter / 2, borderColor: colors.blue, borderWidth: 1.5, color: colors.white });
   }
-  drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: startY - rows * (diameter + 18) + 8, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.blue });
+  drawWrappedText(page, queue.countLabel, fonts, { x: MARGIN, y: startY - rows * (diameter + 18) + 8, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: palette.teal });
 
   if (hasFacts) {
     const boxY = 92 - shift;
-    page.drawRectangle({ x: MARGIN, y: boxY, width: PAGE_WIDTH - MARGIN * 2, height: 190, color: colors.yellowSoft, borderColor: colors.softLine, borderWidth: 0.8 });
-    page.drawText("DID YOU KNOW?", { x: MARGIN + 16, y: boxY + 164, size: 8, font: fonts.bold, color: colors.coral });
+    drawHandLine(page, MARGIN, boxY + 176, MARGIN + 160, boxY + 176, colors.line, 1, `queue-facts-rule2-${dayIndex}`);
+    page.drawText("DID YOU KNOW?", { x: MARGIN, y: boxY + 164, size: 8, font: fonts.bold, color: theme.accent });
     day.slots.factCard.forEach((fact, index) => {
       const y = boxY + 132 - index * 43;
-      page.drawCircle({ x: MARGIN + 18, y: y + 3, size: 3, color: colors.coral });
-      drawWrappedText(page, fact, fonts, { x: MARGIN + 31, y: y + 7, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2 - 48, maxLines: 2, lineHeight: 12, color: colors.ink });
+      page.drawCircle({ x: MARGIN + 4, y: y + 3, size: 3, color: theme.accent });
+      drawWrappedText(page, fact, fonts, { x: MARGIN + 17, y: y + 7, size: 9, maxWidth: PAGE_WIDTH - MARGIN * 2 - 24, maxLines: 2, lineHeight: 12, color: colors.ink });
     });
   }
 }
@@ -2644,17 +2517,20 @@ function drawRevealPage(
   const day = booklet.dayPlans[dayIndex];
   const reveal = day.slots.questReveal;
   if (!reveal) return;
-  const page = drawPageBase(document, fonts, `Day ${day.day} reveal`, pageNumber, totalPages, colors.blue);
-  drawPill(page, `DAY ${day.day} / AT THE DESTINATION`, fonts, MARGIN, 765, colors.blueSoft, colors.blue);
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, `Day ${day.day} reveal`, pageNumber, totalPages, theme.accent);
+  const kicker = `DAY ${day.day} · AT THE DESTINATION`;
+  page.drawText(kicker, { x: MARGIN, y: 768, size: 9, font: fonts.bold, color: theme.accent });
+  drawHandLine(page, MARGIN, 761, MARGIN + fonts.bold.widthOfTextAtSize(kicker, 9), 761, theme.accent, 1.2, `reveal-kicker-${dayIndex}`);
   drawWrappedText(page, "Found It!", fonts, {
     x: MARGIN,
-    y: 725,
-    size: 27,
-    font: fonts.bold,
-    color: colors.ink,
+    y: 720,
+    size: 32,
+    font: fonts.display,
+    color: theme.accent,
   });
 
-  let contentTop = 685;
+  let contentTop = 680;
   if (photo) {
     const photoHeight = 220;
     const dims = photo.scale(1);
@@ -2664,7 +2540,7 @@ function drawRevealPage(
     const drawHeight = dims.height * scale;
     const photoX = MARGIN + (photoWidth - drawWidth) / 2;
     const photoY = contentTop - photoHeight;
-    page.drawRectangle({ x: MARGIN, y: photoY, width: photoWidth, height: photoHeight, color: colors.paper, borderColor: colors.softLine, borderWidth: 1 });
+    drawScrapbookCorner(page, { x: MARGIN, y: photoY, width: photoWidth, height: photoHeight }, colors.line, 14);
     page.drawImage(photo, { x: photoX, y: photoY + (photoHeight - drawHeight) / 2, width: drawWidth, height: drawHeight });
     contentTop = photoY - 18;
   }
@@ -2684,33 +2560,28 @@ function drawRevealPage(
   });
 
   const chatTop = revealTextBottom - 20;
-  page.drawRectangle({ x: MARGIN, y: chatTop - 76, width: PAGE_WIDTH - MARGIN * 2, height: 78, color: colors.blueSoft, borderColor: colors.softLine, borderWidth: 0.8 });
-  page.drawText("CHAT ABOUT IT", { x: MARGIN + 15, y: chatTop - 18, size: 8, font: fonts.bold, color: colors.blue });
+  page.drawLine({ start: { x: MARGIN, y: chatTop - 74 }, end: { x: MARGIN, y: chatTop - 6 }, thickness: 2, color: palette.teal });
+  page.drawText("CHAT ABOUT IT", { x: MARGIN + 14, y: chatTop - 18, size: 8, font: fonts.bold, color: palette.teal });
   reveal.chatPrompts.forEach((prompt, index) => {
     const y = chatTop - 36 - index * 26;
-    page.drawCircle({ x: MARGIN + 20, y: y + 3, size: 3, color: colors.blue });
-    drawWrappedText(page, prompt, fonts, { x: MARGIN + 32, y: y + 7, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 47, maxLines: 2, lineHeight: 11, color: colors.ink });
+    page.drawCircle({ x: MARGIN + 18, y: y + 3, size: 3, color: palette.teal });
+    drawWrappedText(page, prompt, fonts, { x: MARGIN + 30, y: y + 7, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2 - 42, maxLines: 2, lineHeight: 11, color: colors.ink });
   });
 
+  // The one consistent completion mark, not a coloured banner — see
+  // drawStampCircle, used the same way on the certificate.
   const badgeTop = chatTop - 90;
-  page.drawRectangle({ x: MARGIN, y: badgeTop - 26, width: 150, height: 28, color: colors.yellowSoft, borderColor: colors.coral, borderWidth: 1 });
-  page.drawCircle({ x: MARGIN + 20, y: badgeTop - 13, size: 6, color: colors.coral });
-  page.drawText("QUEST COMPLETE", { x: MARGIN + 34, y: badgeTop - 16, size: 7.5, font: fonts.bold, color: colors.coral });
+  const stampCx = MARGIN + 24;
+  const stampCy = badgeTop - 24;
+  drawStampCircle(page, fonts, stampCx, stampCy, 24, theme.accent, theme.accentSoft, "DONE");
+  page.drawText("QUEST COMPLETE", { x: stampCx + 36, y: stampCy - 4, size: 10, font: fonts.display, color: theme.accent });
 
-  const photoBoxTop = badgeTop - 40;
+  const photoBoxTop = badgeTop - 56;
   const photoBoxHeight = Math.max(120, photoBoxTop - 50);
-  page.drawRectangle({
-    x: MARGIN,
-    y: photoBoxTop - photoBoxHeight,
-    width: PAGE_WIDTH - MARGIN * 2,
-    height: photoBoxHeight,
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderDashArray: [4, 4],
-  });
+  drawScrapbookCorner(page, { x: MARGIN, y: photoBoxTop - photoBoxHeight, width: PAGE_WIDTH - MARGIN * 2, height: photoBoxHeight }, colors.line, 14);
   page.drawText("Draw or stick a photo of your discovery here", {
-    x: MARGIN + 12,
-    y: photoBoxTop - 16,
+    x: MARGIN + 14,
+    y: photoBoxTop - 20,
     size: 8,
     font: fonts.bold,
     color: colors.muted,
@@ -2750,7 +2621,7 @@ function drawAnswerKey(
 ) {
   const page = drawPageBase(document, fonts, "Grown-up answer notes", pageNumber, totalPages, colors.yellow);
   page.drawText("GROWN-UP ANSWER NOTES", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.coral });
-  page.drawText("A quick peek for helpful humans", { x: MARGIN, y: 735, size: 26, font: fonts.bold, color: colors.ink });
+  page.drawText("A quick peek for helpful humans", { x: MARGIN, y: 733, size: 23, font: fonts.display, color: colors.ink });
   drawWrappedText(page, "Keep this page tucked away until the child has had a proper go. Observation and imagination pages do not have one perfect answer.", fonts, {
     x: MARGIN,
     y: 697,
@@ -2802,20 +2673,64 @@ function drawMemoryPage(
   pageNumber: number,
   totalPages: number,
 ) {
-  const page = drawPageBase(document, fonts, "Memory museum", pageNumber, totalPages, colors.blue);
-  page.drawText("MEMORY MUSEUM", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: colors.blue });
-  drawWrappedText(page, `${booklet.destination} moments worth keeping`, fonts, { x: MARGIN, y: 733, size: 27, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 30 });
+  const theme = getDestinationTheme(booklet.destination);
+  const page = drawPageBase(document, fonts, "Memory museum", pageNumber, totalPages, theme.accent);
+  page.drawText("MEMORY MUSEUM", { x: MARGIN, y: 775, size: 10, font: fonts.bold, color: theme.accent });
+  drawWrappedText(page, `${booklet.destination} moments worth keeping`, fonts, { x: MARGIN, y: 728, size: 26, font: fonts.display, color: colors.ink, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 28 });
   drawWrappedText(page, "Draw the details that made your family stop, laugh, taste, listen, or look twice.", fonts, { x: MARGIN, y: 660, size: 10, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 14, color: colors.muted });
+
+  // Four visually distinct scrapbook areas — postcard, photo frame,
+  // notebook scrap, ticket stub — rather than four equal formal boxes.
   const prompts = ["Smallest detail", "Biggest surprise", "Kindest moment", "A sound or flavor"];
+  const accents = [theme.accent, palette.teal, palette.green, palette.yellow];
   const gap = 14;
   const width = (PAGE_WIDTH - MARGIN * 2 - gap) / 2;
   const height = 230;
   prompts.forEach((prompt, index) => {
     const x = MARGIN + (index % 2) * (width + gap);
     const y = 390 - Math.floor(index / 2) * (height + gap);
-    page.drawRectangle({ x, y, width, height, color: colors.white, borderColor: colors.line, borderWidth: 1 });
-    page.drawRectangle({ x, y: y + height - 35, width, height: 35, color: index % 2 ? colors.greenSoft : colors.yellowSoft });
-    page.drawText(prompt.toUpperCase(), { x: x + 13, y: y + height - 22, size: 8, font: fonts.bold, color: index % 2 ? colors.green : colors.coral });
+    const accent = accents[index % accents.length];
+    const seed = `memory-${index}-${booklet.destination}`;
+
+    if (index === 0) {
+      // Postcard: open corners, a divider line, and a small tilted "stamp".
+      drawScrapbookCorner(page, { x, y, width, height }, colors.line, 14);
+      drawHandLine(page, x + width * 0.64, y + 10, x + width * 0.64, y + height - 46, colors.line, 1, `${seed}-divider`);
+      page.drawRectangle({ x: x + width - 40, y: y + height - 42, width: 26, height: 30, borderColor: accent, borderWidth: 1.2, rotate: degrees(-4) });
+      page.drawLine({ start: { x: x + width - 37, y: y + height - 15 }, end: { x: x + width - 17, y: y + height - 34 }, thickness: 0.8, color: accent });
+    } else if (index === 1) {
+      // Photo frame: a real double-ruled frame, the one deliberately boxy cell.
+      page.drawRectangle({ x, y, width, height, borderColor: colors.line, borderWidth: 1 });
+      page.drawRectangle({ x: x + 8, y: y + 8, width: width - 16, height: height - 16, borderColor: colors.softLine, borderWidth: 0.8 });
+    } else if (index === 2) {
+      // Notebook scrap: a torn top edge and faint ruled lines.
+      const tornPoints: Array<[number, number]> = [];
+      const teeth = 14;
+      for (let t = 0; t <= teeth; t += 1) {
+        tornPoints.push([x + (width * t) / teeth, y + height + (t % 2 === 0 ? 0 : -4)]);
+      }
+      for (let t = 0; t < teeth; t += 1) {
+        page.drawLine({ start: { x: tornPoints[t][0], y: tornPoints[t][1] }, end: { x: tornPoints[t + 1][0], y: tornPoints[t + 1][1] }, thickness: 1, color: colors.line });
+      }
+      page.drawLine({ start: { x, y }, end: { x, y: y + height }, thickness: 1, color: colors.line });
+      page.drawLine({ start: { x: x + width, y }, end: { x: x + width, y: y + height }, thickness: 1, color: colors.line });
+      page.drawLine({ start: { x, y }, end: { x: x + width, y }, thickness: 1, color: colors.line });
+      for (let row = 1; row <= 5; row += 1) {
+        drawHandLine(page, x + 12, y + row * (height - 46) / 6 + 10, x + width - 12, y + row * (height - 46) / 6 + 10, palette.softLine, 0.8, `${seed}-rule-${row}`);
+      }
+    } else {
+      // Ticket stub: perforated edges and a dashed tear line near one side.
+      page.drawRectangle({ x, y, width, height, borderColor: colors.line, borderWidth: 1 });
+      drawTicketEdge(page, { x, y, width, height }, accent, 3);
+      drawTicketEdge(page, { x, y: y + height, width, height }, accent, 3);
+      const tearX = x + width - 46;
+      for (let ty = y + 8; ty < y + height - 8; ty += 8) {
+        page.drawLine({ start: { x: tearX, y: ty }, end: { x: tearX, y: Math.min(ty + 4, y + height - 8) }, thickness: 1, color: colors.line });
+      }
+      page.drawCircle({ x: tearX + 23, y: y + height - 24, size: 10, borderColor: accent, borderWidth: 1.4 });
+    }
+
+    page.drawText(prompt.toUpperCase(), { x: x + 4, y: y + height + 8, size: 8.5, font: fonts.bold, color: accent });
   });
 }
 

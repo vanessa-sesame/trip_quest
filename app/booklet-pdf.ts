@@ -65,6 +65,11 @@ const PAGE_WIDTH = A4[0];
 const PAGE_HEIGHT = A4[1];
 const MARGIN = 44;
 
+// Retuned to the exact same hues as palette (app/pdf-theme.ts) and
+// app/globals.css's :root, under this file's older token names (kept as-is
+// rather than migrated everywhere) — so pages still using this legacy
+// object instead of `palette` stay visually consistent with the rest of
+// the booklet and the web preview.
 const colors = {
   paper: rgb(0.985, 0.975, 0.945),
   white: rgb(1, 1, 1),
@@ -72,14 +77,14 @@ const colors = {
   muted: rgb(0.34, 0.42, 0.4),
   line: rgb(0.79, 0.77, 0.69),
   softLine: rgb(0.9, 0.88, 0.81),
-  coral: rgb(0.91, 0.34, 0.25),
-  coralSoft: rgb(0.985, 0.89, 0.85),
-  green: rgb(0.47, 0.67, 0.25),
-  greenSoft: rgb(0.91, 0.95, 0.86),
-  yellow: rgb(0.97, 0.76, 0.29),
-  yellowSoft: rgb(1, 0.96, 0.78),
-  blue: rgb(0.16, 0.55, 0.59),
-  blueSoft: rgb(0.88, 0.95, 0.95),
+  coral: rgb(0.851, 0.478, 0.388),
+  coralSoft: rgb(0.969, 0.886, 0.855),
+  green: rgb(0.486, 0.58, 0.388),
+  greenSoft: rgb(0.91, 0.925, 0.875),
+  yellow: rgb(0.902, 0.675, 0.306),
+  yellowSoft: rgb(0.98, 0.929, 0.816),
+  blue: rgb(0.235, 0.431, 0.514),
+  blueSoft: rgb(0.894, 0.933, 0.945),
   charcoal: rgb(0.12, 0.16, 0.16),
 };
 

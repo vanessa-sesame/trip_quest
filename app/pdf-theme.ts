@@ -5,6 +5,11 @@ import { rgb, type RGB } from "pdf-lib";
 // the illustration primitives (app/pdf-illustrations.ts) both read from the
 // same source instead of each hardcoding its own values.
 
+// These values are the print-safe (CMYK-friendlier, slightly desaturated)
+// equivalents of the exact same tokens in app/globals.css's :root — same
+// hues, same names, so the printed booklet and the on-screen preview read
+// as one design rather than two. Retune both files together; don't change
+// one without the other.
 export const palette = {
   paper: rgb(0.985, 0.975, 0.945),
   white: rgb(1, 1, 1),
@@ -13,18 +18,18 @@ export const palette = {
   muted: rgb(0.36, 0.43, 0.41),
   line: rgb(0.78, 0.75, 0.66),
   softLine: rgb(0.9, 0.88, 0.81),
-  // Terracotta rather than a saturated digital red
-  coral: rgb(0.82, 0.37, 0.27),
-  coralSoft: rgb(0.97, 0.89, 0.84),
-  // Muted botanical green, not a bright UI-success green
-  green: rgb(0.42, 0.55, 0.28),
-  greenSoft: rgb(0.9, 0.94, 0.85),
-  // Warm sun/ochre yellow
-  yellow: rgb(0.89, 0.68, 0.3),
-  yellowSoft: rgb(0.99, 0.94, 0.8),
-  // Mediterranean teal, slightly deeper than before
-  teal: rgb(0.13, 0.46, 0.5),
-  tealSoft: rgb(0.87, 0.93, 0.92),
+  // Dusty terracotta blush ("--coral" in globals.css)
+  coral: rgb(0.851, 0.478, 0.388),
+  coralSoft: rgb(0.969, 0.886, 0.855),
+  // Matcha sage ("--leaf" in globals.css)
+  green: rgb(0.486, 0.58, 0.388),
+  greenSoft: rgb(0.91, 0.925, 0.875),
+  // Kinako/mustard ochre ("--sun" in globals.css)
+  yellow: rgb(0.902, 0.675, 0.306),
+  yellowSoft: rgb(0.98, 0.929, 0.816),
+  // Aizome indigo ("--teal" in globals.css)
+  teal: rgb(0.235, 0.431, 0.514),
+  tealSoft: rgb(0.894, 0.933, 0.945),
   charcoal: rgb(0.12, 0.15, 0.15),
 } as const;
 

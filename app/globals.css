@@ -1,22 +1,55 @@
 @import "tailwindcss";
 
+/* Design tokens shared, in spirit, with the printable PDF's own token file
+   (app/pdf-theme.ts) — same two-font pairing, same "warm paper, soft ink,
+   restrained accents" palette family — so the on-screen preview and the
+   printed booklet read as one object, not two different designs. Existing
+   token NAMES are kept as-is (only retuned) everywhere they were already
+   load-bearing across this stylesheet, so retuning them here updates every
+   existing usage without hunting down call sites. Spacing/radius/shadow are
+   new: nothing like them existed before this pass (every rule in this file
+   used to hand-pick its own px value).
+*/
 :root {
-  --canvas: #f4f0e8;
+  --canvas: #f6f1e7;
   --paper: #fffdf7;
   --white: #ffffff;
   --ink: #17312e;
   --muted: #647572;
   --line: #d7cdbf;
-  --teal: #18766b;
-  --teal-dark: #10584f;
-  --coral: #df5b43;
-  --sun: #f5be3d;
+  /* "aizome" indigo — was a flatter teal */
+  --teal: #3c6e83;
+  --teal-dark: #274f5f;
+  /* dusty terracotta blush — was a more saturated coral */
+  --coral: #d97a63;
+  /* kinako/mustard ochre — was a brighter sun yellow */
+  --sun: #e6ac4e;
   --sky: #a8d7e2;
-  --leaf: #6e9344;
-  --pale-blue: #e2f0f3;
-  --pale-coral: #f8dfd9;
-  --pale-yellow: #fff0bd;
+  /* matcha sage — was a more saturated leaf green */
+  --leaf: #7c9463;
+  --pale-blue: #e4eef1;
+  --pale-coral: #f7e2da;
+  --pale-yellow: #faedd0;
+  --pale-leaf: #e8ecdf;
   --shadow: rgba(23, 49, 46, 0.14);
+  /* A hard, unblurred offset — the "sticker/washi-tape" shadow already used
+     ad hoc on a few buttons/cards; formalized as a token so new components
+     reuse the same depth cue instead of inventing another. */
+  --shadow-sticker: 3px 3px 0 var(--ink);
+  --shadow-soft: 0 4px 14px rgba(23, 49, 46, 0.1);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
 }
 
 @theme inline {
@@ -40,7 +73,17 @@ body {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), Arial, Helvetica, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+.jt-display {
+  font-family: var(--font-display), var(--font-body), Arial, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 button,
@@ -73,6 +116,100 @@ h3,
 h4,
 p {
   margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------
+   Shared "Japanese stationery" component vocabulary — small, reusable
+   building blocks applied on top of the existing booklet-page classes
+   above (.generated-sheet, .fact-card, .queue-target, etc.) rather than
+   replacing them, so the underlying page structure/content is untouched.
+   Mirrors the same component names as the printable PDF's own primitives
+   (app/pdf-illustrations.ts): a label/mission header, a soft card, an
+   explorer tip, a fun fact, a checklist, a reward badge, a progress
+   indicator, and doodle decorations.
+   ------------------------------------------------------------------- */
+
+.jt-doodle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  color: var(--line);
+  pointer-events: none;
+}
+
+.jt-doodle-sm {
+  width: 13px;
+  height: 13px;
+}
+
+.jt-doodle-lg {
+  width: 30px;
+  height: 30px;
+}
+
+/* A small pill label — "Mission", "Explorer Tip", "Bonus", "Did You
+   Know?" — the shared shape behind every specific `> strong` label
+   treatment above; use directly for any new label that doesn't already
+   have a dedicated rule. */
+.jt-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--radius-pill);
+  border: 1px solid currentColor;
+  background: var(--white);
+  font-family: var(--font-display), var(--font-body);
+  font-size: 0.5rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+}
+
+/* A generic soft card — rounded corners, thin border, gentle lift —
+   for any new boxed content that doesn't already have its own rule. */
+.jt-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--white);
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* A stamped circular reward mark, the same idea as the PDF's
+   drawStampCircle — a ring, a soft fill, and a short label. */
+.jt-stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--coral);
+  background: var(--pale-coral);
+  color: var(--coral);
+  text-align: center;
+  font-family: var(--font-display), var(--font-body);
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  box-shadow: var(--shadow-soft);
+}
+
+/* A row of small progress dots — one per day/step, filled once complete. */
+.jt-progress {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.jt-progress-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+}
+
+.jt-progress-dot.is-complete {
+  background: var(--teal);
 }
 
 .sr-only {
@@ -1485,6 +1622,7 @@ p {
   display: grid;
   grid-template-columns: 25% 75%;
   gap: 2px 7px;
+  border-radius: var(--radius-sm);
   border-left: 3px solid var(--coral);
   background: var(--pale-yellow);
   padding: 6px 8px;
@@ -1527,8 +1665,9 @@ p {
 .family-preview-roles > div {
   display: grid;
   gap: 3px;
+  border-radius: var(--radius-sm);
   border-left: 4px solid var(--leaf);
-  background: #edf3e5;
+  background: var(--pale-leaf);
   padding: 8px 9px;
 }
 
@@ -1576,7 +1715,9 @@ p {
   align-content: center;
   gap: 6px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   background: var(--pale-yellow);
+  box-shadow: var(--shadow-soft);
   padding: 8px;
 }
 
@@ -1630,10 +1771,14 @@ p {
 }
 
 .generated-sheet > span {
-  color: var(--teal);
+  display: inline-block;
+  color: var(--teal-dark);
+  font-family: var(--font-display), var(--font-body);
   font-size: 0.56rem;
-  font-weight: 900;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
+  border-bottom: 1.5px solid var(--coral);
+  padding-bottom: 2px;
 }
 
 .generated-sheet h3 {
@@ -1689,53 +1834,68 @@ p {
 }
 
 .generated-cover {
-  border: 16px solid var(--teal);
-  background: var(--pale-blue);
+  border-top: var(--space-3) solid var(--coral);
+  background: var(--paper);
 }
 
 .generated-cover h3 {
-  margin-top: 12%;
+  margin-top: 10%;
   color: var(--ink);
   font-size: 2.4rem;
 }
 
+/* The age/day tag reads as a small travel stamp, not a boxed UI chip. */
 .generated-cover > strong {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 4%;
-  border: 2px solid var(--ink);
-  border-radius: 5px;
-  background: var(--paper);
-  font-size: 0.66rem;
-  padding: 7px;
+  border: 1.5px solid var(--coral);
+  border-radius: var(--radius-pill);
+  background: var(--pale-coral);
+  color: var(--coral);
+  font-family: var(--font-display), var(--font-body);
+  font-size: 0.6rem;
+  padding: 5px 12px;
 }
 
+/* A loose scatter of small doodles standing in for the destination motif —
+   kept in the cover's own accent colours, not a bar chart of solid blocks. */
 .cover-motif {
   position: absolute;
   right: 9%;
-  bottom: 24%;
+  bottom: 20%;
   left: 9%;
   display: flex;
-  height: 20%;
+  height: 18%;
   align-items: flex-end;
   justify-content: space-around;
-  border-bottom: 7px solid var(--coral);
+  color: var(--line);
 }
 
-.cover-motif span {
-  display: block;
-  width: 20%;
-  height: 55%;
-  background: var(--leaf);
+.cover-motif .jt-doodle {
+  position: static;
+  opacity: 0.9;
 }
 
-.cover-motif span:nth-child(2) {
-  height: 90%;
-  background: var(--sky);
+.cover-motif .jt-doodle:nth-child(1) {
+  width: 34px;
+  height: 34px;
+  color: var(--teal);
+  align-self: flex-start;
 }
 
-.cover-motif span:nth-child(3) {
-  height: 70%;
-  background: var(--sun);
+.cover-motif .jt-doodle:nth-child(2) {
+  width: 26px;
+  height: 26px;
+  color: var(--coral);
+}
+
+.cover-motif .jt-doodle:nth-child(3) {
+  width: 30px;
+  height: 30px;
+  color: var(--sun);
+  align-self: center;
 }
 
 .generated-guide > div {
@@ -1799,9 +1959,10 @@ p {
   min-height: 49px;
   margin: 4px 0;
   overflow: hidden;
-  border: 1px solid var(--ink);
-  border-radius: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--white);
+  box-shadow: var(--shadow-soft);
   padding: 4px;
 }
 
@@ -2314,6 +2475,7 @@ p {
   height: 7px;
   margin-top: 1px;
   border: 1px solid var(--ink);
+  border-radius: 2px;
 }
 
 .quiz-board {
@@ -2378,6 +2540,7 @@ p {
 
 .generated-queue-page .grown-up-line {
   margin: 4% 0 6%;
+  border-radius: var(--radius-sm);
   border-left: 3px solid var(--teal);
   background: var(--canvas);
   color: var(--muted);
@@ -2388,8 +2551,9 @@ p {
 
 .generated-queue-page .family-cue {
   margin: 0 0 6%;
-  border-left: 3px solid var(--leaf);
-  background: var(--canvas);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--leaf);
+  background: var(--pale-leaf);
   color: var(--ink);
   font-size: 0.5rem;
   line-height: 1.35;
@@ -2397,11 +2561,16 @@ p {
 }
 
 .generated-queue-page .family-cue > strong {
-  display: block;
+  display: inline-block;
   margin-bottom: 2%;
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  border: 1px solid var(--leaf);
   color: var(--leaf);
+  font-family: var(--font-display), var(--font-body);
   font-size: 0.46rem;
   text-transform: uppercase;
+  padding: 2px 8px;
 }
 
 .generated-queue-page .game-place {
@@ -2424,19 +2593,27 @@ p {
 }
 
 .queue-target {
+  position: relative;
   display: block;
   margin: 0 0 4%;
-  border: 1.5px solid var(--teal);
+  border: 1.5px dashed var(--teal);
+  border-radius: var(--radius-md);
   background: var(--pale-blue);
+  box-shadow: var(--shadow-soft);
   padding: 5%;
 }
 
 .queue-target > strong {
-  display: block;
+  display: inline-block;
   margin-bottom: 1%;
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  border: 1px solid var(--teal);
   color: var(--teal-dark);
+  font-family: var(--font-display), var(--font-body);
   font-size: 0.42rem;
   text-transform: uppercase;
+  padding: 2px 8px;
 }
 
 .queue-target > span {
@@ -2449,6 +2626,7 @@ p {
 
 .queue-bonus-quest {
   margin: 0 0 4%;
+  border-radius: var(--radius-md);
   background: var(--pale-yellow);
   color: var(--muted);
   font-size: 0.48rem;
@@ -2457,9 +2635,15 @@ p {
 }
 
 .queue-bonus-quest > strong {
+  display: inline-block;
   margin-right: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  border: 1px solid var(--sun);
   color: var(--coral);
+  font-family: var(--font-display), var(--font-body);
   text-transform: uppercase;
+  padding: 2px 8px;
 }
 
 .queue-counter {
@@ -2467,7 +2651,8 @@ p {
   grid-template-columns: repeat(5, 1fr);
   gap: 7%;
   margin: 3% 0 8%;
-  border: 1.5px solid var(--ink);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
   background: var(--white);
   padding: 8%;
 }
@@ -2480,16 +2665,25 @@ p {
 }
 
 .fact-card {
+  position: relative;
   margin-top: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--sun);
+  border-radius: var(--radius-md);
   background: var(--pale-yellow);
+  box-shadow: var(--shadow-soft);
   padding: 6%;
 }
 
 .fact-card > strong {
+  display: inline-block;
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  border: 1px solid var(--sun);
   color: var(--coral);
+  font-family: var(--font-display), var(--font-body);
   font-size: 0.5rem;
   text-transform: uppercase;
+  padding: 2px 9px;
 }
 
 .fact-card ul {
@@ -2537,17 +2731,24 @@ p {
 
 .reveal-chat {
   margin: 0 0 5%;
-  border: 1px solid var(--line);
+  border: 1px solid var(--teal);
+  border-radius: var(--radius-md);
   background: var(--pale-blue);
+  box-shadow: var(--shadow-soft);
   padding: 6%;
 }
 
 .reveal-chat > strong {
-  display: block;
+  display: inline-block;
   margin-bottom: 3%;
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  border: 1px solid var(--teal);
   color: var(--teal-dark);
+  font-family: var(--font-display), var(--font-body);
   font-size: 0.5rem;
   text-transform: uppercase;
+  padding: 2px 9px;
 }
 
 .reveal-chat ul {
@@ -2562,16 +2763,30 @@ p {
   line-height: 1.35;
 }
 
+/* The one consistent "reward" mark — a stamped badge, not a plain label —
+   reused the same way the printable PDF's drawStampCircle is. */
 .reveal-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   align-self: flex-start;
   margin: 0 0 5%;
-  border: 1px solid var(--coral);
-  background: var(--pale-yellow);
+  border: 1.5px solid var(--coral);
+  border-radius: var(--radius-pill);
+  background: var(--pale-coral);
   color: var(--coral);
-  font-size: 0.48rem;
-  font-weight: 900;
+  font-family: var(--font-display), var(--font-body);
+  font-size: 0.52rem;
   text-transform: uppercase;
-  padding: 3% 6%;
+  padding: 4px 12px 4px 6px;
+}
+
+.reveal-badge .jt-doodle {
+  position: static;
+  width: 16px;
+  height: 16px;
+  color: var(--coral);
 }
 
 .reveal-photo-box {
@@ -2579,6 +2794,7 @@ p {
   flex: 1;
   align-items: flex-start;
   min-height: 140px;
+  border-radius: var(--radius-lg);
   border: 1.5px dashed var(--line);
   padding: 4%;
 }
@@ -3238,7 +3454,9 @@ p {
 .generated-memory > div strong {
   min-height: 82px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   background: var(--pale-blue);
+  box-shadow: var(--shadow-soft);
   font-size: 0.58rem;
   padding: 9px;
 }
@@ -3256,7 +3474,8 @@ p {
 }
 
 .generated-certificate {
-  border: 16px solid var(--teal);
+  border: 2px solid var(--coral);
+  border-radius: var(--radius-lg);
   text-align: center;
 }
 
@@ -3269,9 +3488,10 @@ p {
   width: 82px;
   height: 82px;
   margin: 14% auto;
-  border: 9px solid var(--sun);
+  border: 3px solid var(--sun);
   border-radius: 50%;
   background: var(--pale-yellow);
+  box-shadow: var(--shadow-soft);
 }
 
 /* Editorial board treatment for non-coloring games. The activity data remains

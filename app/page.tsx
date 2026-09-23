@@ -37,6 +37,7 @@ import {
   isGeneratedBookletData,
 } from "./booklet-ai";
 import { ActivityGame } from "./activity-game";
+import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./doodles";
 import { bookletCorePageTitles, bookletDayPageEntries } from "./booklet-pages";
 import {
   GenerationStreamError,
@@ -1636,9 +1637,9 @@ function GeneratedPage({
         <p>{profile.style}</p>
         <strong>Made especially for age {age}</strong>
         <div className="cover-motif" aria-hidden="true">
-          <span />
-          <span />
-          <span />
+          <DoodleMapPin className="jt-doodle" />
+          <DoodleStar className="jt-doodle" />
+          <DoodleCloud className="jt-doodle" />
         </div>
       </article>
     );
@@ -1778,7 +1779,7 @@ function GeneratedPage({
           <strong>Chat about it</strong>
           <ul>{reveal.chatPrompts.map((prompt) => <li key={prompt}>{prompt}</li>)}</ul>
         </section>
-        <p className="reveal-badge">Quest complete</p>
+        <p className="reveal-badge"><DoodleSparkle className="jt-doodle" />Quest complete</p>
         <div className="reveal-photo-box" aria-hidden="true">
           <span>Draw or stick a photo of your discovery here</span>
         </div>

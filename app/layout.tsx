@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Nunito_Sans, Short_Stack } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -9,6 +9,20 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// Same two families the printable PDF uses (app/booklet-pdf.ts's FONT_ASSETS)
+// so the on-screen preview and the printed booklet read as the same object,
+// not two different designs.
+const displayFont = Short_Stack({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: "400",
+});
+
+const bodyFont = Nunito_Sans({
+  variable: "--font-body",
   subsets: ["latin"],
 });
 
@@ -56,7 +70,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${displayFont.variable} ${bodyFont.variable} antialiased`}
       >
         {children}
       </body>

@@ -2443,7 +2443,8 @@ function drawQueuePage(
   const bonusHeight = reveal?.bonusQuest ? 26 : 0;
   const shift = (660 - titleTop) + badgeHeight + bonusHeight;
   drawWrappedText(page, day.landmark.display, fonts, { x: MARGIN, y: titleTop, size: 9, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, color: colors.muted });
-  drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: titleTop - 22, size: 15, font: fonts.bold, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, lineHeight: 17 });
+  const queueTitleSize = fitWrappedTextSize(queue.title, fonts.display, PAGE_WIDTH - MARGIN * 2, 17, 12, 1);
+  drawWrappedText(page, queue.title, fonts, { x: MARGIN, y: titleTop - 22, size: queueTitleSize, font: fonts.display, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 1, lineHeight: 19 });
   drawWrappedText(page, queue.instruction, fonts, { x: MARGIN, y: titleTop - 42, size: 8.5, maxWidth: PAGE_WIDTH - MARGIN * 2, maxLines: 2, lineHeight: 10, color: colors.muted });
 
   let bandTop = titleTop - 64;

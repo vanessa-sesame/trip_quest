@@ -2586,6 +2586,33 @@ p {
   font-size: 1.2rem;
 }
 
+/* Inline with the day kicker (see .generated-sheet > span above), the same
+   placement as the printable PDF's queue-page mission pill — day.mission
+   is real generated content that used to have nowhere on this page to
+   appear at all. */
+.queue-mission-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--teal);
+  background: var(--pale-blue);
+  color: var(--muted);
+  font-size: 0.46rem;
+  line-height: 1.4;
+  padding: 2px 9px;
+}
+
+.queue-mission-pill b {
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--teal-dark);
+  font-family: var(--font-display), var(--font-body);
+  text-transform: uppercase;
+  padding: 1px 6px;
+}
+
 .generated-queue-page .game-instructions {
   margin: 0 0 5%;
   font-size: 0.58rem;

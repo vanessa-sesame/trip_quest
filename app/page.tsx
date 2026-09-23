@@ -1661,6 +1661,11 @@ function GeneratedPage({
     return (
       <article className="generated-sheet generated-day generated-queue-page">
         <span>Day {day.day} · Before you go</span>
+        {day.mission ? (
+          <span className="queue-mission-pill">
+            <b>Mission</b> {day.mission}
+          </span>
+        ) : null}
         <p className="grown-up-line">{day.slots.beforeYouGo}</p>
         {cueText ? (
           <p className="family-cue">

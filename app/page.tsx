@@ -1584,13 +1584,29 @@ function GeneratedPage({
     return (
       <article className="generated-sheet generated-cover">
         <span>TripQuest Explorer Book</span>
+        <p className="cover-subtitle">A trip made for curious hands</p>
         <h3>{destination}</h3>
         <p>{profile.style}</p>
-        <strong>Made especially for age {age}</strong>
+        <div className="cover-stamps">
+          <span className="jt-stamp">Age {age}</span>
+          <span className="jt-stamp cover-stamp-days">{days.length === 1 ? "1 day" : `${days.length} days`}</span>
+        </div>
         <div className="cover-motif" aria-hidden="true">
           <DoodleMapPin className="jt-doodle" />
           <DoodleStar className="jt-doodle" />
           <DoodleCloud className="jt-doodle" />
+        </div>
+        <div className="cover-sign-area">
+          <p className="cover-section-label">Draw your explorer mark</p>
+          <div className="cover-sign-box" />
+        </div>
+        <div className="cover-dates-area">
+          <p className="cover-section-label">Trip dates</p>
+          <div className="cover-dates-line" />
+        </div>
+        <div className="cover-tagline">
+          <p className="cover-tagline-text">Pack a pencil. Notice everything.</p>
+          <p className="cover-tagline-sub">Games, drawing spaces, local clues, and family missions made for this exact trip.</p>
         </div>
       </article>
     );

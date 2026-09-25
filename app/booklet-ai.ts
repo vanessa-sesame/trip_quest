@@ -634,7 +634,14 @@ function requireText(
 
   const text = value.trim();
   if (text.length < minimum) {
-    throw new Error(`${label} has an unexpected length.`);
+    // A live 50-scenario test run found this generic message let Kimi
+    // exhaust every correction attempt regenerating an equally-short value,
+    // since it never learned the actual required length — stating the
+    // bounds and what it actually sent gives the correction retry something
+    // concrete to fix.
+    throw new Error(
+      `${label} must be between ${minimum} and ${maximum} characters (got ${text.length}: "${text}").`,
+    );
   }
 
   if (text.length <= maximum) {
@@ -1119,7 +1126,16 @@ export function validateBookletDraft(
       slots,
       activities,
     };
-    if (typeof day.interestHook === "string") {
+    // interestHook is a nice-to-have enhancement (per the composer prompt,
+    // only ever set on days assigned an interest lens), not core content
+    // like theme/mission — a live 50-scenario test run found Kimi sometimes
+    // just echoes the bare interest word or phrase (e.g. "drawing") instead
+    // of expanding it into a real lens sentence, which can exhaust every
+    // correction attempt and fail the whole batch. Silently dropping a
+    // too-short one instead of throwing matches the same "never block a
+    // booklet over something Kimi structurally won't reliably comply with"
+    // reasoning already used for whileYouWait's gameType/items below.
+    if (typeof day.interestHook === "string" && day.interestHook.trim().length >= 12) {
       normalizedDay.interestHook = requireText(
         day.interestHook,
         `Day ${dayIndex + 1} interest lens`,

@@ -55,6 +55,7 @@ import {
   createGenerationTask,
 } from "../../generation-stream";
 import { addBookletIllustrations, addCoverIllustration, addRevealPhoto } from "../../illustration-ai";
+import { checkGroundedClaims, groundingCorrectionMessage, sanitizeUngroundedClaims } from "../../grounding";
 import { assertBookletQa } from "../../booklet-qa";
 
 export const dynamic = "force-dynamic";
@@ -413,6 +414,14 @@ async function kimiRequest(
         upstreamError?.message || "Kimi could not complete the request.",
         response.status,
       );
+    }
+
+    if (payload.usage) {
+      // Cost-tracking hook: a single choke point for every Kimi call
+      // (research, composition, and the grounding check all go through
+      // kimiRequest), logged raw since Moonshot's usage object shape isn't
+      // pinned down anywhere else in this codebase.
+      console.info(`[TripQuest usage] model=${body.model} path=${path}`, JSON.stringify(payload.usage));
     }
 
     return payload;
@@ -856,6 +865,7 @@ async function composeBookletBatch(
   balancePlan: string,
   gameTypePlan: GameTypePlanItem[],
   interestPlan: InterestPlanItem[],
+  extraGuidance?: string,
 ) {
   const days = itinerary.length;
   const ageBand = getAgeBand(age);
@@ -961,7 +971,7 @@ DESTINATION RESEARCH
 ${research.notes}`,
       },
     ];
-  let correction = "";
+  let correction = extraGuidance || "";
   let lastError: unknown;
 
   // Two correction attempts (three tries total). A retry only recomposes
@@ -1010,8 +1020,23 @@ ${research.notes}`,
       // this stays optional like validateBookletDraft treats it: when
       // present it renders as a real game, when absent the queue page falls
       // back to its plain counting instruction.
+      const groundingFindings = await checkGroundedClaims(draft, research, apiKey, model, modelOptions);
+      if (groundingFindings.length && attempt < 2) {
+        throw new Error(groundingCorrectionMessage(groundingFindings));
+      }
+      const groundedDraft = groundingFindings.length
+        ? sanitizeUngroundedClaims(draft, groundingFindings)
+        : draft;
+      if (groundingFindings.length) {
+        // A live test (Penang, age 7) showed Kimi can genuinely exhaust the
+        // correction budget without ever fully satisfying the checker —
+        // failing the whole booklet over one still-imperfect claim is a
+        // worse outcome than accepting it with that claim neutralized, so
+        // this is a warning, not a thrown error.
+        console.error("[TripQuest grounding] accepted with sanitized claims:", JSON.stringify(groundingFindings));
+      }
       return applySiblingPlan(
-        applyInterestPlan(draft, assignedInterests, dayOffset),
+        applyInterestPlan(groundedDraft, assignedInterests, dayOffset),
         hasSiblings,
       );
     } catch (error) {
@@ -1060,6 +1085,7 @@ async function composeBooklet(
   artifacts?: BookletObjectStorage,
   cacheKey?: string,
   publish?: (message: string) => void,
+  extraGuidance?: string,
 ) {
   const batchSize = composeBatchSize(days);
   const batches = Array.from(
@@ -1113,6 +1139,7 @@ async function composeBooklet(
       balancePlan,
       gameTypePlan,
       interestPlan,
+      extraGuidance,
     );
     if (cacheKey) {
       try {
@@ -1383,64 +1410,82 @@ export async function POST(request: Request) {
               family,
               events,
             };
-            // Reject bad model output before paying the latency and cost of images.
-            try {
-              assertBookletQa(provisionalResult);
-            } catch (qaError) {
-              // A whole-booklet rule can fail even when every batch passed
-              // its own checks (for example a duplicate mission card across
-              // two batches). Recompose only the offending day's batch
-              // instead of discarding all the already-valid composed work;
-              // give up if the day cannot be identified or the repair also
-              // fails its own QA pass.
-              const failedDay = qaError instanceof Error
-                ? Number(qaError.message.match(/^Day (\d+)/)?.[1])
-                : NaN;
-              if (!Number.isInteger(failedDay)) throw qaError;
-
-              const { offset, dayCount } = batchRangeForDay(failedDay, days);
-              publish(`Repairing day ${failedDay}…`);
+            // Reject bad model output before paying the latency and cost of
+            // images. A live 50-scenario test run found a single repair
+            // attempt is sometimes not enough — Kimi can occasionally miss
+            // the same whole-booklet rule twice in a row even when told
+            // what to avoid — so this allows a couple of repair rounds,
+            // mirroring the "extra attempt is cheap insurance" reasoning
+            // composeBookletBatch's own schema-validation retries already
+            // use, rather than failing the entire generation over one
+            // stubborn day.
+            const MAX_QA_REPAIRS = 2;
+            for (let repairAttempt = 0; ; repairAttempt += 1) {
               try {
-                await deleteStoredBookletBatch(runtime.BOOKLET_FILES, cacheKey, offset, dayCount);
-              } catch (error) {
-                logStorageFailure("delete invalid booklet batch", error);
-              }
+                assertBookletQa(provisionalResult);
+                break;
+              } catch (qaError) {
+                // A whole-booklet rule can fail even when every batch passed
+                // its own checks (for example a duplicate mission card
+                // across two batches). Recompose only the offending day's
+                // batch instead of discarding all the already-valid
+                // composed work; give up if the day cannot be identified or
+                // the repair budget is exhausted.
+                const failedDay = qaError instanceof Error
+                  ? Number(qaError.message.match(/^Day (\d+)/)?.[1])
+                  : NaN;
+                if (!Number.isInteger(failedDay) || repairAttempt >= MAX_QA_REPAIRS) throw qaError;
 
-              stageStartedAt = Date.now();
-              draft = await composeBooklet(
-                destination,
-                age,
-                days,
-                itinerary,
-                research,
-                apiKey,
-                composerModel,
-                familyContext,
-                hasSiblings,
-                balancePlan,
-                gameTypePlan,
-                interestPlan,
-                runtime.BOOKLET_FILES,
-                cacheKey,
-                publish,
-              ).catch((error) => {
-                throw new GenerationStageError("composition", error);
-              });
-              logGenerationTiming(cacheKey, "composition-repair", stageStartedAt);
-              lockLease?.assertOwned();
-              preparedDraft = applySiblingPlan(draft, family);
-              provisionalResult = {
-                destination,
-                age,
-                days,
-                itinerary,
-                ...preparedDraft,
-                sources: research.sources,
-                generatedAt: new Date().toISOString(),
-                family,
-                events,
-              };
-              assertBookletQa(provisionalResult);
+                const { offset, dayCount } = batchRangeForDay(failedDay, days);
+                publish(`Repairing day ${failedDay}…`);
+                try {
+                  await deleteStoredBookletBatch(runtime.BOOKLET_FILES, cacheKey, offset, dayCount);
+                } catch (error) {
+                  logStorageFailure("delete invalid booklet batch", error);
+                }
+
+                stageStartedAt = Date.now();
+                // Tell the repair exactly what the previous attempt got
+                // wrong — recomposing blind can hit the same whole-booklet
+                // QA rule again and waste the repair budget.
+                const repairGuidance = qaError instanceof Error
+                  ? `The previous version of this booklet was rejected: ${qaError.message} Avoid that specific problem this time.`
+                  : undefined;
+                draft = await composeBooklet(
+                  destination,
+                  age,
+                  days,
+                  itinerary,
+                  research,
+                  apiKey,
+                  composerModel,
+                  familyContext,
+                  hasSiblings,
+                  balancePlan,
+                  gameTypePlan,
+                  interestPlan,
+                  runtime.BOOKLET_FILES,
+                  cacheKey,
+                  publish,
+                  repairGuidance,
+                ).catch((error) => {
+                  throw new GenerationStageError("composition", error);
+                });
+                logGenerationTiming(cacheKey, `composition-repair-${repairAttempt + 1}`, stageStartedAt);
+                lockLease?.assertOwned();
+                preparedDraft = applySiblingPlan(draft, family);
+                provisionalResult = {
+                  destination,
+                  age,
+                  days,
+                  itinerary,
+                  ...preparedDraft,
+                  sources: research.sources,
+                  generatedAt: new Date().toISOString(),
+                  family,
+                  events,
+                };
+              }
             }
             stageStartedAt = Date.now();
             // Run in parallel, not chained: each generates a disjoint set of

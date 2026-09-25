@@ -201,6 +201,24 @@ test("AI booklet validation requires the requested day count and unique activiti
   assert.throws(() => validateBookletDraft(draft, 1, 4), /not an age-4 game/i);
   assert.throws(() => validateBookletDraft(draft, 2), /exactly 2 day pages/i);
 
+  // Regression test: Kimi sometimes echoes the bare interest word (e.g.
+  // "drawing") as interestHook instead of expanding it into a real lens
+  // sentence — a live 50-scenario test run found this exhausted every
+  // correction attempt and failed the whole booklet. interestHook is a
+  // nice-to-have (only ever set on days with an assigned interest), so a
+  // too-short one is dropped rather than rejecting the batch.
+  const tooShortHook = { ...draft, dayPlans: [{ ...draft.dayPlans[0], interestHook: "drawing" }] };
+  assert.doesNotThrow(() => validateBookletDraft(tooShortHook, 1));
+  assert.equal(validateBookletDraft(tooShortHook, 1).dayPlans[0].interestHook, undefined);
+  const longEnoughHook = {
+    ...draft,
+    dayPlans: [{ ...draft.dayPlans[0], interestHook: "Spot how drawing meets architecture here." }],
+  };
+  assert.equal(
+    validateBookletDraft(longEnoughHook, 1).dayPlans[0].interestHook,
+    "Spot how drawing meets architecture here.",
+  );
+
   const repeated = structuredClone(draft);
   repeated.dayPlans[0].activities[1].title = "Stone Sailor Search";
   assert.throws(() => validateBookletDraft(repeated, 1), /repeated/i);

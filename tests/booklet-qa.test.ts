@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBooklet, getDestinationProfile } from "../app/booklet.ts";
-import { assertBookletQa, wordCount } from "../app/booklet-qa.ts";
-import type { GeneratedBookletData } from "../app/booklet-ai.ts";
+import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
+import { assertBookletQa, wordCount } from "../app/lib/booklet/qa.ts";
+import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 function strictBooklet(days = 2): GeneratedBookletData {
   return {

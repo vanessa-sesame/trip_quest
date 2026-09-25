@@ -1,9 +1,9 @@
 import { degrees, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
-import { palette, type DestinationTheme } from "./pdf-theme.ts";
+import { palette, type DestinationTheme } from "./theme.ts";
 
 // Reusable, stylistically-consistent drawing primitives for the printable
 // PDF booklet — the "hand-drawn journal" vocabulary referenced throughout
-// app/booklet-pdf.ts's page-composition functions, instead of each page
+// app/lib/pdf/booklet-pdf.ts's page-composition functions, instead of each page
 // inventing its own one-off rectangles. Every function here only draws; it
 // has no knowledge of booklet content.
 //
@@ -271,7 +271,7 @@ export function drawDestinationMotif(page: PDFPage, box: Box, theme: Destination
 
 // ---------------------------------------------------------------------
 // "Japanese stationery" component vocabulary, second pass — the printable
-// counterpart to app/doodles.tsx and the .jt-* classes in app/globals.css.
+// counterpart to app/components/doodles.tsx and the .jt-* classes in app/globals.css.
 // pdf-lib has no native rounded-rectangle or shadow support, so
 // drawRoundedRect below is the one new foundational primitive everything
 // else here builds on (a hand-rolled rounded-corner SVG path); the rest —
@@ -369,7 +369,7 @@ export function drawConfettiBurst(page: PDFPage, cx: number, cy: number, radius:
 }
 
 // A five-point star outline — a slightly hand-drawn doodle mark, the
-// printable counterpart to app/doodles.tsx's DoodleStar.
+// printable counterpart to app/components/doodles.tsx's DoodleStar.
 export function drawDoodleStar(page: PDFPage, cx: number, cy: number, radius: number, color: RGB, thickness = 1.4) {
   const points = 5;
   const coords: Array<[number, number]> = [];

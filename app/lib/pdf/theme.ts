@@ -1,8 +1,8 @@
 import { rgb, type RGB } from "pdf-lib";
 
-// Central design tokens for the printable PDF booklet (app/booklet-pdf.ts).
+// Central design tokens for the printable PDF booklet (app/lib/pdf/booklet-pdf.ts).
 // Kept as plain data (no pdf-lib drawing calls) so page-composition code and
-// the illustration primitives (app/pdf-illustrations.ts) both read from the
+// the illustration primitives (app/lib/pdf/illustrations.ts) both read from the
 // same source instead of each hardcoding its own values.
 
 // These values are the print-safe (CMYK-friendlier, slightly desaturated)
@@ -49,7 +49,7 @@ export type DestinationTheme = {
   aliases: string[];
   accent: RGB;
   accentSoft: RGB;
-  // Which illustration-primitive motif family (app/pdf-illustrations.ts's
+  // Which illustration-primitive motif family (app/lib/pdf/illustrations.ts's
   // drawDestinationMotif) this destination uses. New destinations start on
   // "generic" and graduate to their own motif the same way Barcelona does
   // here — never leave a destination with no motif at all.

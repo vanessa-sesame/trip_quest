@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addBookletIllustrations } from "../app/illustration-ai.ts";
-import { buildBooklet, type Activity } from "../app/booklet.ts";
+import { addBookletIllustrations } from "../app/lib/generation/illustration-ai.ts";
+import { buildBooklet, type Activity } from "../app/lib/booklet/booklet.ts";
 
 test("uncached custom illustrations are generated concurrently and capped at three", async () => {
   const dayPlans = buildBooklet(7, "Reykjavik", 2).map((day, dayIndex) => {

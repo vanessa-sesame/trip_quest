@@ -39,7 +39,6 @@ yarn-error.log*
 next-env.d.ts
 /dist/
 /.wrangler/
-/outputs/
-/work/
-/output/
-/tmp/
+# generated PDFs, QA renders and archived builds
+/artifacts/
+*.tsbuildinfo

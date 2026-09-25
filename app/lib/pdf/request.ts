@@ -1,4 +1,4 @@
-import { normalizeItinerary } from "./booklet-ai";
+import { normalizeItinerary } from "../generation/booklet-ai";
 import {
   familyEditionContext,
   familyPromptSummary,
@@ -6,9 +6,9 @@ import {
   normalizeItineraryEvents,
   type FamilyChild,
   type ItineraryEvent,
-} from "./family";
-import type { BookletCacheIdentity } from "./booklet-storage";
-import { requireInteger } from "./request-security";
+} from "../family";
+import type { BookletCacheIdentity } from "../storage/booklet-storage";
+import { requireInteger } from "../request-security";
 
 export type NormalizedPdfRequest = {
   destination: string;

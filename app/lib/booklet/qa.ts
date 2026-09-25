@@ -1,5 +1,5 @@
 import type { DayPlan } from "./booklet.ts";
-import type { GeneratedBookletData } from "./booklet-ai.ts";
+import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 
 export function wordCount(value: string) {
   if (!value.trim()) return 0;

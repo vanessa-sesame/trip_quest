@@ -5,7 +5,7 @@ import {
   createGenerationStreamResponse,
   createGenerationTask,
   readGenerationResponse,
-} from "../app/generation-stream.ts";
+} from "../app/lib/generation/stream.ts";
 
 test("generation progress streams before the completed result", async () => {
   const task = createGenerationTask("Starting…", async (publish) => {

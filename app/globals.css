@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* Design tokens shared, in spirit, with the printable PDF's own token file
-   (app/pdf-theme.ts) — same two-font pairing, same "warm paper, soft ink,
+   (app/lib/pdf/theme.ts) — same two-font pairing, same "warm paper, soft ink,
    restrained accents" palette family — so the on-screen preview and the
    printed booklet read as one object, not two different designs. Existing
    token NAMES are kept as-is (only retuned) everywhere they were already
@@ -124,7 +124,7 @@ p {
    above (.generated-sheet, .fact-card, .queue-target, etc.) rather than
    replacing them, so the underlying page structure/content is untouched.
    Mirrors the same component names as the printable PDF's own primitives
-   (app/pdf-illustrations.ts): a label/mission header, a soft card, an
+   (app/lib/pdf/illustrations.ts): a label/mission header, a soft card, an
    explorer tip, a fun fact, a checklist, a reward badge, a progress
    indicator, and doodle decorations.
    ------------------------------------------------------------------- */

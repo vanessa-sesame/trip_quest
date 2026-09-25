@@ -1,5 +1,5 @@
-import type { Activity, GameItem, GameType } from "../../app/booklet.ts";
-import type { GeneratedBookletData } from "../../app/booklet-ai.ts";
+import type { Activity, GameItem, GameType } from "../../app/lib/booklet/booklet.ts";
+import type { GeneratedBookletData } from "../../app/lib/generation/booklet-ai.ts";
 
 function activity(
   title: string,

@@ -1,10 +1,10 @@
 import {
   defaultFamilyWorkspace,
   normalizeFamilyWorkspace,
-} from "../../family";
-import type { BookletDatabase } from "../../booklet-storage";
-import { assertSameOriginRequest, readJsonObject } from "../../request-security";
-import { readFamilyWorkspace, writeFamilyWorkspace } from "../../family-storage";
+} from "../../lib/family";
+import type { BookletDatabase } from "../../lib/storage/booklet-storage";
+import { assertSameOriginRequest, readJsonObject } from "../../lib/request-security";
+import { readFamilyWorkspace, writeFamilyWorkspace } from "../../lib/storage/family-storage";
 
 export const dynamic = "force-dynamic";
 

@@ -5,9 +5,9 @@ import {
   groundingCorrectionMessage,
   sanitizeUngroundedClaims,
   type GroundingResearch,
-} from "../app/grounding.ts";
-import { buildBooklet } from "../app/booklet.ts";
-import type { BookletDraft } from "../app/booklet-ai.ts";
+} from "../app/lib/generation/grounding.ts";
+import { buildBooklet } from "../app/lib/booklet/booklet.ts";
+import type { BookletDraft } from "../app/lib/generation/booklet-ai.ts";
 
 function draftWithClaim(text: string): BookletDraft {
   const dayPlans = buildBooklet(7, "Singapore", 1);

@@ -1,5 +1,5 @@
 // Batch-generates curated printable line art for every ColoringScene that
-// currently has no imagePath in app/coloring.ts's coloringIllustrationSpecs
+// currently has no imagePath in app/lib/booklet/coloring.ts's coloringIllustrationSpecs
 // — the eight scenes added 2026-09-22 (canal, windmill, bicycle, machine,
 // boat, statue, playground, artwork), plus "skyline", whose old asset was
 // removed for actually depicting a specific real landmark (Marina Bay
@@ -7,7 +7,7 @@
 // targets scenes still missing an imagePath.
 //
 // Each prompt explicitly asks for an INVENTED, non-landmark-specific scene,
-// unlike the per-booklet illustration prompts in app/illustration-ai.ts
+// unlike the per-booklet illustration prompts in app/lib/generation/illustration-ai.ts
 // (which intentionally depict the real named place) — these are meant to
 // work as a generic fallback for any destination, so they must not
 // accidentally become a new mislabeled-specific-place bug themselves.
@@ -16,14 +16,14 @@
 //   node --experimental-strip-types --env-file=.env.local scripts/generate-coloring-library.ts
 //
 // After a successful run, add the printed imagePath back into each
-// scene's entry in app/coloring.ts's coloringIllustrationSpecs — this
+// scene's entry in app/lib/booklet/coloring.ts's coloringIllustrationSpecs — this
 // script does not edit that file, to avoid fragile source rewriting.
 
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { coloringIllustrationSpecs, coloringScenes, type ColoringScene } from "../app/coloring.ts";
-import { generatePng } from "../app/illustration-ai.ts";
+import { coloringIllustrationSpecs, coloringScenes, type ColoringScene } from "../app/lib/booklet/coloring.ts";
+import { generatePng } from "../app/lib/generation/illustration-ai.ts";
 
 const ILLUSTRATIONS_DIR = fileURLToPath(new URL("../public/illustrations/", import.meta.url));
 const MANIFEST_PATH = fileURLToPath(new URL("../public/illustrations/manifest.json", import.meta.url));
@@ -112,7 +112,7 @@ async function main() {
 
   console.log(`\n${succeeded.length}/${targets.length} succeeded.`);
   if (succeeded.length) {
-    console.log("\nAdd these imagePaths back into app/coloring.ts's coloringIllustrationSpecs:");
+    console.log("\nAdd these imagePaths back into app/lib/booklet/coloring.ts's coloringIllustrationSpecs:");
     for (const scene of succeeded) {
       console.log(`  ${scene}: imagePath: "/illustrations/${scene}-coloring-v1.png"`);
     }

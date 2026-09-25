@@ -12,8 +12,8 @@ import {
   type RGB,
 } from "pdf-lib";
 import * as fontkit from "fontkit";
-import type { Activity, GameItem } from "./booklet.ts";
-import { pairEligibleGameTypes } from "./booklet.ts";
+import type { Activity, GameItem } from "../booklet/booklet.ts";
+import { pairEligibleGameTypes } from "../booklet/booklet.ts";
 import {
   coloringIllustrationSpecs,
   coloringPageSpec,
@@ -21,8 +21,8 @@ import {
   coloringVariantFor,
   curatedColoringImagePath,
   type ColoringScene,
-} from "./coloring.ts";
-import { getDestinationTheme, palette, spacing } from "./pdf-theme.ts";
+} from "../booklet/coloring.ts";
+import { getDestinationTheme, palette, spacing } from "./theme.ts";
 import {
   drawAnnotationCircle,
   drawConfettiBurst,
@@ -39,13 +39,13 @@ import {
   drawSpeechBubble,
   drawStampCircle,
   drawTicketEdge,
-} from "./pdf-illustrations.ts";
-import { getAgeBand } from "./booklet.ts";
-import { sniffImageContentType } from "./illustration-ai.ts";
+} from "./illustrations.ts";
+import { getAgeBand } from "../booklet/booklet.ts";
+import { sniffImageContentType } from "../generation/illustration-ai.ts";
 import {
   type GeneratedBookletData,
   validateBookletDraft,
-} from "./booklet-ai.ts";
+} from "../generation/booklet-ai.ts";
 import {
   createCrossword,
   createMaze,
@@ -53,7 +53,7 @@ import {
   createWordSearch,
   mazeSizeForAge,
   normalizePuzzleWord,
-} from "./puzzles.ts";
+} from "../booklet/puzzles.ts";
 import {
   FAMILY_BADGES,
   familyChildDisplayName,
@@ -63,16 +63,16 @@ import {
   type FamilyChild,
   type ItineraryEvent,
   type QuestMechanic,
-} from "./family.ts";
-import { assertBookletQa } from "./booklet-qa.ts";
-import { bookletDayPageEntries, bookletPageTotal, dayGameActivities } from "./booklet-pages.ts";
+} from "../family.ts";
+import { assertBookletQa } from "../booklet/qa.ts";
+import { bookletDayPageEntries, bookletPageTotal, dayGameActivities } from "../booklet/pages.ts";
 
 const A4: [number, number] = [595.28, 841.89];
 const PAGE_WIDTH = A4[0];
 const PAGE_HEIGHT = A4[1];
 const MARGIN = 44;
 
-// Retuned to the exact same hues as palette (app/pdf-theme.ts) and
+// Retuned to the exact same hues as palette (app/lib/pdf/theme.ts) and
 // app/globals.css's :root, under this file's older token names (kept as-is
 // rather than migrated everywhere) — so pages still using this legacy
 // object instead of `palette` stay visually consistent with the rest of
@@ -654,7 +654,7 @@ function drawGuide(
 // A section label, not a box: the game board underneath supplies its own
 // structure (grid lines, cells, a maze wall), so wrapping the whole thing
 // in a filled banner + bordered panel was a box with nothing functional to
-// contain — see app/pdf-illustrations.ts for the shared vocabulary this
+// contain — see app/lib/pdf/illustrations.ts for the shared vocabulary this
 // (and drawEditorialBoardChrome, drawCompactGameFrame) draw from.
 function drawGameFrame(page: PDFPage, fonts: Fonts, label: string, box: Box) {
   const labelText = pdfText(label).toUpperCase();

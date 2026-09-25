@@ -18,13 +18,25 @@ npm run build
 
 This starter does not use `wrangler.jsonc`.
 
+## Project layout
+
+- `app/page.tsx`, `app/layout.tsx`, `app/globals.css`: the parent-facing site and booklet preview
+- `app/components/`: React components used by the preview (game boards, doodles)
+- `app/api/*/route.ts`: HTTP handlers only; logic lives in `app/lib/`
+- `app/lib/booklet/`: booklet data model, offline builder, page manifest, QA rules, puzzles, coloring scenes
+- `app/lib/generation/`: Kimi research and composition, fact-checking, illustrations, streaming
+- `app/lib/pdf/`: printable PDF renderer, theme tokens and drawing primitives
+- `app/lib/storage/`: D1/R2 persistence and cache keys
+- `tests/`: `node --test` suites (run with `npm test`)
+- `scripts/`: sample, QA and benchmark generators; they write to `artifacts/`
+- `artifacts/` (gitignored): generated booklets, QA renders and archived builds
+
 ## Included Shape
 
 - edit site code under `app/`
 - `.openai/hosting.json` declares optional Sites D1 and R2 bindings
 - `vite.config.ts` simulates declared bindings for local development
 - `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
 - `drizzle.config.ts` supports local migration generation when needed
 
 ## Workspace Auth Headers
@@ -60,7 +72,7 @@ export default async function Home() {
 
 ## Optional Dispatch-Owned ChatGPT Sign-In
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
+Import the ready-to-use helpers from `app/lib/chatgpt-auth.ts` when the site needs
 optional or required ChatGPT sign-in:
 
 - Use `getChatGPTUser()` for optional signed-in UI.

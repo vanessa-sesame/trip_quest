@@ -1,6 +1,6 @@
-import type { DayPlan } from "./booklet.ts";
-import type { BookletObjectStorage } from "./booklet-storage.ts";
-import { curatedColoringImagePath } from "./coloring.ts";
+import type { DayPlan } from "../booklet/booklet.ts";
+import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
+import { curatedColoringImagePath } from "../booklet/coloring.ts";
 
 const ILLUSTRATION_VERSION = "v2";
 const encoder = new TextEncoder();
@@ -42,7 +42,7 @@ function bytesFromBase64(value: string) {
 // the shared "artwork.png" R2 key name, which is just a storage convention,
 // not a format guarantee) — sniff the real format from magic bytes rather
 // than trusting the source, so storage metadata and PDF embedding
-// (app/booklet-pdf.ts) always match what's actually there.
+// (app/lib/pdf/booklet-pdf.ts) always match what's actually there.
 export function sniffImageContentType(bytes: Uint8Array): "image/png" | "image/jpeg" {
   return bytes[0] === 0xff && bytes[1] === 0xd8 ? "image/jpeg" : "image/png";
 }

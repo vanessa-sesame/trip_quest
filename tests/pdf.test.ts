@@ -6,10 +6,10 @@ import {
   bookletPdfFilename,
   bookletPdfPageCount,
   createBookletPdf,
-} from "../app/booklet-pdf.ts";
+} from "../app/lib/pdf/booklet-pdf.ts";
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
-import { buildBooklet, getDestinationProfile } from "../app/booklet.ts";
-import type { GeneratedBookletData } from "../app/booklet-ai.ts";
+import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
+import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 test("a generated booklet becomes a complete A4 PDF", async () => {
   const booklet = sampleGeneratedBooklet();
@@ -97,7 +97,7 @@ test("a queue mystery with a reveal adds exactly one page for that day, and only
     day.activities = [day.slots.inThePlace, day.slots.sitDown];
   });
   // buildBooklet's offline fallback already populates questReveal (with a
-  // nested targetLabel) on every day (see app/booklet.ts's buildDaySlots) —
+  // nested targetLabel) on every day (see app/lib/booklet/booklet.ts's buildDaySlots) —
   // strip day 2's so only day 1 gets the reveal page, proving the extra
   // page is per-day, not whole-booklet.
   delete dayPlans[1].slots.questReveal;

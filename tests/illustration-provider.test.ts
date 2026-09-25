@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCoverIllustration, sniffImageContentType } from "../app/illustration-ai.ts";
+import { addCoverIllustration, sniffImageContentType } from "../app/lib/generation/illustration-ai.ts";
 
 function jpegBase64() {
   // Minimal magic-byte-only fake JPEG: 0xFF 0xD8 ... — enough for

@@ -11,12 +11,12 @@ import {
   normalizeFamilyChildren,
   parseFamilyTags,
   parseItineraryText,
-} from "../app/family.ts";
+} from "../app/lib/family.ts";
 import {
   bookletPdfPageCount,
   createBookletPdf,
   familyPackPdfFilename,
-} from "../app/booklet-pdf.ts";
+} from "../app/lib/pdf/booklet-pdf.ts";
 import { PDFDocument } from "pdf-lib";
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
 

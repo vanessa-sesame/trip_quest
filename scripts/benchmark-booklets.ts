@@ -10,13 +10,13 @@ import { POST as generateBooklet } from "../app/api/generate/route.ts";
 import {
   allowedGameTypesForAge,
   type GeneratedBookletData,
-} from "../app/booklet-ai.ts";
+} from "../app/lib/generation/booklet-ai.ts";
 import {
   bookletPdfFilename,
   bookletPdfPageCount,
   createBookletPdf,
-} from "../app/booklet-pdf.ts";
-import { readGenerationResponse } from "../app/generation-stream.ts";
+} from "../app/lib/pdf/booklet-pdf.ts";
+import { readGenerationResponse } from "../app/lib/generation/stream.ts";
 
 type BenchmarkCase = {
   id: number;
@@ -544,7 +544,7 @@ const selectedCaseIds = new Set(
 );
 const selectedCases = cases.filter((testCase) => selectedCaseIds.has(testCase.id));
 const maxAttempts = Math.max(1, Number(process.env.BENCHMARK_MAX_ATTEMPTS) || 2);
-const outputDirectory = new URL(`../tmp/pdfs/${runName}/`, import.meta.url);
+const outputDirectory = new URL(`../artifacts/booklets/benchmark-runs/${runName}/`, import.meta.url);
 const resultPath = new URL("results.json", outputDirectory);
 const runSummaryPath = new URL("run-summary.json", outputDirectory);
 const originalFetch = globalThis.fetch.bind(globalThis);

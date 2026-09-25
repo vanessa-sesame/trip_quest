@@ -1,6 +1,6 @@
 import type { Activity, DayPlan } from "./booklet.ts";
-import type { GeneratedBookletData } from "./booklet-ai.ts";
-import { bookletDayPageEntries, type DayPageEntry } from "./booklet-pages.ts";
+import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
+import { bookletDayPageEntries, type DayPageEntry } from "./pages.ts";
 
 export const FREE_PREVIEW_PAGE_COUNT = 3;
 export const FULL_PREVIEW_FOR_TESTERS = true;

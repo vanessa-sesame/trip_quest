@@ -55,10 +55,10 @@ Current public release: https://tripquestkids.com, source branch `main`.
   matches the edition shown on screen.
 - A coloring/drawing activity's curated fallback picture is deduplicated
   within one booklet: if a second day's activity would land on the same
-  scene as an earlier day's (matched by `app/coloring.ts`'s keyword system),
+  scene as an earlier day's (matched by `app/lib/booklet/coloring.ts`'s keyword system),
   it does not embed that picture a second time — it falls back to the
   abstract vector scene instead, so no two days show the literal same
-  image. This is deterministic (`app/booklet-pdf.ts`'s `usedCuratedPaths`),
+  image. This is deterministic (`app/lib/pdf/booklet-pdf.ts`'s `usedCuratedPaths`),
   not a retry/regeneration mechanism — see Known Gaps for why a QA-and-retry
   approach was considered and rejected for this specific problem.
 - Word search clues (each word's meaning or the local fact that makes it the
@@ -132,7 +132,7 @@ Current public release: https://tripquestkids.com, source branch `main`.
 The paid flow is connected in Stripe sandbox mode and must be moved to live
 Stripe credentials before charging customers:
 
-- `FULL_PREVIEW_FOR_TESTERS` is temporarily `true` in `app/booklet-preview.ts`;
+- `FULL_PREVIEW_FOR_TESTERS` is temporarily `true` in `app/lib/booklet/preview.ts`;
   testers can inspect the complete generated edition before purchase. Restore
   the three-page paywall before a public paid launch.
 - Hosted `TRIPQUEST_PDF_TEST_MODE` is `false`; the customer PDF button no longer
@@ -176,7 +176,7 @@ Stripe credentials before charging customers:
   exactly three concrete facts under 15 words; otherwise the fact card is
   omitted instead of inventing filler.
 - The second in-place game and the queue game are restricted by two lists in
-  `app/booklet.ts`: `pairEligibleGameTypes` (everything except `map_puzzle`
+  `app/lib/booklet/booklet.ts`: `pairEligibleGameTypes` (everything except `map_puzzle`
   and `coloring`) for `inThePlaceSecond`, and `queueEligibleGameTypes`
   (everything except `map_puzzle`) for the queue slot's optional bonus game.
   `map_puzzle` stays excluded from both because it shares a once-per-booklet
@@ -190,14 +190,14 @@ Stripe credentials before charging customers:
   full page width to stay legible — their PDF/CSS layouts use offsets that
   go near-illegible at a half-width column — so whenever either game in a
   pair is one of those, the page stacks them top/bottom at full width
-  instead (`drawStackedInPlaceGames` in `app/booklet-pdf.ts`;
+  instead (`drawStackedInPlaceGames` in `app/lib/pdf/booklet-pdf.ts`;
   `.game-pair-stacked` in `app/globals.css`, chosen client-side by the same
   `wideOnlyGameTypes` check in `app/page.tsx`).
 - Word-search clues are now shown next to every word, not just the two
   surfaced in the fixed "LOCAL CLUES" strip: `drawWordSearch` (PDF) and
-  `WordSearchBoard` (`app/activity-game.tsx`, web) both render a clue line
+  `WordSearchBoard` (`app/components/activity-game.tsx`, web) both render a clue line
   under each word bank entry. The lookup is by normalized word, not array
-  index, because `createWordSearch` (`app/puzzles.ts`) dedupes/reorders
+  index, because `createWordSearch` (`app/lib/booklet/puzzles.ts`) dedupes/reorders
   labels and `puzzle.words[i]` is not guaranteed to match `activity.items[i]`
   positionally. The prompt now explicitly asks for the plain-English meaning
   when a word-search/crossword label is a transliterated local word.
@@ -266,7 +266,7 @@ D1 stores metadata and R2 object keys.
   missing or mismatched modern artifact instead of silently substituting a
   newly cached booklet; failed entitlement webhook matches return a retryable
   response to Stripe.
-- Current cache versions are defined in `app/booklet-storage.ts`.
+- Current cache versions are defined in `app/lib/storage/booklet-storage.ts`.
 - PDF requests reuse the stored booklet and reuse a stored PDF when available.
 - Family profiles use an anonymous browser-scoped family identifier and D1; a
   child name is not sent in the Kimi family prompt.
@@ -342,15 +342,15 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   locking, and rate limits.
 - `app/api/pdf/route.ts`: stored booklet lookup and PDF delivery.
 - `app/api/family/route.ts`: anonymous family profile API.
-- `app/family.ts`: family normalization, itinerary parsing, interest plans, and
+- `app/lib/family.ts`: family normalization, itinerary parsing, interest plans, and
   quest-mechanic planning.
-- `app/booklet-ai.ts`: generated-data schema, age-safe game plans, and content
+- `app/lib/generation/booklet-ai.ts`: generated-data schema, age-safe game plans, and content
   validation.
-- `app/booklet-pdf.ts`: A4 family-pack PDF generation.
-- `app/illustration-ai.ts`: exact-landmark image generation and R2 reuse.
+- `app/lib/pdf/booklet-pdf.ts`: A4 family-pack PDF generation.
+- `app/lib/generation/illustration-ai.ts`: exact-landmark image generation and R2 reuse.
 - `app/api/illustration/route.ts`: immutable generated artwork delivery.
-- `app/puzzles.ts`: deterministic crossword, word-search, maze, and route logic.
-- `app/booklet-storage.ts`: D1/R2 cache keys and persistence.
+- `app/lib/booklet/puzzles.ts`: deterministic crossword, word-search, maze, and route logic.
+- `app/lib/storage/booklet-storage.ts`: D1/R2 cache keys and persistence.
 - `db/schema.ts`: D1 schema.
 - `drizzle/`: deployment migrations.
 - `scripts/benchmark-booklets.ts`: live destination and age UAT runner.
@@ -450,11 +450,11 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   queue page's target badge is a separate, independent enhancement gated on
   `targetLabel` specifically. The whole pair stays optional at validation;
   editions where Kimi drops it still render today's plain queue page. The
-  one-photo-per-booklet reveal image (`app/illustration-ai.ts`'s
+  one-photo-per-booklet reveal image (`app/lib/generation/illustration-ai.ts`'s
   `addRevealPhoto`) is gated on `questReveal.targetLabel` (needs a concrete
   subject to depict) and never attempts generation without it, so it adds
   no cost/latency when absent.
-- Curated coloring/drawing fallback art (`app/coloring.ts`'s ~28 scenes) had
+- Curated coloring/drawing fallback art (`app/lib/booklet/coloring.ts`'s ~28 scenes) had
   a recurring bug class, found live three times in one session (2026-09-22):
   a scene's curated image depicts one specific real place or culture
   (Marina Bay Sands for "skyline"; a Southeast/East Asian temple-guardian
@@ -466,7 +466,7 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   generic where no real generic-city photo exists; guardian/tile were
   narrowed to their actually-specific keywords). Not exhaustively re-audited
   across all ~28 scenes; the pattern to watch for is documented in a
-  comment above `coloringSceneFor` in `app/coloring.ts`. A *dynamic*
+  comment above `coloringSceneFor` in `app/lib/booklet/coloring.ts`. A *dynamic*
   "ask Kimi if this image is relevant" check was considered and rejected —
   it would need a new AI call and reintroduces the same retry-failure risk
   as the item below, for a problem that is 100% a consequence of our own

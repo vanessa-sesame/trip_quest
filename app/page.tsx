@@ -30,24 +30,24 @@ import {
   pairEligibleGameTypes,
   sanitizeAge,
   sanitizeDays,
-} from "./booklet";
+} from "./lib/booklet/booklet";
 import {
   enrichOfflinePreviewGameplay,
   type GeneratedBookletData,
   type GeneratedBookletProfile,
   isGeneratedBookletData,
-} from "./booklet-ai";
-import { ActivityGame } from "./activity-game";
-import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./doodles";
-import { bookletCorePageTitles, bookletDayPageEntries } from "./booklet-pages";
+} from "./lib/generation/booklet-ai";
+import { ActivityGame } from "./components/activity-game";
+import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./components/doodles";
+import { bookletCorePageTitles, bookletDayPageEntries } from "./lib/booklet/pages";
 import {
   GenerationStreamError,
   readGenerationResponse,
-} from "./generation-stream";
+} from "./lib/generation/stream";
 import {
   FULL_PREVIEW_FOR_TESTERS,
   isBookletPageLocked,
-} from "./booklet-preview";
+} from "./lib/booklet/preview";
 import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
@@ -65,7 +65,7 @@ import {
   readingLevelForAge,
   type FamilyChild,
   type ItineraryEvent,
-} from "./family";
+} from "./lib/family";
 
 type Trip = {
   age: number;
@@ -1555,7 +1555,7 @@ function FamilyPackPreviewPage({
 
 // Label prefix for the queue page's secret-target badge, keyed by
 // QueueTargetKind. Purely presentational (never AI-authored), mirrors
-// queueTargetKindCopy in app/booklet-pdf.ts; an unexpected kind falls back
+// queueTargetKindCopy in app/lib/pdf/booklet-pdf.ts; an unexpected kind falls back
 // to a neutral default rather than showing nothing.
 const queueTargetKindPrefix: Record<string, string> = {
   shape: "Your secret shape:",

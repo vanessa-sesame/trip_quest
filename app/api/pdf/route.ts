@@ -1,13 +1,13 @@
-import { applySiblingPlan } from "../../booklet-ai";
+import { applySiblingPlan } from "../../lib/generation/booklet-ai";
 import {
   familyPackPdfFilename,
   createBookletPdf,
   type FamilyPackContext,
-} from "../../booklet-pdf";
+} from "../../lib/pdf/booklet-pdf";
 import {
   familyChildDisplayName,
   mechanicPlanForTrip,
-} from "../../family";
+} from "../../lib/family";
 import {
   type BookletDatabase,
   type BookletObjectStorage,
@@ -17,7 +17,7 @@ import {
   readStoredBooklet,
   readStoredBookletPdf,
   writeStoredBookletPdf,
-} from "../../booklet-storage";
+} from "../../lib/storage/booklet-storage";
 import {
   readPurchasePdf,
   readVerifiedPaidPurchase,
@@ -26,14 +26,14 @@ import {
   writePurchasePdf,
   type PaymentRuntime,
   type PurchaseRecord,
-} from "../../payment";
-import { normalizePdfRequest, type NormalizedPdfRequest } from "../../pdf-request";
+} from "../../lib/payment";
+import { normalizePdfRequest, type NormalizedPdfRequest } from "../../lib/pdf/request";
 import {
   HttpRequestError,
   assertSameOriginRequest,
   readJsonObject,
-} from "../../request-security";
-import { illustrationStorageKey } from "../../illustration-ai";
+} from "../../lib/request-security";
+import { illustrationStorageKey } from "../../lib/generation/illustration-ai";
 
 export const dynamic = "force-dynamic";
 

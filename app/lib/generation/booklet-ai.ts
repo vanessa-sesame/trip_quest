@@ -6,14 +6,14 @@ import {
   type GameItem,
   type GameType,
   type QueueTargetKind,
-} from "./booklet.ts";
+} from "../booklet/booklet.ts";
 import {
   familyChildDisplayName,
   type FamilyChild,
   type InterestPlanItem,
   type ItineraryEvent,
-} from "./family.ts";
-import { createCrossword } from "./puzzles.ts";
+} from "../family.ts";
+import { createCrossword } from "../booklet/puzzles.ts";
 
 const supportedGameTypes: GameType[] = [
   "coloring",
@@ -242,7 +242,7 @@ export function balancedGameTypePlanForTrip(
 
 // Generic clue items for a preview activity that doesn't have real,
 // researched ones yet — only ever used by enrichOfflinePreviewGameplay
-// below, the same role app/activity-game.tsx's own fallbackItems plays for
+// below, the same role app/components/activity-game.tsx's own fallbackItems plays for
 // the web board renderer, kept here too so the PDF path (which has no such
 // fallback and expects real items on any gameType that needs them) gets
 // something sane as well.
@@ -259,7 +259,7 @@ function seededPick<T>(options: T[], seed: string): T {
   return options[hash % options.length];
 }
 
-// buildBooklet's offline generator (app/booklet.ts) — the deterministic
+// buildBooklet's offline generator (app/lib/booklet/booklet.ts) — the deterministic
 // fallback used for the web preview before a real booklet has been
 // generated — varies each day's theme, landmark, and activity titles, but
 // never assigns inThePlace/inThePlaceSecond/sitDown a gameType or items at
@@ -388,11 +388,11 @@ function addInterestLens(mission: string, interest: string) {
   return `${base}. ${lens}`;
 }
 
-export function applyInterestPlan(
-  draft: BookletDraft,
+export function applyInterestPlan<T extends BookletDraft>(
+  draft: T,
   interestPlan: InterestPlanItem[],
   dayOffset = 0,
-): BookletDraft {
+): T {
   return {
     ...draft,
     dayPlans: draft.dayPlans.map((day, localDayIndex) => {
@@ -530,10 +530,10 @@ function familyMission(children: FamilyChild[], day: DayPlan, dayIndex: number) 
   return `${tasks.join("; ")}. Combine the answers at ${place}.`.slice(0, 280);
 }
 
-export function applySiblingPlan(
-  draft: BookletDraft,
+export function applySiblingPlan<T extends BookletDraft>(
+  draft: T,
   familyOrHasSiblings: FamilyChild[] | boolean,
-): BookletDraft {
+): T {
   const family = Array.isArray(familyOrHasSiblings) ? familyOrHasSiblings : null;
   const hasSiblings = family ? family.length > 1 : familyOrHasSiblings;
   const siblingMissionPatterns = [
@@ -594,9 +594,9 @@ export type GeneratedBookletData = BookletDraft & {
   editionFingerprint?: string;
   family?: FamilyChild[];
   events?: ItineraryEvent[];
-  // Set by addCoverIllustration (app/illustration-ai.ts) when an AI-generated
+  // Set by addCoverIllustration (app/lib/generation/illustration-ai.ts) when an AI-generated
   // hero image is available; the cover falls back to the hand-drawn
-  // destination motif (app/pdf-illustrations.ts) when absent, the same way
+  // destination motif (app/lib/pdf/illustrations.ts) when absent, the same way
   // every other AI-illustrated element in the booklet degrades gracefully.
   coverIllustrationPath?: string;
 };
@@ -879,7 +879,7 @@ function validateActivity(
     requiresPresence: requiresPresenceStrict
       ? activity.requiresPresence === true
       : Boolean(activity.requiresPresence),
-    answerMode: activity.answerMode === "closed" ? "closed" : "open",
+    answerMode: activity.answerMode === "closed" ? "closed" as const : "open" as const,
     ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
       ? { illustrationPath: activity.illustrationPath }
       : {}),

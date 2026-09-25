@@ -2,7 +2,7 @@ import {
   defaultFamilyWorkspace,
   normalizeFamilyWorkspace,
   type FamilyWorkspace,
-} from "./family";
+} from "../family";
 import type { BookletDatabase } from "./booklet-storage";
 
 export async function readFamilyWorkspace(database: BookletDatabase, familyId: string) {

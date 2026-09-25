@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { coloringPageSpec, coloringSceneFor, coloringVariantFor, curatedColoringImagePath } from "../app/coloring.ts";
+import { coloringPageSpec, coloringSceneFor, coloringVariantFor, curatedColoringImagePath } from "../app/lib/booklet/coloring.ts";
 
 const activity = (title: string, label = "DETAIL", clue = "A local detail to notice.") => ({
   title,

@@ -4,10 +4,10 @@ import {
   FREE_PREVIEW_PAGE_COUNT,
   createBookletPreview,
   isBookletPageLocked,
-} from "../app/booklet-preview.ts";
+} from "../app/lib/booklet/preview.ts";
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
-import { buildBooklet, getDestinationProfile } from "../app/booklet.ts";
-import type { GeneratedBookletData } from "../app/booklet-ai.ts";
+import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
+import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 test("only the first three booklet pages are exposed in a public preview", () => {
   const booklet = sampleGeneratedBooklet();
@@ -87,7 +87,7 @@ test("a second in-place activity is locked with its page, not left exposed", () 
 });
 
 test("a reveal page shifts every later lock boundary by one, day by day", () => {
-  // buildBooklet's offline fallback (app/booklet.ts's buildDaySlots) always
+  // buildBooklet's offline fallback (app/lib/booklet/booklet.ts's buildDaySlots) always
   // sets questReveal (with a nested targetLabel), so day 1 here is 4 pages
   // (queue, reveal, in-place, sit-down) instead of 3 — proving the lock
   // logic derives indices from bookletDayPageEntries rather than assuming a

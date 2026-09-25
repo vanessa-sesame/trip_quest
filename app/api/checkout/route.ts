@@ -3,8 +3,8 @@ import {
   readStoredBookletReference,
   type BookletDatabase,
   type BookletObjectStorage,
-} from "../../booklet-storage";
-import { normalizePdfRequest } from "../../pdf-request";
+} from "../../lib/storage/booklet-storage";
+import { normalizePdfRequest } from "../../lib/pdf/request";
 import {
   createCheckoutSession,
   familyCookie,
@@ -12,12 +12,12 @@ import {
   readFamilyId,
   writePendingPurchase,
   type PaymentRuntime,
-} from "../../payment";
+} from "../../lib/payment";
 import {
   HttpRequestError,
   assertSameOriginRequest,
   readJsonObject,
-} from "../../request-security";
+} from "../../lib/request-security";
 
 export const dynamic = "force-dynamic";
 

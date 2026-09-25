@@ -1,5 +1,5 @@
-import { illustrationStorageKey } from "../../illustration-ai";
-import type { BookletObjectStorage } from "../../booklet-storage";
+import { illustrationStorageKey } from "../../lib/generation/illustration-ai";
+import type { BookletObjectStorage } from "../../lib/storage/booklet-storage";
 
 export const dynamic = "force-dynamic";
 

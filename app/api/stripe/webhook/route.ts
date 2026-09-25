@@ -1,10 +1,10 @@
-import type { BookletDatabase } from "../../../booklet-storage";
+import type { BookletDatabase } from "../../../lib/storage/booklet-storage";
 import {
   markPurchasePaidFromStripeSession,
   parseStripeEvent,
   verifyStripeSignature,
   type PaymentRuntime,
-} from "../../../payment";
+} from "../../../lib/payment";
 
 export const dynamic = "force-dynamic";
 

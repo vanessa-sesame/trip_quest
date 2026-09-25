@@ -4,7 +4,7 @@
 // className="jt-doodle" (see globals.css) rather than inline styles, so a
 // page can scatter a few without each one becoming a bespoke one-off.
 // Mirrors the same restrained vocabulary as the printable PDF's
-// app/pdf-illustrations.ts doodle primitives (drawHandLine, drawStampCircle,
+// app/lib/pdf/illustrations.ts doodle primitives (drawHandLine, drawStampCircle,
 // etc.) — same idea, translated into SVG for the browser.
 
 type DoodleProps = {

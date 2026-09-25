@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bookletArtifactKey } from "../app/booklet-storage.ts";
-import { purchaseEditionFromRequestJson, verifyStripeSignature } from "../app/payment.ts";
+import { bookletArtifactKey } from "../app/lib/storage/booklet-storage.ts";
+import { purchaseEditionFromRequestJson, verifyStripeSignature } from "../app/lib/payment.ts";
 
 test("Stripe webhook signatures accept a fresh HMAC and reject stale or altered payloads", async () => {
   const payload = JSON.stringify({ type: "checkout.session.completed" });

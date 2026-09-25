@@ -1,5 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { createBookletPdf } from "../app/booklet-pdf.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createBookletPdf } from "../app/lib/pdf/booklet-pdf.ts";
 import { sampleGeneratedBooklet } from "../tests/fixtures/generated-booklet.ts";
 
 const source = sampleGeneratedBooklet();
@@ -51,4 +51,6 @@ const booklet = {
   dayPlans,
 };
 const pdf = await createBookletPdf(booklet);
-await writeFile(new URL("../output/pdf/TripQuest-Five-Slot-Architecture-QA.pdf", import.meta.url), pdf);
+const outputDirectory = new URL("../artifacts/qa/", import.meta.url);
+await mkdir(outputDirectory, { recursive: true });
+await writeFile(new URL("TripQuest-Five-Slot-Architecture-QA.pdf", outputDirectory), pdf);

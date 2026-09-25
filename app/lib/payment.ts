@@ -2,7 +2,7 @@ import {
   isBookletArtifactKey,
   type BookletDatabase,
   type BookletObjectStorage,
-} from "./booklet-storage.ts";
+} from "./storage/booklet-storage.ts";
 
 export type PaymentRuntime = {
   STRIPE_SECRET_KEY?: string;
@@ -184,7 +184,7 @@ function stripeMetadataMatchesPurchase(session: StripeSession, purchase: Purchas
 
 export async function writePendingPurchase(
   database: BookletDatabase,
-  input: Omit<PurchaseRecord, "status" | "pdfKey">,
+  input: Omit<PurchaseRecord, "status" | "pdfKey" | "edition">,
   amountCents: number,
   currencyCode: string,
 ) {

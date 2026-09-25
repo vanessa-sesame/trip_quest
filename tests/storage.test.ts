@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { buildBooklet } from "../app/booklet.ts";
+import { buildBooklet } from "../app/lib/booklet/booklet.ts";
 import {
   type BookletCacheIdentity,
   type BookletDatabase,
@@ -29,8 +29,8 @@ import {
   writeStoredBookletBatch,
   writeStoredBookletPdf,
   writeStoredResearch,
-} from "../app/booklet-storage.ts";
-import type { GeneratedBookletData } from "../app/booklet-ai.ts";
+} from "../app/lib/storage/booklet-storage.ts";
+import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 function createTestDatabase(): BookletDatabase {
   const sqlite = new DatabaseSync(":memory:");

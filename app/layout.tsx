@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Same two families the printable PDF uses (app/booklet-pdf.ts's FONT_ASSETS)
+// Same two families the printable PDF uses (app/lib/pdf/booklet-pdf.ts's FONT_ASSETS)
 // so the on-screen preview and the printed booklet read as the same object,
 // not two different designs.
 const displayFont = Short_Stack({

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
-import type { Activity, GameItem, GameType } from "./booklet";
+import type { Activity, GameItem, GameType } from "../lib/booklet/booklet";
 import {
   coloringIllustrationSpecs,
   curatedColoringImagePath,
@@ -8,7 +8,7 @@ import {
   coloringSceneFor,
   coloringSceneLabels,
   coloringVariantFor,
-} from "./coloring";
+} from "../lib/booklet/coloring";
 import {
   createCrossword,
   createMaze,
@@ -16,7 +16,7 @@ import {
   createWordSearch,
   mazeSizeForAge,
   normalizePuzzleWord,
-} from "./puzzles";
+} from "../lib/booklet/puzzles";
 
 const gameNames: Record<GameType, string> = {
   coloring: "Coloring page",

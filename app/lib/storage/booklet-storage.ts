@@ -4,11 +4,11 @@ import {
   type GeneratedBookletData,
   normalizeItinerary,
   validateBookletDraft,
-} from "./booklet-ai.ts";
+} from "../generation/booklet-ai.ts";
 import {
   normalizeFamilyChildren,
   normalizeItineraryEvents,
-} from "./family.ts";
+} from "../family.ts";
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-21-9";

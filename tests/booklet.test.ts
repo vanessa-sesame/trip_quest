@@ -5,7 +5,7 @@ import {
   getAgeBand,
   getDestinationProfile,
   sanitizeAge,
-} from "../app/booklet.ts";
+} from "../app/lib/booklet/booklet.ts";
 import {
   applyInterestPlan,
   applySiblingPlan,
@@ -13,15 +13,15 @@ import {
   balancedGameTypePlanForTrip,
   normalizeItinerary,
   validateBookletDraft,
-} from "../app/booklet-ai.ts";
+} from "../app/lib/generation/booklet-ai.ts";
 import {
   createCrossword,
   createMaze,
   createRoutePuzzle,
   createWordSearch,
   mazeSizeForAge,
-} from "../app/puzzles.ts";
-import { coloringSceneFor } from "../app/coloring.ts";
+} from "../app/lib/booklet/puzzles.ts";
+import { coloringSceneFor } from "../app/lib/booklet/coloring.ts";
 
 function bookletText(age: number, destination: string) {
   return JSON.stringify(buildBooklet(age, destination, 5));

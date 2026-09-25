@@ -6,7 +6,7 @@ import {
   createClientRateLimitKey,
   readJsonObject,
   requireInteger,
-} from "../app/request-security.ts";
+} from "../app/lib/request-security.ts";
 
 test("API requests enforce same-origin browser calls", () => {
   assert.doesNotThrow(() => assertSameOriginRequest(new Request(

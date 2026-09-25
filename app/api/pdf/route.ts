@@ -183,8 +183,14 @@ async function preparePdf(
         const stored = await runtime.BOOKLET_FILES?.get(storedKey);
         return stored?.arrayBuffer ? new Uint8Array(await stored.arrayBuffer()) : null;
       }
-      if (!runtime.ASSETS) return null;
-      const response = await runtime.ASSETS.fetch(new Request(new URL(path, request.url)));
+      if (!path.startsWith("/") || path.startsWith("//")) return null;
+      const assetRequest = new Request(new URL(path, request.url));
+      // Local dev has no ASSETS binding (vite.config.ts only simulates D1/R2),
+      // which silently rendered every dev PDF in Helvetica with no curated
+      // art; the dev server serves public/ itself, so fetch it from there.
+      const response = runtime.ASSETS
+        ? await runtime.ASSETS.fetch(assetRequest)
+        : await fetch(assetRequest);
       if (!response.ok) return null;
       return new Uint8Array(await response.arrayBuffer());
     };

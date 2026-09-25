@@ -147,3 +147,14 @@ test("sanitizing leaves other days untouched", () => {
   ]);
   assert.deepEqual(sanitized.dayPlans[1], draft.dayPlans[1]);
 });
+
+test("a neutralized reveal still names the target when the target itself was fine", () => {
+  const draft = draftWithClaim("The purple spiky flower is Singapore's national orchid!");
+  const sanitized = sanitizeUngroundedClaims(draft, [
+    { day: 1, field: "questReveal.revealText", issue: "not spiky" },
+  ]);
+  assert.equal(
+    sanitized.dayPlans[0].slots.questReveal!.revealText,
+    "You found the spiky ball! Look closely: what makes it special here?",
+  );
+});

@@ -437,3 +437,23 @@ test("printable puzzle builders use supplied place vocabulary", () => {
     assert.ok(route.minimumStreets > 0);
   }
 });
+
+test("the game planner never repeats a game type on consecutive days", () => {
+  // Regression: a rotated table slice could wrap into two identical rows, and
+  // drawing replacements only checked the previous slot, so Paris age 9-12
+  // came out quiz+scavenger_hunt on two days running.
+  const destinations = ["Paris", "Tokyo", "Kuala Lumpur", "Rome", "Lisbon", "Hoi An", "Cairo", "Sydney"];
+  for (const age of [3, 5, 6, 8, 9, 11, 12, 14]) {
+    for (const destination of destinations) {
+      for (const days of [2, 3, 5, 7, 14]) {
+        for (const interests of [undefined, [], [{ day: 1, childNumber: 1, interest: "drawing" }]]) {
+          const plan = balancedGameTypePlanForTrip(age, days, interests, destination);
+          for (let index = 1; index < plan.length; index += 1) {
+            const shared = plan[index].gameTypes.filter((type) => plan[index - 1].gameTypes.includes(type));
+            assert.deepEqual(shared, [], `age ${age} ${destination} ${days}d day ${index + 1}: ${JSON.stringify(plan.map((day) => day.gameTypes))}`);
+          }
+        }
+      }
+    }
+  }
+});

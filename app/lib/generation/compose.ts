@@ -15,6 +15,7 @@ import {
 } from "../storage/booklet-storage.ts";
 import type { InterestPlanItem } from "../family.ts";
 import { checkGroundedClaims, groundingCorrectionMessage, sanitizeUngroundedClaims } from "./grounding.ts";
+import { composedContentIssues } from "../booklet/qa.ts";
 import { kimiRequest } from "./kimi.ts";
 import { logStorageFailure } from "./log.ts";
 import type { ResearchResult } from "./research.ts";
@@ -145,12 +146,13 @@ export function bookletSchema(days: number, age: number) {
                     instruction: { type: "string" },
                     countLabel: { type: "string" },
                     countTo: { type: "integer", minimum: 1, maximum: 20 },
-                    required: { type: "boolean" },
-                    // Nested (not gameType/items alongside "required") because
-                    // this object already has its own property named
-                    // "required" next to the JSON-Schema "required" keyword;
-                    // that collision measurably made Kimi drop these two
-                    // fields when they sat at the same level.
+                    // Deliberately not named "required": a data property
+                    // with the same name as the JSON-Schema "required"
+                    // keyword made Kimi return this whole object empty
+                    // (confirmed live, 3/3 attempts), so every queue page
+                    // fell back to placeholder copy. validateBookletDraft
+                    // maps it back to QueueSlot.required.
+                    queueLikely: { type: "boolean" },
                     game: {
                       type: "object",
                       additionalProperties: false,
@@ -166,7 +168,7 @@ export function bookletSchema(days: number, age: number) {
                     "instruction",
                     "countLabel",
                     "countTo",
-                    "required",
+                    "queueLikely",
                     "game",
                   ],
                 },
@@ -302,7 +304,7 @@ CREATIVE DIRECTION
 - Every day must return exactly seven named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard, questReveal. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
-- whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${queueEligibleGameTypes.join(", ")}. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Still set required=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
+- whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${queueEligibleGameTypes.join(", ")}. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Set queueLikely=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
 - whileYouWait and questReveal together form a two-page mystery: the child is set a secret target to spot while waiting, then the payoff page confirms it once the family has arrived. All of the mystery/reveal fields live inside questReveal. questReveal.targetLabel is the short, punchy name of that target as it would look on a badge (2-5 words, for example "ARCH", "SOMETHING RED", "A DRUM BEAT") — it must be a specific, visually or audibly spottable thing drawn from the research, never a vague category. questReveal.targetKind classifies it as exactly one of shape, colour, object, sound, or person. questReveal.bonusQuest is one short extra challenge line tied to the same target (for example "Find the strangest one!"). questReveal.revealText is the payoff: 1-2 sentences that name the real place/detail the target came from, tied to the actual research, in an excited voice (for example "Here it is! The arch you spotted is from the colourful shophouses on this street!"). questReveal.chatPrompts are exactly two short, open-ended questions a parent could actually ask on the spot, building on what the child just found.
 - inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${pairEligibleGameTypes.join(", ")}.
 - sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.
@@ -315,6 +317,9 @@ CREATIVE DIRECTION
 - A map_puzzle is a route-planning street-grid challenge with START, FINISH, closed roads, and four named local stops. The child must choose and trace the route; never pre-draw the answer or describe it as connecting four dots. Never call an activity Sudoku because Sudoku is not a supported game mechanic.
 - For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
 - Exactly four items appear in each printed game. Never mention a fifth item, extra target, or different answer in the activity body or prompt.
+- Every item label names a different, specific local thing: a real object, place, food, word, or feature. Never number or order labels ("Treasure 1", "Food 2", "First red lantern", "Second find") and never reuse the same word across one game's labels. On a drawing or story page the four items are four different things to draw or write about, each labelled with that thing ("Roof", "Price tag", "Lantern"), not a numbered sequence.
+- For quiz games, each item's clue is a genuine question a child can answer by looking at the place (ending in "?"), and its label is the short correct answer.
+- For matching, bingo, quiz, and codebreaker games, clues describe or ask about a real detail; they are never drawing, colouring, or writing instructions.
 - For answerMode use closed only when the puzzle has one checkable answer. Use open for observations, drawings, and imaginative responses.
 - Do not repeat a fill-in template, activity title, sentence frame, or “create your own” task.
 - Keep facts accurate and culturally respectful. Phrase myths as stories rather than facts.
@@ -338,6 +343,15 @@ ${research.notes}`,
     ];
   let correction = extraGuidance || "";
   let lastError: unknown;
+  // The most recent draft that passed hard validation but was sent back for
+  // a soft reason (content rules, grounding). A live run lost a whole booklet
+  // when the final retry degenerated (profile.etiquette came back as the
+  // literal word "etiquette") even though earlier attempts were usable.
+  let lastValidDraft: BookletDraft | undefined;
+  const finalize = (draft: BookletDraft) => applySiblingPlan(
+    applyInterestPlan(draft, assignedInterests, dayOffset),
+    hasSiblings,
+  );
 
   // Two correction attempts (three tries total). A retry only recomposes
   // this one checkpointed batch, not the whole booklet, so the extra attempt
@@ -377,14 +391,23 @@ ${research.notes}`,
         days,
         age,
       );
-      // whileYouWait's gameType/items are requested in the schema and prompt
-      // but Kimi does not reliably include them (confirmed live, 4/4
-      // generations, even after an explicit correction demanding it).
-      // Enforcing them here just burns the correction budget and fails the
-      // whole batch for something Kimi structurally won't comply with, so
-      // this stays optional like validateBookletDraft treats it: when
+      lastValidDraft = draft;
+      // whileYouWait's game stays optional, as in validateBookletDraft: when
       // present it renders as a real game, when absent the queue page falls
-      // back to its plain counting instruction.
+      // back to its counting instruction. (Kimi used to return whileYouWait
+      // empty every time; that was the schema's "required" property-name
+      // collision, not Kimi ignoring the prompt — see bookletSchema.)
+      // Cheap local content rules first, so a draft that needs rewriting
+      // anyway doesn't pay for a fact-check call. Soft on the last attempt,
+      // like grounding: a filler label is worse than nothing only when the
+      // alternative isn't a failed booklet.
+      const contentIssues = composedContentIssues(draft);
+      if (contentIssues.length && attempt < 2) {
+        throw new Error(contentIssues.join(" "));
+      }
+      if (contentIssues.length) {
+        console.error("[TripQuest content] accepted with issues:", JSON.stringify(contentIssues));
+      }
       const groundingFindings = await checkGroundedClaims(draft, research, apiKey, model, modelOptions);
       if (groundingFindings.length && attempt < 2) {
         throw new Error(groundingCorrectionMessage(groundingFindings));
@@ -400,14 +423,24 @@ ${research.notes}`,
         // this is a warning, not a thrown error.
         console.error("[TripQuest grounding] accepted with sanitized claims:", JSON.stringify(groundingFindings));
       }
-      return applySiblingPlan(
-        applyInterestPlan(groundedDraft, assignedInterests, dayOffset),
-        hasSiblings,
-      );
+      return finalize(groundedDraft);
     } catch (error) {
       lastError = error;
+      console.info(
+        `[TripQuest composition] day ${dayOffset + 1}-${dayOffset + days} attempt ${attempt + 1} rejected:`,
+        (error instanceof Error ? error.message : String(error)).slice(0, 300),
+      );
       correction = `The previous booklet could not be accepted: ${error instanceof Error ? error.message : "invalid output"} Return a complete replacement JSON booklet. Keep every item label non-empty; word-puzzle labels must be unique 3-to-9-letter local words.`;
     }
+  }
+
+  if (lastValidDraft) {
+    const findings = await checkGroundedClaims(lastValidDraft, research, apiKey, model, modelOptions);
+    console.error(
+      "[TripQuest composition] final attempt unusable; falling back to the last draft that passed validation:",
+      lastError instanceof Error ? lastError.message : String(lastError),
+    );
+    return finalize(findings.length ? sanitizeUngroundedClaims(lastValidDraft, findings) : lastValidDraft);
   }
 
   throw lastError instanceof Error ? lastError : new Error("Kimi returned no valid booklet content.");

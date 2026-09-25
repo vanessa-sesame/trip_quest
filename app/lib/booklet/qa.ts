@@ -127,3 +127,71 @@ export function assertBookletQa(booklet: GeneratedBookletData) {
   });
   return booklet;
 }
+
+const ORDINAL_LABEL = /^(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b/i;
+const COUNTER_SUFFIX = /\s*#?\d+$/;
+const IMPERATIVE_CLUE = /^(draw|colou?r|write|sketch|trace)\b/i;
+const CLUE_MECHANICS = new Set(["matching", "quiz", "bingo", "codebreaker"]);
+
+type ComposedGame = { title: string; gameType?: string; items?: { label: string; clue: string }[] };
+
+function composedGames(day: DayPlan): ComposedGame[] {
+  const queue = day.slots.whileYouWait;
+  const games: Array<ComposedGame | undefined> = [
+    day.slots.inThePlace,
+    day.slots.inThePlaceSecond,
+    day.slots.sitDown,
+    queue.items ? { title: queue.title, gameType: queue.gameType, items: queue.items } : undefined,
+  ];
+  return games.filter((game): game is ComposedGame => Boolean(game));
+}
+
+// Composition-time content rules. Unlike assertBookletQa these return
+// messages instead of throwing and never run on stored booklets, so they
+// can tighten over time without invalidating editions already saved.
+export function composedContentIssues(draft: { dayPlans: DayPlan[] }) {
+  const issues: string[] = [];
+  for (const day of draft.dayPlans) {
+    const dayGames = [day.slots.inThePlace, day.slots.inThePlaceSecond, day.slots.sitDown]
+      .filter((game) => Boolean(game?.gameType));
+    const types = dayGames.map((game) => game!.gameType);
+    const repeated = types.filter((type, index) => types.indexOf(type) !== index);
+    if (repeated.length) {
+      issues.push(
+        `Day ${day.day} uses ${repeated[0]} for more than one game; its in-place, second in-place and sit-down games must be three different game types (follow the assigned schedule).`,
+      );
+    }
+    for (const game of composedGames(day)) {
+      const items = game.items ?? [];
+      const labels = items.map((item) => item.label.trim());
+      const ordinal = labels.filter((label) => ORDINAL_LABEL.test(label));
+      const stems = labels.map((label) => label.replace(COUNTER_SUFFIX, "").toLocaleLowerCase());
+      const counted = labels.filter((label, index) =>
+        COUNTER_SUFFIX.test(label) && stems.filter((stem) => stem === stems[index]).length > 1,
+      );
+      const filler = [...new Set([...ordinal, ...counted])];
+      if (filler.length) {
+        issues.push(
+          `Day ${day.day} "${game.title}" uses numbered filler labels (${filler.join(", ")}); give its four items four different, specific local things instead.`,
+        );
+      }
+      if (game.gameType && CLUE_MECHANICS.has(game.gameType)) {
+        const imperative = items.filter((item) => IMPERATIVE_CLUE.test(item.clue.trim()));
+        if (imperative.length) {
+          issues.push(
+            `Day ${day.day} "${game.title}" is a ${game.gameType} game but its clues are drawing/writing instructions ("${imperative[0].clue}"); write clues that describe or ask about a real local detail.`,
+          );
+        }
+      }
+      if (game.gameType === "quiz") {
+        const notQuestions = items.filter((item) => !item.clue.includes("?"));
+        if (notQuestions.length) {
+          issues.push(
+            `Day ${day.day} "${game.title}" is a quiz but "${notQuestions[0].clue}" is not a question; each quiz clue must be a real question whose answer is its label.`,
+          );
+        }
+      }
+    }
+  }
+  return issues;
+}

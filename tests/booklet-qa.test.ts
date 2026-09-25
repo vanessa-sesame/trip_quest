@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
-import { assertBookletQa, wordCount } from "../app/lib/booklet/qa.ts";
+import { assertBookletQa, composedContentIssues, wordCount } from "../app/lib/booklet/qa.ts";
 import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 function strictBooklet(days = 2): GeneratedBookletData {
@@ -98,4 +98,79 @@ test("QA rejects duplicate mission cards and multi-child language for one child"
   const wrongRoster = strictBooklet();
   wrongRoster.dayPlans[0].siblingMission = "One explorer counts while the other writes. Swap roles.";
   assert.throws(() => assertBookletQa(wrongRoster), /one-child roster/i);
+});
+
+function draftWith(items: { label: string; clue: string }[], gameType: "bingo" | "quiz" | "matching" | "drawing" = "bingo") {
+  const dayPlans = buildBooklet(7, "Tokyo", 1);
+  dayPlans[0].slots.inThePlace = { ...dayPlans[0].slots.inThePlace, gameType, items };
+  return { dayPlans };
+}
+
+test("numbered or ordinal filler labels are flagged at composition time", () => {
+  // Live examples from the 50-scenario run: "First/Second/Third/Fourth red
+  // lantern" (Tokyo), "Treasure 1/Treasure 2" (Cairo), "Food 1/Food 2" (New York).
+  const ordinal = composedContentIssues(draftWith([
+    { label: "First red lantern you see", clue: "A red paper lantern." },
+    { label: "Second red lantern", clue: "Another one." },
+    { label: "Tuna block", clue: "Big red fish at a stall." },
+    { label: "Onigiri", clue: "Rice triangle wrapped in seaweed." },
+  ]));
+  assert.match(ordinal.join(" "), /numbered filler labels \(First red lantern you see, Second red lantern\)/);
+
+  const counted = composedContentIssues(draftWith([
+    { label: "Stall roof", clue: "A striped awning." },
+    { label: "Treasure 1", clue: "A brass lamp." },
+    { label: "Treasure 2", clue: "A woven basket." },
+    { label: "Price tag", clue: "Egyptian pounds." },
+  ]));
+  assert.match(counted.join(" "), /Treasure 1, Treasure 2/);
+
+  const fine = composedContentIssues(draftWith([
+    { label: "Platform 9", clue: "Where the express stops." },
+    { label: "Onigiri", clue: "Rice triangle wrapped in seaweed." },
+    { label: "Lantern", clue: "Red paper light." },
+    { label: "Tuna block", clue: "Big red fish at a stall." },
+  ]));
+  assert.deepEqual(fine.filter((issue) => issue.includes("filler")), [], "a lone numbered proper noun is fine");
+});
+
+test("drawing instructions as clues are flagged on clue-based games", () => {
+  const issues = composedContentIssues(draftWith([
+    { label: "Stall roof", clue: "Draw a striped roof over your shop." },
+    { label: "Lamp", clue: "A brass lamp." },
+    { label: "Basket", clue: "A woven basket." },
+    { label: "Price tag", clue: "Egyptian pounds." },
+  ], "matching"));
+  assert.match(issues.join(" "), /matching game but its clues are drawing\/writing instructions/);
+
+  const drawingPage = composedContentIssues(draftWith([
+    { label: "Roof", clue: "Draw a striped roof over your shop." },
+    { label: "Lamp", clue: "Draw a brass lamp." },
+    { label: "Basket", clue: "Draw a woven basket." },
+    { label: "Price tag", clue: "Write a price." },
+  ], "drawing"));
+  assert.deepEqual(drawingPage.filter((issue) => issue.includes("instructions")), [], "drawing pages may use instructions");
+});
+
+test("quiz clues must be real questions", () => {
+  // Live example: a quiz whose "question" was the statement "space between
+  // the left building and the center hall", answered by "left gap / right gap".
+  const issues = composedContentIssues(draftWith([
+    { label: "Two", clue: "space between the left building and the center hall" },
+    { label: "Red", clue: "What color is the main gate?" },
+    { label: "Lion", clue: "Which animal guards the steps?" },
+    { label: "Nine", clue: "How many roof tiers can you count?" },
+  ], "quiz"));
+  assert.match(issues.join(" "), /is a quiz but "space between the left building and the center hall" is not a question/);
+});
+
+test("a day's three games must be three different game types", () => {
+  // Live example: Kuala Lumpur day 1 came back matching (in-place) + story +
+  // matching (sit-down) with near-identical labels, despite a matching+story schedule.
+  const four = (labels: string[]) => labels.map((label) => ({ label, clue: `The ${label.toLowerCase()} by the towers.` }));
+  const dayPlans = buildBooklet(6, "Kuala Lumpur", 1);
+  dayPlans[0].slots.inThePlace = { ...dayPlans[0].slots.inThePlace, gameType: "matching", items: four(["Two spires", "Sky bridge", "Glass shine", "Same height"]) };
+  dayPlans[0].slots.inThePlaceSecond = { ...dayPlans[0].slots.inThePlace, gameType: "story", items: four(["Tracks", "Station", "Signal", "Bridge"]) };
+  dayPlans[0].slots.sitDown = { ...dayPlans[0].slots.sitDown, gameType: "matching", items: four(["Spire", "Walkway", "Window", "Base"]) };
+  assert.match(composedContentIssues({ dayPlans }).join(" "), /Day 1 uses matching for more than one game/);
 });

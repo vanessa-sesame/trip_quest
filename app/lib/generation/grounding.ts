@@ -179,6 +179,9 @@ export function sanitizeUngroundedClaims(
 
       const reveal = day.slots.questReveal;
       const clearFactCard = [...fields].some((field) => field.startsWith("factCard["));
+      const trustedTarget = !fields.has("questReveal.targetLabel") && reveal?.targetLabel?.trim()
+        ? reveal.targetLabel.trim().toLocaleLowerCase()
+        : undefined;
 
       return {
         ...day,
@@ -194,7 +197,11 @@ export function sanitizeUngroundedClaims(
                     ? { bonusQuest: "Take a closer look and describe what you notice!" }
                     : {}),
                   ...(fields.has("questReveal.revealText")
-                    ? { revealText: "Great spotting — that's a real detail from this exact place!" }
+                    ? {
+                        revealText: trustedTarget
+                          ? `You found the ${trustedTarget}! Look closely: what makes it special here?`
+                          : "Great spotting! Tell a grown-up what you noticed and where you found it.",
+                      }
                     : {}),
                 },
               }

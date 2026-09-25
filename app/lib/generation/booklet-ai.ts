@@ -149,14 +149,29 @@ function drawingInterestPresent(interestPlan: InterestPlanItem[]) {
   return interestPlan.some((item) => /draw|art|paint|craft|sketch/i.test(item.interest));
 }
 
-function replaceUnwantedDrawing(gameTypes: [GameType, GameType], age: number, previous: GameType | undefined) {
+// `avoid` holds every game type already used on this day and its neighbours.
+// Avoiding only the previous slot let two adjacent days collapse into the
+// same pair (age 9-12 Paris came out quiz+scavenger_hunt twice in a row).
+function replaceUnwantedDrawing(gameTypes: [GameType, GameType], age: number, avoid: Iterable<GameType | undefined>) {
   const replacements = age <= 5
     ? ["matching", "story", "scavenger_hunt", "bingo", "spot_the_difference", "maze"] as GameType[]
     : age <= 8
       ? ["matching", "quiz", "scavenger_hunt", "bingo", "spot_the_difference", "story"] as GameType[]
       : ["quiz", "scavenger_hunt", "story", "codebreaker", "word_search", "crossword"] as GameType[];
-  const replacement = replacements.find((candidate) => candidate !== previous && allowedGameTypesForAge(age).includes(candidate));
-  return replacement || replacements.find((candidate) => allowedGameTypesForAge(age).includes(candidate)) || gameTypes[0];
+  const allowed = replacements.filter((candidate) => allowedGameTypesForAge(age).includes(candidate));
+  const avoided = new Set(avoid);
+  return allowed.find((candidate) => !avoided.has(candidate))
+    || allowed.find((candidate) => !gameTypes.includes(candidate))
+    || allowed[0]
+    || gameTypes[0];
+}
+
+function neighbourGameTypes(selected: Array<[GameType, GameType]>, dayIndex: number) {
+  return [
+    ...(selected[dayIndex - 1] ?? []),
+    ...selected[dayIndex],
+    ...(selected[dayIndex + 1] ?? []),
+  ].filter((gameType) => gameType !== "drawing");
 }
 
 // Every one of these per-age tables is fixed and always sliced from index 0
@@ -197,13 +212,11 @@ export function balancedGameTypePlanForTrip(
   // editions pass the interest plan so a drawing page is intentional, not filler.
   if (interestPlan) {
     const hasDrawingInterest = drawingInterestPresent(interestPlan);
-    let previous: GameType | undefined;
-    selected.forEach((gameTypes) => {
+    selected.forEach((gameTypes, dayIndex) => {
       for (let index = 0; index < gameTypes.length; index += 1) {
         if (gameTypes[index] === "drawing" && !hasDrawingInterest) {
-          gameTypes[index] = replaceUnwantedDrawing(gameTypes, age, previous);
+          gameTypes[index] = replaceUnwantedDrawing(gameTypes, age, neighbourGameTypes(selected, dayIndex));
         }
-        previous = gameTypes[index];
       }
     });
 
@@ -224,13 +237,28 @@ export function balancedGameTypePlanForTrip(
         selected.forEach((gameTypes, index) => {
           if (index === targetDay - 1) return;
           for (let slot = 0; slot < gameTypes.length; slot += 1) {
-            if (gameTypes[slot] === "drawing") gameTypes[slot] = replaceUnwantedDrawing(gameTypes, age, gameTypes[slot - 1]);
+            if (gameTypes[slot] === "drawing") gameTypes[slot] = replaceUnwantedDrawing(gameTypes, age, neighbourGameTypes(selected, index));
           }
         });
         if (!selected[targetDay - 1].includes("drawing")) {
           selected[targetDay - 1][0] = "drawing";
         }
       }
+    }
+  }
+
+  // Never the same game on consecutive days, whatever the table rotation or
+  // drawing swaps above produced (the tables' last and first rows are
+  // identical for some ages, so a rotated slice can wrap into a repeat).
+  const protectedDrawingDay = interestPlan && drawingInterestPresent(interestPlan)
+    ? interestPlan.find((item) => /draw|art|paint|craft|sketch/i.test(item.interest))?.day
+    : undefined;
+  for (let dayIndex = 1; dayIndex < selected.length; dayIndex += 1) {
+    const gameTypes = selected[dayIndex];
+    for (let slot = 0; slot < gameTypes.length; slot += 1) {
+      if (!selected[dayIndex - 1].includes(gameTypes[slot])) continue;
+      if (gameTypes[slot] === "drawing" && protectedDrawingDay === dayIndex + 1) continue;
+      gameTypes[slot] = replaceUnwantedDrawing(gameTypes, age, neighbourGameTypes(selected, dayIndex));
     }
   }
 
@@ -1090,7 +1118,7 @@ export function validateBookletDraft(
             countTo: Number.isInteger(queueValue.countTo) && Number(queueValue.countTo) >= 1 && Number(queueValue.countTo) <= 20
               ? Number(queueValue.countTo)
               : 5,
-            required: queueValue.required === true,
+            required: queueValue.queueLikely === true || queueValue.required === true,
             ...queueGame,
           }
         : {

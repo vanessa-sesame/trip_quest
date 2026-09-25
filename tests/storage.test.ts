@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { buildBooklet } from "../app/booklet.ts";
 import {
   type BookletCacheIdentity,
   type BookletDatabase,
@@ -302,6 +303,41 @@ test("immutable booklet snapshots preserve the frozen family and itinerary event
   assert.equal(restored?.fingerprint, fingerprint);
 });
 
+test("a cover illustration path survives a durable-storage round trip", async () => {
+  // Regression test: parseStoredBooklet rebuilds the booklet object read
+  // back from R2 via an explicit field whitelist that did not include
+  // coverIllustrationPath (unlike family/events, which do). That silently
+  // dropped every AI-generated cover image the moment a booklet was read
+  // back from durable storage — which /api/pdf always does — changing the
+  // recomputed fingerprint and making the download 409 with "This PDF does
+  // not match the booklet edition currently shown in the preview."
+  const database = createTestDatabase();
+  const { storage } = createTestArtifacts();
+  const coverIllustrationPath = `/api/illustration?key=${encodeURIComponent(`illustrations/v2/${"b".repeat(64)}/artwork.png`)}`;
+  const booklet: GeneratedBookletData = { ...generatedBooklet(), coverIllustrationPath };
+  const identity: BookletCacheIdentity = {
+    destination: booklet.destination,
+    age: booklet.age,
+    days: booklet.days,
+    itinerary: booklet.itinerary,
+    researchModel: "kimi-k3",
+    composerModel: "kimi-k2.6",
+  };
+  const cacheKey = await createBookletCacheKey(identity);
+  const fingerprint = await bookletSnapshotFingerprint(booklet);
+  await writeStoredBooklet(database, storage, {
+    cacheKey,
+    booklet,
+    researchModel: identity.researchModel,
+    composerModel: identity.composerModel,
+    expiresAt: Date.now() + 60_000,
+  });
+
+  const restored = await readStoredBooklet(database, storage, cacheKey, identity);
+  assert.equal(restored?.coverIllustrationPath, coverIllustrationPath);
+  assert.equal(restored && await bookletSnapshotFingerprint(restored), fingerprint);
+});
+
 test("a purchase can keep reading its exact edition after the D1 cache row changes", async () => {
   const database = createTestDatabase();
   const { storage } = createTestArtifacts();
@@ -357,6 +393,92 @@ test("edition fingerprints ignore transport metadata", async () => {
   const fingerprint = await bookletSnapshotFingerprint(booklet);
   const decorated = { ...booklet, editionFingerprint: "f".repeat(64) } as typeof booklet & { editionFingerprint: string };
   assert.equal(await bookletSnapshotFingerprint(decorated), fingerprint);
+});
+
+test("edition fingerprints do not depend on nested object key order", async () => {
+  // Regression test: bookletSnapshotFingerprint used to hash a plain
+  // JSON.stringify of the booklet, which serializes object keys in
+  // insertion order. Two code paths can build a logically identical
+  // questReveal object with photoPath inserted at a different position
+  // (attached after composition vs. rebuilt in validateBookletDraft's fixed
+  // field order while re-reading a stored booklet), which changed the hash
+  // for content that had not actually changed and made a live /api/pdf call
+  // 409 with "This PDF does not match the booklet edition currently shown
+  // in the preview" for any booklet whose day needed a QA repair pass.
+  const booklet: GeneratedBookletData = { ...generatedBooklet(), dayPlans: buildBooklet(7, "Singapore", 1) };
+  const reveal = booklet.dayPlans[0].slots.questReveal!;
+  const photoPath = "/api/illustration?key=illustrations%2Fv2%2F1a2b3c4d5e6f7890123456789012345678901234567890123456789012345a%2Fartwork.png";
+  const reordered: GeneratedBookletData = {
+    ...booklet,
+    dayPlans: [
+      {
+        ...booklet.dayPlans[0],
+        slots: {
+          ...booklet.dayPlans[0].slots,
+          questReveal: {
+            targetLabel: reveal.targetLabel,
+            targetKind: reveal.targetKind,
+            bonusQuest: reveal.bonusQuest,
+            photoPath,
+            revealText: reveal.revealText,
+            chatPrompts: reveal.chatPrompts,
+          },
+        },
+      },
+      ...booklet.dayPlans.slice(1),
+    ],
+  };
+  const withPhotoSameOrderAsReordered: GeneratedBookletData = {
+    ...booklet,
+    dayPlans: [
+      {
+        ...booklet.dayPlans[0],
+        slots: {
+          ...booklet.dayPlans[0].slots,
+          questReveal: { ...reveal, photoPath },
+        },
+      },
+      ...booklet.dayPlans.slice(1),
+    ],
+  };
+
+  assert.notEqual(
+    JSON.stringify(reordered.dayPlans[0].slots.questReveal),
+    JSON.stringify(withPhotoSameOrderAsReordered.dayPlans[0].slots.questReveal),
+    "the two fixtures must actually differ in key order to exercise the bug",
+  );
+  assert.equal(
+    await bookletSnapshotFingerprint(reordered),
+    await bookletSnapshotFingerprint(withPhotoSameOrderAsReordered),
+  );
+});
+
+test("a fingerprint ignores an explicit undefined value the same way JSON.stringify does", async () => {
+  // Regression test: coverIllustrationPath is attached via bare shorthand
+  // (`{ ...result, coverIllustrationPath }`) in app/api/generate/route.ts,
+  // so it resolves to an explicit `undefined`-valued key — not a missing
+  // key — whenever both image providers fail (confirmed live, both quota-
+  // exhausted, during a 50-scenario test run). JSON.stringify silently
+  // drops an undefined-valued property, so the durably-stored copy (written
+  // and read back through real JSON) never has the key at all. Before this
+  // fix, bookletSnapshotFingerprint's stableStringify used Object.entries,
+  // which DOES include an undefined-valued key, so the in-memory and
+  // durably-stored fingerprints permanently disagreed for any booklet whose
+  // cover art failed — a real, previously undetected case of the same
+  // 409 "does not match the booklet edition" bug fixed twice already this
+  // session for different reasons.
+  const withExplicitUndefined: GeneratedBookletData = {
+    ...generatedBooklet(),
+    coverIllustrationPath: undefined,
+  };
+  const withoutTheKeyAtAll: GeneratedBookletData = generatedBooklet();
+  assert.ok("coverIllustrationPath" in withExplicitUndefined, "the key must exist (with value undefined) to exercise the bug");
+  assert.ok(!("coverIllustrationPath" in withoutTheKeyAtAll));
+
+  assert.equal(
+    await bookletSnapshotFingerprint(withExplicitUndefined),
+    await bookletSnapshotFingerprint(withoutTheKeyAtAll),
+  );
 });
 
 test("legacy mutable booklet objects are promoted to immutable snapshots", async () => {

@@ -83,6 +83,44 @@ async function digest(value: unknown) {
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+// Plain JSON.stringify serializes object keys in insertion order, so two
+// logically identical booklets can hash differently depending on which code
+// path happened to build a nested object (for example questReveal.photoPath
+// lands in a different key position depending on whether it was attached at
+// composition time or rebuilt while re-validating a stored booklet). Sorting
+// keys recursively makes the fingerprint depend only on content.
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    // JSON.stringify replaces an undefined array element with null rather
+    // than omitting it — match that exactly, or an array containing one
+    // would hash differently than its real JSON.stringify'd form.
+    return `[${value.map((item) => (item === undefined ? "null" : stableStringify(item))).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    // JSON.stringify silently drops an object property whose value is
+    // undefined. A live 50-scenario test run found a real case this
+    // affects: coverIllustrationPath is added via bare shorthand
+    // (`{ ...result, coverIllustrationPath }`) and resolves to undefined
+    // whenever both image providers fail, which creates the key with an
+    // undefined value in memory — Object.entries includes it, so without
+    // this filter the in-memory fingerprint included a key that the
+    // durably-stored copy (round-tripped through real JSON.stringify, which
+    // drops it) never has, permanently failing every /api/pdf 409 check for
+    // that booklet.
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+async function stableDigest(value: unknown) {
+  const input = encoder.encode(stableStringify(value));
+  const hash = await crypto.subtle.digest("SHA-256", input);
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function normalizedText(value: string) {
   return value.toLocaleLowerCase();
 }
@@ -225,7 +263,7 @@ export function bookletPdfKey(cacheKey: string) {
 export async function bookletSnapshotFingerprint(booklet: GeneratedBookletData) {
   const snapshot = { ...(booklet as GeneratedBookletData & { editionFingerprint?: unknown }) };
   delete snapshot.editionFingerprint;
-  return digest(snapshot);
+  return stableDigest(snapshot);
 }
 
 export type StoredBookletReference = {
@@ -299,6 +337,14 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
     const events = Array.isArray(parsed.events)
       ? normalizeItineraryEvents(parsed.events, parsed.days)
       : undefined;
+    // Same validated shape as Activity.illustrationPath/questReveal.photoPath
+    // (see booklet-ai.ts) — without this, a re-read from durable storage
+    // silently drops the AI-generated cover art, changing the booklet's
+    // fingerprint and making every later /api/pdf call 409.
+    const coverIllustrationPath = typeof parsed.coverIllustrationPath === "string"
+      && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(parsed.coverIllustrationPath)
+      ? parsed.coverIllustrationPath
+      : undefined;
 
     return {
       destination: parsed.destination,
@@ -315,6 +361,7 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
       generatedAt: parsed.generatedAt,
       ...(family ? { family } : {}),
       ...(events ? { events } : {}),
+      ...(coverIllustrationPath ? { coverIllustrationPath } : {}),
     };
   } catch {
     return null;

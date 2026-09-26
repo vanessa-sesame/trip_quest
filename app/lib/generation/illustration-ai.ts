@@ -109,7 +109,7 @@ function printableCoverArtPrompt(destination: string, style: CoverArtStyle) {
 
 // Exported for scripts/generate-coloring-library.ts, which reuses this
 // same call to batch-generate curated scene art offline.
-export async function generatePng(apiKey: string, model: string, prompt: string, size: "1024x1536" | "1536x1024" = "1024x1536") {
+export async function generatePng(apiKey: string, model: string, prompt: string, size: "1024x1536" | "1536x1024" | "1024x1024" = "1024x1536") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
@@ -181,7 +181,7 @@ async function generatePngCloudflare(accountId: string, apiToken: string, model:
   }
 }
 
-type ImageProvider =
+export type ImageProvider =
   | { kind: "cloudflare"; accountId: string; apiToken: string; model: string }
   | { kind: "openai"; apiKey: string; model: string };
 
@@ -191,7 +191,7 @@ type ImageProvider =
 // does not force a choice, since it is the free option — flip
 // IMAGE_PROVIDER=openai to prefer the paid one instead (e.g. for quality
 // comparison) without unsetting credentials.
-function resolveImageProvider(runtime: IllustrationRuntime): ImageProvider | null {
+export function resolveImageProvider(runtime: IllustrationRuntime): ImageProvider | null {
   const forced = runtime.IMAGE_PROVIDER?.trim().toLowerCase();
   const cloudflare = (): ImageProvider | null => {
     const accountId = runtime.CLOUDFLARE_ACCOUNT_ID?.trim();
@@ -214,7 +214,7 @@ function resolveImageProvider(runtime: IllustrationRuntime): ImageProvider | nul
   return cloudflare() || openai();
 }
 
-async function generateIllustrationPng(provider: ImageProvider, prompt: string, size: "1024x1536" | "1536x1024" = "1024x1536") {
+export async function generateIllustrationPng(provider: ImageProvider, prompt: string, size: "1024x1536" | "1536x1024" | "1024x1024" = "1024x1536") {
   if (provider.kind === "cloudflare") return generatePngCloudflare(provider.accountId, provider.apiToken, provider.model, prompt);
   return generatePng(provider.apiKey, provider.model, prompt, size);
 }

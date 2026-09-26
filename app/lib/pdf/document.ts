@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, type PDFImage } from "pdf-lib";
 import * as fontkit from "fontkit";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
+import { hasDifferencePictures } from "../booklet/game-copy.ts";
 import { activityContext, bookletDayPageEntries, dayGameActivities, type DayPageEntry } from "../booklet/pages.ts";
 import { assertBookletQa } from "../booklet/qa.ts";
 import { type GeneratedBookletData, validateBookletDraft } from "../generation/booklet-ai.ts";
@@ -75,7 +76,7 @@ function planBookletPages(booklet: GeneratedBookletData, includeFamilyPack: bool
   const answers: AnswerEntry[] = booklet.dayPlans.flatMap((day) =>
     dayGameActivities(day)
       .map((activity, index) => ({ day: day.day, index, activity }))
-      .filter((entry) => entry.activity.answerMode === "closed"),
+      .filter((entry) => entry.activity.answerMode === "closed" || hasDifferencePictures(entry.activity)),
   );
   const answerChunks = chunk(answers, ANSWERS_PER_PAGE);
   const relayChunks = chunk(booklet.dayPlans, RELAY_DAYS_PER_PAGE);
@@ -159,6 +160,15 @@ async function loadArtwork(document: PDFDocument, booklet: GeneratedBookletData,
       if (!path || usedCuratedPaths.has(path)) return;
       usedCuratedPaths.add(path);
       imageRequests.set(coloringArtworkKey(activity, context), path);
+    });
+  });
+  // Spot-the-difference picture pairs, keyed by their own paths.
+  booklet.dayPlans.forEach((day) => {
+    bookletDayPageEntries([day]).forEach((entry) => {
+      const pictures = entry.kind === "activity" ? entry.activity.differencePaths : undefined;
+      if (entry.kind !== "activity" || entry.activity.gameType !== "spot_the_difference" || !pictures) return;
+      imageRequests.set(pictures.a, pictures.a);
+      imageRequests.set(pictures.b, pictures.b);
     });
   });
   const revealRequests = new Map<number, string>();

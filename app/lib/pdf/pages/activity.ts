@@ -27,8 +27,9 @@ export function drawActivityPage(ctx: PdfContext, day: DayPlan, activity: Activi
   });
 
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  // Spot-the-difference renders as look-and-find until it has paired
-  // pictures, so its "compare the two pictures" intro would not match.
+  // Spot-the-difference skips its intro: with pictures the how-to line says
+  // it all (and the pictures need the room); without them it plays as
+  // look-and-find, which the "compare the two pictures" intro would not match.
   if (activity.body && activity.gameType !== "spot_the_difference") {
     flow.text(activity.body, { size: type.body, color: colors.ink, maxLines: 3 });
   }

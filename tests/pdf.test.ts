@@ -425,3 +425,51 @@ test("PDF renderer supports explicit Merlion and guardian coloring subjects", as
   assert.ok(bytes.length > 30_000);
   assert.ok(illustratedBytes.length > bytes.length + 500_000);
 });
+
+test("a spot-the-difference game embeds both of its pictures", async () => {
+  const dayPlans = buildBooklet(7, "Hoi An", 1);
+  const items = [
+    { label: "Lantern", clue: "What glows above the stall?" },
+    { label: "Basket", clue: "What holds the fruit?" },
+    { label: "Awning", clue: "What keeps the sun off?" },
+    { label: "Barrel", clue: "What wooden drum sits in front?" },
+  ];
+  const path = (letter: string) => `/api/illustration?key=${encodeURIComponent(`illustrations/v2/${letter.repeat(64)}/artwork.png`)}`;
+  const slots = dayPlans[0].slots;
+  slots.inThePlace = {
+    ...slots.inThePlace,
+    gameType: "spot_the_difference",
+    items,
+    differencePaths: {
+      a: path("a"),
+      b: path("b"),
+      regions: [
+        { x: 0.7, y: 0.02, w: 0.2, h: 0.18, label: "a bird" },
+        { x: 0.7, y: 0.75, w: 0.24, h: 0.24, label: "a cat" },
+        { x: 0.02, y: 0.75, w: 0.22, h: 0.24, label: "a ball" },
+      ],
+    },
+  };
+  slots.sitDown = { ...slots.sitDown, gameType: "story", items };
+  delete slots.inThePlaceSecond;
+  dayPlans[0].activities = [slots.inThePlace, slots.sitDown];
+  const booklet: GeneratedBookletData = {
+    destination: "Hoi An",
+    age: 7,
+    days: 1,
+    itinerary: [""],
+    profile: getDestinationProfile("Hoi An"),
+    dayPlans,
+    sources: [],
+    generatedAt: "2026-09-26T00:00:00.000Z",
+  };
+  const requested: string[] = [];
+  const picture = await readFile("public/illustrations/market-coloring-v1.png");
+  const withPictures = await createBookletPdf(booklet, undefined, async (requestedPath) => {
+    requested.push(requestedPath);
+    return new Uint8Array(picture);
+  });
+  const withoutPictures = await createBookletPdf(booklet);
+  assert.ok(requested.includes(path("a")) && requested.includes(path("b")), "both pictures are requested");
+  assert.ok(withPictures.length > withoutPictures.length + picture.length, "both pictures are embedded");
+});

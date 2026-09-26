@@ -50,6 +50,47 @@ function drawTraceRow(args: GameArgs, word: string, box: Box) {
   drawDottedLine(args.page, traceX, box.x + box.width, baseline - 3, colors.line, 2, 3);
 }
 
+// Picture A above picture B, each in a rounded frame, with three circles
+// beside picture B to tick off as the changes are found. Returns false when
+// either picture is unavailable, so the caller can fall back to look-and-find.
+export function drawDifferencePictures(args: GameArgs) {
+  const { ctx, page, activity, box } = args;
+  const pictures = activity.differencePaths;
+  const a = pictures && ctx.artwork[pictures.a];
+  const b = pictures && ctx.artwork[pictures.b];
+  if (!a || !b) return false;
+  const { fonts, type } = ctx;
+  const labelGap = type.label * 2 + 2;
+  const trackerWidth = 34;
+  const side = Math.min(box.width - trackerWidth * 2, (box.height - labelGap * 2 - 8) / 2);
+  const x = box.x + (box.width - side) / 2;
+  let top = box.y + box.height;
+  [
+    { image: a, label: "Picture A", color: colors.teal, soft: colors.tealSoft },
+    { image: b, label: "Picture B", color: colors.coral, soft: colors.coralSoft },
+  ].forEach(({ image, label, color, soft }, index) => {
+    drawPill(page, fonts, label, { x, top, color, fill: soft, size: type.label });
+    const frame = { x, y: top - labelGap - side, width: side, height: side };
+    drawRoundedRect(page, frame, 12, { color: colors.white, borderColor: color, borderWidth: 1.4 });
+    drawImageContained(page, image, { x: frame.x + 5, y: frame.y + 5, width: frame.width - 10, height: frame.height - 10 });
+    if (index === 1) {
+      // Three circles down the right of picture B, one per change found.
+      [0, 1, 2].forEach((circle) => {
+        page.drawCircle({
+          x: frame.x + frame.width + trackerWidth / 2 + 4,
+          y: frame.y + frame.height - 18 - circle * 30,
+          size: 10,
+          color: colors.white,
+          borderColor: [colors.coral, colors.teal, colors.green][circle],
+          borderWidth: 1.6,
+        });
+      });
+    }
+    top = frame.y - 8;
+  });
+  return true;
+}
+
 export function drawDrawingBoard(args: GameArgs) {
   const { ctx, page, activity, box, context } = args;
   const { fonts, type } = ctx;

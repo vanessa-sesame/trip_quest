@@ -1767,7 +1767,7 @@ function GeneratedPage({
       <span>Day {day.day} · {kicker}</span>
       <p className="game-place">{day.landmark.place}</p>
       <h3>{activity.title}</h3>
-      {/* Spot-the-difference plays as look-and-find until it has paired pictures. */}
+      {/* Spot-the-difference skips its intro, matching the printed page. */}
       {activity.body && activity.gameType !== "spot_the_difference" ? <p className="game-instructions">{activity.body}</p> : null}
       <ActivityGame activity={activity} age={age} context={activityContext(day, slot)} />
       {activity.gameType === "coloring" || !activity.prompt ? null : <i>{activity.prompt}</i>}

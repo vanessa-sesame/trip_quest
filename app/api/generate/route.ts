@@ -41,6 +41,7 @@ import {
   createGenerationTask,
 } from "../../lib/generation/stream";
 import { addBookletIllustrations, addCoverIllustration, addRevealPhoto } from "../../lib/generation/illustration-ai";
+import { addSpotTheDifference, applyDifferencePaths } from "../../lib/generation/spot-difference";
 import { assertBookletQa } from "../../lib/booklet/qa";
 import { composeBooklet } from "../../lib/generation/compose";
 import {
@@ -65,6 +66,7 @@ type RuntimeEnvironment = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_AI_IMAGE_MODEL?: string;
+  CLOUDFLARE_AI_EDIT_MODEL?: string;
   IMAGE_PROVIDER?: string;
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
@@ -613,7 +615,7 @@ export async function POST(request: Request) {
             // images (coloring/drawing activities vs. one reveal photo vs.
             // one cover hero image) and touches disjoint fields, so there is
             // no reason to pay any one's latency on top of another's.
-            const [illustratedDayPlans, revealPhotoDayPlans, coverIllustrationPath] = await Promise.all([
+            const [illustratedDayPlans, revealPhotoDayPlans, coverIllustrationPath, spotPictures] = await Promise.all([
               addBookletIllustrations(runtime, {
                 destination,
                 age,
@@ -625,8 +627,9 @@ export async function POST(request: Request) {
                 dayPlans: preparedDraft.dayPlans,
               }, publish),
               addCoverIllustration(runtime, { destination }, publish),
+              addSpotTheDifference(runtime, { destination, dayPlans: preparedDraft.dayPlans }, publish),
             ]);
-            const revealedDayPlans = illustratedDayPlans.map((day, index) => {
+            const revealedDayPlans = applyDifferencePaths(illustratedDayPlans, spotPictures).map((day, index) => {
               const photoPath = revealPhotoDayPlans[index]?.slots?.questReveal?.photoPath;
               if (!photoPath || !day.slots.questReveal) return day;
               return {

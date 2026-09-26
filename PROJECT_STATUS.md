@@ -230,6 +230,19 @@ Relevant environment variable names are documented in `.env.example`:
 - `OPENAI_API_KEY`
 - `OPENAI_IMAGE_MODEL`
 - `TRIPQUEST_OWNER_EMAIL`
+- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Workers AI REST: images and
+  spot-the-difference edits)
+- `CLOUDFLARE_AI_EDIT_MODEL` (optional; defaults to
+  `@cf/black-forest-labs/flux-2-klein-9b`)
+
+Spot-the-difference pictures (`app/lib/generation/spot-difference.ts`): picture
+A is generated line art; picture B is A plus three changes placed in A's
+emptiest regions. FLUX.2 klein adds one object per region, and only the strokes
+it added are copied into B, so B matches A everywhere else. A region the model
+cannot change cleanly after two tries gets a drawn doodle (star, balloon, sun).
+At most two games per booklet get pictures; the rest, and any game whose
+pictures fail, play as look-and-find. Both pictures are cached in R2, with the
+regions in picture B's metadata, and the answer notes name each change.
 
 Never add real values to this document or commit `.env.local`.
 
@@ -353,6 +366,13 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
 - `.openai/hosting.json`: Sites project and logical D1/R2 bindings.
 
 ## Known Gaps
+
+- Spot-the-difference edits run on Cloudflare Workers AI. On the free plan
+  the daily allowance is 10,000 neurons; the 2026-09-26 spike (about 30
+  FLUX.2 calls at 1024 px) used all of it. Production edits run at 512 px,
+  but a busy day on the free plan will run out, after which new games fall
+  back to look-and-find until the allowance resets (00:00 UTC). The OpenAI
+  image account had no credits on the same day, so OpenAI edits are untested.
 
 - A live one-day diagnostic on 2026-09-21 measured about 96 seconds for fresh
   Kimi web research. Fresh destinations can still exceed a minute; connection

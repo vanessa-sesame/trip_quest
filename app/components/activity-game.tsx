@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
-import type { Activity, GameItem, GameType } from "../lib/booklet/booklet";
+import type { Activity, GameItem } from "../lib/booklet/booklet";
 import {
   coloringIllustrationSpecs,
   curatedColoringImagePath,
@@ -17,9 +17,8 @@ import {
   mazeSizeForAge,
   normalizePuzzleWord,
 } from "../lib/booklet/puzzles";
-import { gameInstruction, gameTypeLabels } from "../lib/booklet/game-copy";
+import { gameInstruction, gameLabel, hasDifferencePictures } from "../lib/booklet/game-copy";
 
-const gameNames = gameTypeLabels as Record<GameType, string>;
 
 const fallbackItems: GameItem[] = [
   { label: "Look", clue: "Find one tiny detail." },
@@ -851,6 +850,22 @@ function QuizBoard({ items }: { items: GameItem[] }) {
   );
 }
 
+// Picture A and picture B, the same pair the printed page shows.
+function DifferenceBoard({ activity }: { activity: Activity }) {
+  const pictures = activity.differencePaths;
+  if (!pictures) return null;
+  return (
+    <div className="difference-board">
+      {[{ label: "Picture A", src: pictures.a }, { label: "Picture B", src: pictures.b }].map((picture) => (
+        <figure key={picture.label}>
+          <figcaption>{picture.label}</figcaption>
+          <Image src={picture.src} alt={`${activity.title}, ${picture.label}`} width={512} height={512} unoptimized />
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 function StoryBoard({ items }: { items: GameItem[] }) {
   return (
     <div className="story-board">
@@ -881,8 +896,8 @@ export function ActivityGame({ activity, age, context }: { activity: Activity; a
     case "maze": board = <MazeBoard activity={activity} age={age} items={items} />; break;
     case "matching": board = <MatchingBoard items={items} />; break;
     case "bingo": board = <BingoBoard items={items} />; break;
-    // Look-and-find until spot-the-difference has paired pictures.
-    case "spot_the_difference": board = <ChecklistBoard items={items} />; break;
+    // Look-and-find when a spot-the-difference game has no picture pair.
+    case "spot_the_difference": board = hasDifferencePictures(activity) ? <DifferenceBoard activity={activity} /> : <ChecklistBoard items={items} />; break;
     case "codebreaker": board = <CodebreakerBoard items={items} />; break;
     case "map_puzzle": board = <MapBoard activity={activity} age={age} items={items} />; break;
     case "scavenger_hunt": board = <ChecklistBoard items={items} />; break;
@@ -891,9 +906,9 @@ export function ActivityGame({ activity, age, context }: { activity: Activity; a
   }
 
   return (
-    <section className={`activity-game game-${gameType}`} aria-label={gameNames[gameType]}>
+    <section className={`activity-game game-${gameType}`} aria-label={gameLabel({ ...activity, gameType })}>
       {gameType === "coloring" ? <style>{coloringPageCss}</style> : null}
-      <b>{gameNames[gameType]}</b>
+      <b>{gameLabel({ ...activity, gameType })}</b>
       {gameType === "coloring" ? board : (
         <>
           <GameEditorialHeader activity={activity} />

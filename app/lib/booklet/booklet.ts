@@ -34,6 +34,24 @@ export type GameItem = {
   clue: string;
 };
 
+// Where one of spot-the-difference's three changes sits in picture B, as
+// fractions of the (square) picture, and what changed there.
+export type DifferenceRegion = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+};
+
+// Picture A and picture B for spot-the-difference, set after composition
+// (see app/lib/generation/spot-difference.ts) like illustrationPath.
+export type DifferencePictures = {
+  a: string;
+  b: string;
+  regions: DifferenceRegion[];
+};
+
 export type Activity = {
   title: string;
   kind: string;
@@ -42,6 +60,7 @@ export type Activity = {
   gameType?: GameType;
   items?: GameItem[];
   illustrationPath?: string;
+  differencePaths?: DifferencePictures;
   requiresPresence?: boolean;
   answerMode?: "closed" | "open";
 };

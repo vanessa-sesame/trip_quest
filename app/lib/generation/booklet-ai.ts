@@ -3,6 +3,8 @@ import {
   queueEligibleGameTypes,
   type Activity,
   type DayPlan,
+  type DifferencePictures,
+  type DifferenceRegion,
   type GameItem,
   type GameType,
   type QueueTargetKind,
@@ -762,6 +764,29 @@ function renameActivityForMechanic(value: string, replacement: string) {
   return `${cleaned || "Local"} ${replacement}`.slice(0, 70);
 }
 
+const illustrationPathPattern = /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i;
+
+// Spot-the-difference pictures are set after composition, like
+// illustrationPath, so they must survive re-validation of stored booklets
+// intact or not at all.
+function validDifferencePictures(value: unknown): { differencePaths?: DifferencePictures } {
+  if (!value || typeof value !== "object") return {};
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.a !== "string" || !illustrationPathPattern.test(candidate.a)) return {};
+  if (typeof candidate.b !== "string" || !illustrationPathPattern.test(candidate.b)) return {};
+  if (!Array.isArray(candidate.regions) || candidate.regions.length !== 3) return {};
+  const fraction = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number >= 0 && number <= 1;
+  const regions: DifferenceRegion[] = [];
+  for (const entry of candidate.regions) {
+    if (!entry || typeof entry !== "object") return {};
+    const region = entry as Record<string, unknown>;
+    if (![region.x, region.y, region.w, region.h].every(fraction)) return {};
+    if (typeof region.label !== "string" || !region.label.trim() || region.label.length > 40) return {};
+    regions.push({ x: region.x as number, y: region.y as number, w: region.w as number, h: region.h as number, label: region.label.trim() });
+  }
+  return { differencePaths: { a: candidate.a, b: candidate.b, regions } };
+}
+
 function validateActivity(
   activityValue: unknown,
   activityLabel: number | string,
@@ -908,9 +933,10 @@ function validateActivity(
       ? activity.requiresPresence === true
       : Boolean(activity.requiresPresence),
     answerMode: activity.answerMode === "closed" ? "closed" as const : "open" as const,
-    ...(typeof activity.illustrationPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(activity.illustrationPath)
+    ...(typeof activity.illustrationPath === "string" && illustrationPathPattern.test(activity.illustrationPath)
       ? { illustrationPath: activity.illustrationPath }
       : {}),
+    ...(gameType === "spot_the_difference" ? validDifferencePictures(activity.differencePaths) : {}),
   };
 }
 

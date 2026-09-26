@@ -1,4 +1,4 @@
-import type { Activity } from "./booklet.ts";
+import type { Activity, DifferenceRegion } from "./booklet.ts";
 
 // Player-facing names and how-to-play lines for each game type, shared by
 // the printable PDF and the web preview so both say the same thing.
@@ -20,14 +20,33 @@ export const gameTypeLabels: Record<string, string> = {
   story: "Story studio",
 };
 
-export function gameLabel(activity: Pick<Activity, "gameType">) {
+type GameCopyInput = Pick<Activity, "gameType" | "differencePaths">;
+
+// Spot-the-difference is only a picture game once it has its picture pair;
+// without one it is played as a look-and-find checklist.
+export function hasDifferencePictures(activity: GameCopyInput) {
+  return activity.gameType === "spot_the_difference" && Boolean(activity.differencePaths);
+}
+
+export function gameLabel(activity: GameCopyInput) {
+  if (hasDifferencePictures(activity)) return "Spot 3 differences";
   return gameTypeLabels[activity.gameType || ""] || "Travel game";
+}
+
+// "top left", "middle right"... for where a difference sits in picture B.
+export function differencePosition(region: Pick<DifferenceRegion, "x" | "y" | "w" | "h">) {
+  const cx = region.x + region.w / 2;
+  const cy = region.y + region.h / 2;
+  const vertical = cy < 1 / 3 ? "top" : cy > 2 / 3 ? "bottom" : "middle";
+  const horizontal = cx < 1 / 3 ? "left" : cx > 2 / 3 ? "right" : "centre";
+  return vertical === "middle" && horizontal === "centre" ? "centre" : `${vertical} ${horizontal}`;
 }
 
 // How each mechanic is played, written for the board as it is actually
 // drawn (Start/Finish on the maze, questions on the quiz). This is render
 // copy, not stored content, so it can change without touching editions.
-export function gameInstruction(activity: Pick<Activity, "gameType">) {
+export function gameInstruction(activity: GameCopyInput) {
+  if (hasDifferencePictures(activity)) return "Find the 3 things that changed in picture B and circle them.";
   switch (activity.gameType) {
     case "word_search":
       return "Find each word in the grid and circle it. Tick it off below.";

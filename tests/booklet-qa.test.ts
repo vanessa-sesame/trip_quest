@@ -174,3 +174,13 @@ test("a day's three games must be three different game types", () => {
   dayPlans[0].slots.sitDown = { ...dayPlans[0].slots.sitDown, gameType: "matching", items: four(["Spire", "Walkway", "Window", "Base"]) };
   assert.match(composedContentIssues({ dayPlans }).join(" "), /Day 1 uses matching for more than one game/);
 });
+
+test("numeric answers are not mistaken for numbered filler labels", () => {
+  const [day] = buildBooklet(10, "Barcelona", 1);
+  const numbers = ["1882", "2026", "18", "8"].map((label) => ({ label, clue: `Which year or number is ${label}?` }));
+  day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "codebreaker", items: numbers };
+  assert.ok(!composedContentIssues({ dayPlans: [day] }).some((issue) => /numbered filler/.test(issue)));
+  const photos = ["Photo 1", "Photo 2", "Gate", "Tower"].map((label) => ({ label, clue: `Find the ${label}.` }));
+  day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "scavenger_hunt", items: photos };
+  assert.ok(composedContentIssues({ dayPlans: [day] }).some((issue) => /numbered filler/.test(issue)));
+});

@@ -165,9 +165,11 @@ export function composedContentIssues(draft: { dayPlans: DayPlan[] }) {
       const items = game.items ?? [];
       const labels = items.map((item) => item.label.trim());
       const ordinal = labels.filter((label) => ORDINAL_LABEL.test(label));
-      const stems = labels.map((label) => label.replace(COUNTER_SUFFIX, "").toLocaleLowerCase());
+      const stems = labels.map((label) => label.replace(COUNTER_SUFFIX, "").trim().toLocaleLowerCase());
+      // "Photo 1 / Photo 2" is filler; a bare number ("1882", a code digit)
+      // is a real answer, so only labels with a word stem count.
       const counted = labels.filter((label, index) =>
-        COUNTER_SUFFIX.test(label) && stems.filter((stem) => stem === stems[index]).length > 1,
+        COUNTER_SUFFIX.test(label) && stems[index] !== "" && stems.filter((stem) => stem === stems[index]).length > 1,
       );
       const filler = [...new Set([...ordinal, ...counted])];
       if (filler.length) {

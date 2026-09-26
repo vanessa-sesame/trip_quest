@@ -67,6 +67,40 @@ function activitySchemaFor(gameTypes: GameType[]) {
   };
 }
 
+// Queue games are played standing in line: no table, no reading needed.
+const queueFriendlyGameTypes: GameType[] = ["bingo", "scavenger_hunt", "matching", "quiz", "codebreaker", "maze"];
+
+export type SecondaryGamePlanItem = { day: number; second: GameType; queue: GameType | undefined };
+
+// The second in-place game and the queue game for every day of the trip,
+// planned together because days compose separately and cannot see each
+// other's choices. Rotates through the age's allowed types, never repeats a
+// type already used that day, and never gives consecutive days the same one.
+export function secondaryGamePlan(age: number, gameTypePlan: GameTypePlanItem[], seed: string): SecondaryGamePlanItem[] {
+  const allowed = allowedGameTypesForAge(age);
+  const seconds = pairEligibleGameTypes.filter((gameType) => allowed.includes(gameType));
+  const queues = queueFriendlyGameTypes.filter((gameType) => allowed.includes(gameType) && queueEligibleGameTypes.includes(gameType));
+  let hash = 17;
+  for (const character of seed.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  // Tries each option from `start`, first avoiding `avoid` and yesterday's
+  // pick, then (when the age has too few types for both) just `avoid`.
+  const pick = (options: GameType[], start: number, avoid: Set<GameType>, yesterday: GameType | undefined) => {
+    const rotated = options.map((_, offset) => options[(start + offset) % options.length]);
+    return rotated.find((option) => !avoid.has(option) && option !== yesterday)
+      ?? rotated.find((option) => !avoid.has(option));
+  };
+  const plan: SecondaryGamePlanItem[] = [];
+  gameTypePlan.forEach((day, index) => {
+    const previous = plan[index - 1];
+    const taken = new Set<GameType>(day.gameTypes);
+    const second = pick(seconds, hash + index, taken, previous?.second) ?? seconds[0];
+    // The queue game is optional, so with no type left it stays unassigned.
+    const queue = pick(queues, (hash >>> 3) + index, new Set([...taken, second]), previous?.queue);
+    plan.push({ day: day.day, second, queue });
+  });
+  return plan;
+}
+
 export function bookletSchema(days: number, age: number) {
   const activitySchema = activitySchemaFor(allowedGameTypesForAge(age));
 
@@ -260,8 +294,12 @@ export async function composeBookletBatch(
         `Day ${item.day}: use Child ${item.childNumber}'s interest phrase "${item.interest}" as a playful lens.`,
       ).join("\n")
     : "No interests were recorded for these days; keep the activities destination-led.";
+  const secondaryPlan = secondaryGamePlan(age, gameTypePlan, destination).slice(dayOffset, dayOffset + days);
   const exactGameSchedule = assignedGameTypes
-    .map((plan) => `Day ${plan.day}: ${plan.gameTypes.join(" + ")}`)
+    .map((plan, index) => {
+      const secondary = secondaryPlan[index];
+      return `Day ${plan.day}: inThePlace ${plan.gameTypes[0]}, inThePlaceSecond ${secondary?.second ?? "(any listed type)"}, sitDown ${plan.gameTypes[1]}${secondary?.queue ? `, whileYouWait game ${secondary.queue}` : ""}`;
+    })
     .join("\n");
   const messages = [
       {
@@ -292,7 +330,7 @@ Use the listed mechanics as the intended mix. Do not use the same mechanic as th
 
 EXACT PRINTABLE GAME SCHEDULE
 ${exactGameSchedule}
-Use these exact gameType values in this order: inThePlace, then sitDown. This schedule has already been balanced for age and variety; do not substitute a favorite format. For inThePlaceSecond, choose a different game type than inThePlace, from this list only: ${pairEligibleGameTypes.join(", ")}.
+Use exactly these gameType values for each slot. The schedule has been balanced across the whole trip for age and variety (the other days are designed separately), so do not substitute a favorite format.
 
 VISIBLE INTEREST LENSES
 ${interestDirections}
@@ -306,7 +344,7 @@ CREATIVE DIRECTION
 - Every day must return exactly seven named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard, questReveal. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
-- whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Choose its gameType only from: ${queueEligibleGameTypes.join(", ")}. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Set queueLikely=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
+- whileYouWait has two independent requirements, and the second must hold even when the first is not met. First (a bonus, often dropped): give whileYouWait its own gameType and four items like any other game, but the mechanic itself must still need no table and no child reading, answerable while standing and holding the booklet. Use the whileYouWait game type from the schedule. Second (always required, independent of the first): the instruction field alone, read with no other field, must name the exact physical thing to count or find — a specific object, color, material, shape, or repeated architectural feature drawn from the research (for example "Count the pointed rooftops you can see from here" or "Count how many carved lion statues line this street"), never a placeholder phrase like "a repeated feature" or "one repeated detail" that does not say what the thing is. Set queueLikely=true whenever research or common visitor flow indicates a queue, and keep a visible physical target and a countTo suitable for the age.
 - whileYouWait and questReveal together form a two-page mystery: the child is set a secret target to spot while waiting, then the payoff page confirms it once the family has arrived. All of the mystery/reveal fields live inside questReveal. questReveal.targetLabel is the short, punchy name of that target as it would look on a badge (2-5 words, for example "ARCH", "SOMETHING RED", "A DRUM BEAT") — it must be a specific, visually or audibly spottable thing drawn from the research, never a vague category. questReveal.targetKind classifies it as exactly one of shape, colour, object, sound, or person. questReveal.bonusQuest is one short extra challenge line tied to the same target (for example "Find the strangest one!"). questReveal.revealText is the payoff: 1-2 sentences that name the real place/detail the target came from, tied to the actual research, in an excited voice (for example "Here it is! The arch you spotted is from the colourful shophouses on this street!"). questReveal.chatPrompts are exactly two short, open-ended questions a parent could actually ask on the spot, building on what the child just found.
 - inThePlace and inThePlaceSecond must both be impossible to solve before arrival. Set requiresPresence=true on both and make each answer depend on a real position, relative height, color placement, count, sound, texture, or changing detail the child must observe there. They must use different observation mechanics from each other and different gameTypes from each other; inThePlaceSecond's gameType must come only from: ${pairEligibleGameTypes.join(", ")}.
 - sitDown is the cafe, train, or post-visit page: draw, trace, colour, write, or solve according to age. Set requiresPresence=false.

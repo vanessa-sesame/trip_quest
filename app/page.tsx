@@ -634,7 +634,9 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (familyLoading || resumeAttempted.current || generatedBooklet) return;
+    // generationInFlight: the preview clears the old booklet when the first
+    // finished day of a new one arrives, which is not a reopened page.
+    if (familyLoading || resumeAttempted.current || generatedBooklet || generationInFlight.current) return;
     const pendingTrip = readPendingGeneration();
     if (!pendingTrip) return;
     resumeAttempted.current = true;
@@ -1157,7 +1159,7 @@ export default function Home() {
 
           <div className="purchase-bar">
             <div>
-              <span>Printable A4 PDF</span>
+              <span>Printable A5 PDF</span>
               <strong>S$0.99</strong>
             </div>
             {paidDownloadState === "preparing" ? (
@@ -1248,7 +1250,7 @@ export default function Home() {
               The complete age-{trip.age} booklet, ready to print before the trip.
             </p>
             <ul className="included-list">
-              <li><Check size={17} /> {reportPageTitles.length} high-resolution A4 pages</li>
+              <li><Check size={17} /> {Math.ceil(reportPageTitles.length / 4) * 4} printable A5 pages</li>
               <li><Check size={17} /> {trip.days * 3} itinerary-matched activity pages</li>
               <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
               <li><Check size={17} /> Grown-up answer notes</li>

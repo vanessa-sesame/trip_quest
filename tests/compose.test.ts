@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBooklet } from "../app/lib/booklet/booklet.ts";
-import { bookletSchema, composeBookletBatch } from "../app/lib/generation/compose.ts";
+import { bookletSchema, composeBookletBatch, secondaryGamePlan } from "../app/lib/generation/compose.ts";
+import { balancedGameTypePlanForTrip } from "../app/lib/generation/booklet-ai.ts";
 
 function propertyNames(schema: unknown, path = "$"): Array<{ path: string; name: string }> {
   if (!schema || typeof schema !== "object") return [];
@@ -101,4 +102,26 @@ test("a failed repair keeps the composed draft instead of failing the day", asyn
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("second in-place and queue games are varied across the trip", () => {
+  let consecutiveQueueRepeats = 0;
+  for (const age of [3, 5, 7, 9, 11, 14]) {
+    for (const destination of ["Barcelona", "Kyoto", "Lima"]) {
+      const plan = balancedGameTypePlanForTrip(age, 7, [], destination);
+      const secondary = secondaryGamePlan(age, plan, destination);
+      secondary.forEach((day, index) => {
+        const types = [plan[index].gameTypes[0], day.second, plan[index].gameTypes[1]];
+        assert.equal(new Set(types).size, 3, `age ${age} ${destination} day ${day.day}: ${types.join("/")}`);
+        if (day.queue) assert.ok(!types.includes(day.queue), `queue game repeats a day game on day ${day.day}`);
+        if (index > 0) {
+          assert.notEqual(day.second, secondary[index - 1].second, `second game repeats on day ${day.day}`);
+          // Young ages have only four queue-friendly types, so a repeat is
+          // occasionally unavoidable; it must stay rare.
+          if (day.queue && day.queue === secondary[index - 1].queue) consecutiveQueueRepeats += 1;
+        }
+      });
+    }
+  }
+  assert.ok(consecutiveQueueRepeats <= 4, `${consecutiveQueueRepeats} consecutive queue repeats across 18 week-long trips`);
 });

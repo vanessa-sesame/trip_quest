@@ -166,10 +166,11 @@ test("the pipeline stores both pictures, reuses them, and assigns them to the ri
   const a = scene();
   let calls = 0;
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (_input, init) => {
     calls += 1;
-    const url = String(input);
-    const image = url.includes("flux-1-schnell") ? encodePng(a) : toJpeg(withObjects(a, chooseRegions(a)));
+    // Picture A is a text-to-image call; edits send picture A along.
+    const isEdit = init?.body instanceof FormData && init.body.has("input_image_0");
+    const image = isEdit ? toJpeg(withObjects(a, chooseRegions(a))) : encodePng(a);
     return Response.json({ result: { image: Buffer.from(image).toString("base64") } });
   };
   try {

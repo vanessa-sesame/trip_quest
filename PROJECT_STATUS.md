@@ -233,7 +233,8 @@ Relevant environment variable names are documented in `.env.example`:
 - `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` (Workers AI REST: images and
   spot-the-difference edits)
 - `CLOUDFLARE_AI_EDIT_MODEL` (optional; defaults to
-  `@cf/black-forest-labs/flux-2-klein-9b`)
+  `@cf/black-forest-labs/flux-2-klein-4b`, about 31 neurons per 512 px edit;
+  klein-9b costs about 45x more)
 
 Spot-the-difference pictures (`app/lib/generation/spot-difference.ts`): picture
 A is generated line art; picture B is A plus three changes placed in A's

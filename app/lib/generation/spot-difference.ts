@@ -9,7 +9,6 @@ import {
   dilate,
   doodleKinds,
   drawDoodle,
-  dropSpeckles,
   encodePng,
   inkMask,
   squareGrey,
@@ -27,12 +26,20 @@ const VERSION = "spot-v1";
 const SIZE = 512;
 const GRID = 5;
 const MAX_GAMES = 2;
-const DEFAULT_EDIT_MODEL = "@cf/black-forest-labs/flux-2-klein-9b";
+// klein-4b bills per 512 px tile (about 31 neurons per edit at 512 px);
+// klein-9b bills a full megapixel minimum (about 1,400), roughly 45x more.
+// Only the new strokes are kept, so 4b's extra line drift costs nothing.
+const DEFAULT_EDIT_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";
 // Tuned on real FLUX.2 output at 512 px (artifacts/qa/spot-spike2 at 2x).
 const A_INK = 150;
 const B_INK = 110;
+const B_EDGE = 200;
 const NEAR_EXISTING_INK = 2;
 const MIN_NEW_INK = 90;
+// Time limits, so picture pairs never become the slowest part of a booklet.
+const PICTURE_TIMEOUT_MS = 30_000;
+const EDIT_TIMEOUT_MS = 20_000;
+const EDIT_BUDGET_MS = 30_000;
 
 export type SpotRuntime = IllustrationRuntime & { CLOUDFLARE_AI_EDIT_MODEL?: string };
 export type SpotSlot = "inThePlace" | "inThePlaceSecond" | "sitDown";
@@ -103,37 +110,70 @@ export function chooseRegions(a: Grey): Cell[] {
   const chosen: Cell[] = [];
   for (const cell of cells.sort((first, second) => first.ink - second.ink || first.row - second.row || first.col - second.col)) {
     if (chosen.some((other) => Math.abs(other.col - cell.col) <= 1 && Math.abs(other.row - cell.row) <= 1)) continue;
+    // Spread the three changes out: at most two share a row.
+    if (chosen.filter((other) => other.row === cell.row).length >= 2) continue;
     chosen.push(cell);
     if (chosen.length === 3) break;
   }
   return chosen;
 }
 
-function cellBounds(cell: Cell, size: number) {
-  const cellSize = size / GRID;
-  const margin = cellSize * 0.2;
-  return {
-    x0: Math.max(0, cell.col * cellSize - margin),
-    y0: Math.max(0, cell.row * cellSize - margin),
-    x1: Math.min(size, (cell.col + 1) * cellSize + margin),
-    y1: Math.min(size, (cell.row + 1) * cellSize + margin),
-  };
-}
-
-// Strokes that are dark in B but have no ink anywhere near them in A,
-// limited to one cell: what the edit added there, and nothing else.
+// Strokes that are dark in B but have no ink anywhere near them in A: what
+// the edit added. Dark cores seed each stroke and grow into its lighter,
+// anti-aliased edges, so thin lines stay whole. A stroke counts for a cell
+// when it touches the cell, and it is kept whole (never cropped), unless it
+// reaches into the picture's centre, where the subject is.
 export function newInkInCell(a: Grey, b: Grey, cell: Cell) {
   const size = a.width;
+  const cellSize = size / GRID;
   const nearA = dilate(inkMask(a, A_INK), size, size, NEAR_EXISTING_INK);
-  const bounds = cellBounds(cell, size);
-  const mask = new Uint8Array(a.data.length);
-  for (let y = Math.floor(bounds.y0); y < Math.ceil(bounds.y1); y += 1) {
-    for (let x = Math.floor(bounds.x0); x < Math.ceil(bounds.x1); x += 1) {
-      const index = y * size + x;
-      if (b.data[index] < B_INK && !nearA[index]) mask[index] = 1;
-    }
+  const candidate = new Uint8Array(a.data.length);
+  for (let index = 0; index < candidate.length; index += 1) {
+    if (!nearA[index] && b.data[index] < B_EDGE) candidate[index] = b.data[index] < B_INK ? 2 : 1;
   }
-  dropSpeckles(mask, size, 12);
+  const mask = new Uint8Array(a.data.length);
+  const seen = new Uint8Array(a.data.length);
+  const inCell = (x: number, y: number) =>
+    x >= cell.col * cellSize && x < (cell.col + 1) * cellSize && y >= cell.row * cellSize && y < (cell.row + 1) * cellSize;
+  const inCentre = (x: number, y: number) =>
+    x >= cellSize * 1.5 && x < cellSize * 3.5 && y >= cellSize * 1.5 && y < cellSize * 3.5;
+  const stack: number[] = [];
+  for (let start = 0; start < candidate.length; start += 1) {
+    if (candidate[start] !== 2 || seen[start]) continue;
+    const blob: number[] = [];
+    let touchesCell = false;
+    let touchesCentre = false;
+    let cores = 0;
+    let minBlobX = size;
+    let minBlobY = size;
+    let maxBlobX = 0;
+    let maxBlobY = 0;
+    stack.push(start);
+    seen[start] = 1;
+    while (stack.length) {
+      const p = stack.pop()!;
+      blob.push(p);
+      const x = p % size;
+      const y = Math.floor(p / size);
+      if (candidate[p] === 2) cores += 1;
+      minBlobX = Math.min(minBlobX, x);
+      maxBlobX = Math.max(maxBlobX, x);
+      minBlobY = Math.min(minBlobY, y);
+      maxBlobY = Math.max(maxBlobY, y);
+      if (inCell(x, y)) touchesCell = true;
+      if (inCentre(x, y)) touchesCentre = true;
+      const neighbours = [x > 0 ? p - 1 : -1, x < size - 1 ? p + 1 : -1, p - size, p + size];
+      for (const q of neighbours) {
+        if (q < 0 || q >= candidate.length || seen[q] || !candidate[q]) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    // A real added object fits in about two cells; anything longer is a
+    // redrawn line (a horizon, a frame) that merely moved.
+    const compact = maxBlobX - minBlobX <= cellSize * 2 && maxBlobY - minBlobY <= cellSize * 2;
+    if (touchesCell && !touchesCentre && compact && cores >= 12) for (const p of blob) mask[p] = 1;
+  }
   let count = 0;
   let minX = size;
   let minY = size;
@@ -176,16 +216,29 @@ function editPrompt(object: string, cell: Cell) {
 
 // Builds picture B from picture A. `edit` returns an edited image (or null
 // on failure); regions it cannot change cleanly after two tries get a doodle.
-export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed: string) {
+// Retries stop at `deadline` so a slow provider cannot hold up the booklet;
+// regions still unchanged by then get doodles.
+export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed: string, deadline = Date.now() + EDIT_BUDGET_MS) {
   const size = a.width;
   const cells = chooseRegions(a);
   const b: Grey = { width: size, height: size, data: Uint8Array.from(a.data) };
-  const outcomes = await Promise.all(cells.map(async (cell, index) => {
+  // Each region gets its own two objects to try (first choice, retry), never
+  // shared with another region, so no picture has two of the same change.
+  const taken = new Set<string>();
+  const plans = cells.map((cell, index) => {
     const options = objectsByBand[band(cell)];
     const start = seededIndex(`${seed}|${index}`, options.length);
+    const picks = options
+      .map((_, offset) => options[(start + offset) % options.length])
+      .filter((object) => !taken.has(object.label))
+      .slice(0, 2);
+    picks.forEach((object) => taken.add(object.label));
+    return { cell, picks };
+  });
+  const outcomes = await Promise.all(plans.map(async ({ cell, picks }) => {
     if (edit) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        const object = options[(start + attempt) % options.length];
+      for (const [attempt, object] of picks.entries()) {
+        if (attempt > 0 && Date.now() > deadline) break;
         try {
           const bytes = await edit(editPrompt(object.prompt, cell));
           if (!bytes) continue;
@@ -201,7 +254,12 @@ export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed:
   }));
 
   const regions: DifferenceRegion[] = [];
-  // Doodles never repeat within one picture.
+  // Doodles never repeat each other or echo an edited object's name
+  // ("a balloon" next to "a hot-air balloon" would confuse the answer key).
+  const editedLabels = outcomes.flatMap((outcome) => (outcome.kind === "edit" ? [outcome.label] : []));
+  const doodleOrder = [0, 1, 2]
+    .map((offset) => doodleKinds[(seededIndex(seed, doodleKinds.length) + offset) % doodleKinds.length])
+    .filter((kind) => !editedLabels.some((label) => label.includes(kind)));
   let doodles = 0;
   for (const outcome of outcomes) {
     if (outcome.kind === "edit") {
@@ -212,7 +270,7 @@ export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed:
       regions.push(regionFromBox(outcome.added.box, size, outcome.label));
     } else {
       const cellSize = size / GRID;
-      const doodle = doodleKinds[(seededIndex(seed, doodleKinds.length) + doodles) % doodleKinds.length];
+      const doodle = doodleOrder[doodles % doodleOrder.length];
       doodles += 1;
       const radius = cellSize * 0.3;
       drawDoodle(b, doodle, (outcome.cell.col + 0.5) * cellSize, (outcome.cell.row + 0.5) * cellSize, radius);
@@ -224,28 +282,33 @@ export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed:
 }
 
 function spotPicturePrompt(destination: string, day: DayPlan, activity: Activity) {
+  // Never pass the game's title: image models print it as lettering.
+  const details = (activity.items ?? []).map((item) => item.label).slice(0, 3).join(", ");
   return [
-    "Create a black-and-white coloring-book line drawing for a children's spot-the-difference puzzle.",
-    `The exact place is ${day.landmark?.place || day.theme}, in ${destination}. The puzzle is called ${activity.title}.`,
-    "The real landmark or local subject must be recognizable. Square composition with the subject in the middle.",
+    `A black-and-white coloring-book line drawing of ${day.landmark?.place || day.theme} in ${destination}.`,
+    details ? `Include a few real local details such as ${details}.` : "",
+    "The landmark is recognizable and sits in the middle of a square picture, with a little scenery around it.",
     "Leave open, empty sky across the top and open, empty ground along the bottom, and keep all four corners empty.",
-    "Clean dark outlines on pure white paper, medium detail, no shading, no filled areas, no gray, no text, no frame.",
-  ].join(" ");
+    "Clean dark outlines on pure white paper, medium detail. Every shape is left white inside: no shading, no filled or gray areas, no black areas.",
+    "No text of any kind: no letters, words, inscriptions, carved or painted lettering, signs, numbers or logos.",
+    "The drawing runs edge to edge with no border, frame or outline around the picture.",
+  ].filter(Boolean).join(" ");
 }
 
-function cloudflareEdit(runtime: SpotRuntime, a: Uint8Array): EditFn | null {
+// One FLUX.2 call: text-to-image without `input`, an edit of `input` with it.
+function cloudflareFlux(runtime: SpotRuntime) {
   const accountId = runtime.CLOUDFLARE_ACCOUNT_ID?.trim();
   const apiToken = runtime.CLOUDFLARE_API_TOKEN?.trim();
   if (!accountId || !apiToken) return null;
   const model = runtime.CLOUDFLARE_AI_EDIT_MODEL?.trim() || DEFAULT_EDIT_MODEL;
-  return async (prompt) => {
+  return async (prompt: string, size: number, input?: Uint8Array, timeoutMs = EDIT_TIMEOUT_MS) => {
     const form = new FormData();
     form.append("prompt", prompt);
-    form.append("input_image_0", new Blob([a as Uint8Array<ArrayBuffer>], { type: "image/png" }), "picture-a.png");
-    form.append("width", String(SIZE));
-    form.append("height", String(SIZE));
+    if (input) form.append("input_image_0", new Blob([input as Uint8Array<ArrayBuffer>], { type: "image/png" }), "picture-a.png");
+    form.append("width", String(size));
+    form.append("height", String(size));
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`, {
         method: "POST",
@@ -256,7 +319,7 @@ function cloudflareEdit(runtime: SpotRuntime, a: Uint8Array): EditFn | null {
       if (!response.ok) {
         // A 400 here is usually the provider's content filter misfiring on
         // a landmark; the doodle fallback covers it.
-        console.info(`[TripQuest spot-the-difference] edit returned ${response.status}`);
+        console.info(`[TripQuest spot-the-difference] FLUX returned ${response.status}`);
         return null;
       }
       const body = await response.json() as { result?: { image?: string } };
@@ -307,10 +370,16 @@ async function pictureFor(runtime: SpotRuntime, destination: string, candidate: 
     console.error("[TripQuest spot-the-difference cache]", error);
   }
 
-  const source = await generateIllustrationPng(provider, spotPicturePrompt(destination, candidate.day, candidate.activity), "1024x1024");
+  // FLUX.2 klein follows "no fills, no text" far better than the default
+  // illustration model, for about the same cost; other providers still work.
+  const flux = cloudflareFlux(runtime);
+  const prompt = spotPicturePrompt(destination, candidate.day, candidate.activity);
+  const source = (flux && await flux(prompt, 1024, undefined, PICTURE_TIMEOUT_MS).catch(() => null))
+    || await generateIllustrationPng(provider, prompt, "1024x1024");
   const a = squareGrey(decodeImage(source), SIZE);
   const aPng = encodePng(a);
-  const { b, regions, edited } = await buildDifferencePicture(a, cloudflareEdit(runtime, aPng), identity);
+  const edit: EditFn | null = flux ? (editPromptText) => flux(editPromptText, SIZE, aPng) : null;
+  const { b, regions, edited } = await buildDifferencePicture(a, edit, identity);
   const metadata = { cacheControl: "public, max-age=31536000, immutable", contentType: "image/png" };
   await storage.put(keyA, aPng, { httpMetadata: metadata, customMetadata: { destination, title: `${candidate.activity.title} (A)` } });
   await storage.put(keyB, encodePng(b), {

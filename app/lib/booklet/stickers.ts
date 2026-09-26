@@ -6,6 +6,9 @@ import { FAMILY_BADGES } from "../family.ts";
 // booklet draws a spot for each sticker and the sticker sheets print one
 // sticker for each, both from this one list, so they always match.
 
+// A5 sticker sheets hold a 4 x 5 grid of 30mm circles.
+export const STICKERS_PER_SHEET = 20;
+
 export type StickerIcon =
   | "star" | "heart" | "magnifier" | "pencil" | "pin" | "maze" | "check"
   | "sparkle" | "crown" | "flag" | "key" | "question" | "book" | "envelope" | "sun";
@@ -98,10 +101,22 @@ export function stickerPlan(
   });
 
   treatMilestones(booklet.dayPlans.length).forEach((milestone, index) => {
-    stickers.push({ id: `treat-${index}`, kind: "milestone", sheet: "game", label: milestone.label, icon: "heart", tone: (index + 1) % 4, spot: { page: "treats", milestone: index } });
+    stickers.push({ id: `treat-${index}`, kind: "milestone", sheet: "game", label: `Stop ${index + 1} treat!`, icon: "heart", tone: (index + 1) % 4, spot: { page: "treats", milestone: index } });
   });
 
-  stickers.push({ id: "envelope-seal", kind: "envelopeSeal", sheet: "envelope", label: "Open me at the end of your treat trail!", icon: "envelope", tone: 3, spot: { page: "none" } });
+  // Extra cheers fill the last game sheet, for anything else worth a
+  // sticker: a brave taste, a long walk, a kind moment.
+  const gameCount = stickers.length;
+  const extraCount = (STICKERS_PER_SHEET - (gameCount % STICKERS_PER_SHEET)) % STICKERS_PER_SHEET;
+  const extras: Array<{ label: string; icon: StickerIcon }> = [
+    { label: "Super!", icon: "star" }, { label: "Great job!", icon: "check" }, { label: "So brave!", icon: "heart" },
+    { label: "You did it!", icon: "sparkle" }, { label: "Awesome!", icon: "sun" }, { label: "Top explorer!", icon: "flag" },
+  ];
+  for (let index = 0; index < extraCount; index += 1) {
+    stickers.push({ id: `extra-${index}`, kind: "bonus", sheet: "game", ...extras[index % extras.length], tone: index % 4, spot: { page: "none" } });
+  }
+
+  stickers.push({ id: "envelope-seal", kind: "envelopeSeal", sheet: "envelope", label: "Open at the end!", icon: "envelope", tone: 3, spot: { page: "none" } });
   stickers.push({ id: "seal", kind: "seal", sheet: "envelope", label: `${booklet.destination} Explorer`, icon: "star", tone: 2, spot: { page: "certificate" } });
   stickers.push({ id: "master", kind: "master", sheet: "envelope", label: "Master Explorer", icon: "crown", tone: 0, spot: { page: "none" } });
   if (options.familyPack) {
@@ -109,11 +124,15 @@ export function stickerPlan(
       stickers.push({ id: `badge-${index}`, kind: "badge", sheet: "envelope", label: badge, icon: (["magnifier", "heart", "star", "sparkle", "pin", "book", "flag", "check"] as StickerIcon[])[index % 8], tone: index % 4, spot: { page: "badges", index } });
     });
   }
-  // Bonus stickers fill the envelope sheet: a surprise with no set spot.
+  // Bonus stickers fill the envelope sheet: surprises with no set spot.
   const envelopeCount = stickers.filter((sticker) => sticker.sheet === "envelope").length;
-  const bonusIcons: StickerIcon[] = ["star", "heart", "sparkle", "pin", "sun", "flag"];
-  for (let index = 0; envelopeCount + index < 20 && index < 6; index += 1) {
-    stickers.push({ id: `bonus-${index}`, kind: "bonus", sheet: "envelope", label: index === 0 ? booklet.destination : ["Wow!", "Brave!", "Curious!", "Kind!", "Explorer!"][(index - 1) % 5], icon: bonusIcons[index], tone: index % 4, spot: { page: "none" } });
+  const bonusIcons: StickerIcon[] = ["star", "heart", "sparkle", "pin", "sun", "flag", "check", "magnifier"];
+  const bonusLabels = [
+    booklet.destination, "Wow!", "Brave!", "Curious!", "Kind!", "Explorer!", "Tried it!", "Big smile!", "Helper!",
+    "Walked far!", "Wonder!", "Adventurer!", "So cool!", "Good eye!", "Travel star!", "Hooray!", "High five!",
+  ];
+  for (let index = 0; envelopeCount + index < STICKERS_PER_SHEET && index < bonusLabels.length; index += 1) {
+    stickers.push({ id: `bonus-${index}`, kind: "bonus", sheet: "envelope", label: bonusLabels[index], icon: bonusIcons[index % bonusIcons.length], tone: index % 4, spot: { page: "none" } });
   }
   return stickers;
 }

@@ -73,6 +73,18 @@ async function loadFont(document: PDFDocument, resolveFontBytes: FontResolver | 
   return document.embedFont(fallback);
 }
 
+// The booklet's three faces, shared with the sticker sheets.
+export async function loadBookletFonts(document: PDFDocument, resolveFontBytes: FontResolver | undefined): Promise<Fonts> {
+  document.registerFontkit(fontkit);
+  return {
+    regular: await loadFont(document, resolveFontBytes, FONT_ASSETS.regular, StandardFonts.Helvetica),
+    bold: await loadFont(document, resolveFontBytes, FONT_ASSETS.bold, StandardFonts.HelveticaBold),
+    mono: await document.embedFont(StandardFonts.Courier),
+    monoBold: await document.embedFont(StandardFonts.CourierBold),
+    display: await loadFont(document, resolveFontBytes, FONT_ASSETS.display, StandardFonts.HelveticaBold),
+  };
+}
+
 // Illustrations come from either image provider, which return different
 // formats, so sniff instead of assuming PNG.
 function embedIllustration(document: PDFDocument, bytes: Uint8Array) {
@@ -177,14 +189,7 @@ export async function createBookletPdf(
   const booklet = normalizedBooklet(inputBooklet);
   assertBookletQa(booklet);
   const document = await PDFDocument.create();
-  document.registerFontkit(fontkit);
-  const fonts: Fonts = {
-    regular: await loadFont(document, resolveFontBytes, FONT_ASSETS.regular, StandardFonts.Helvetica),
-    bold: await loadFont(document, resolveFontBytes, FONT_ASSETS.bold, StandardFonts.HelveticaBold),
-    mono: await document.embedFont(StandardFonts.Courier),
-    monoBold: await document.embedFont(StandardFonts.CourierBold),
-    display: await loadFont(document, resolveFontBytes, FONT_ASSETS.display, StandardFonts.HelveticaBold),
-  };
+  const fonts = await loadBookletFonts(document, resolveFontBytes);
   const art = resolveColoringImage
     ? await loadArtwork(document, booklet, resolveColoringImage)
     : { artwork: {}, revealArtwork: {}, coverArtwork: undefined };

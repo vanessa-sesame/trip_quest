@@ -28,6 +28,7 @@ import {
   type PurchaseRecord,
 } from "../../lib/payment";
 import { normalizePdfRequest, type NormalizedPdfRequest } from "../../lib/pdf/request";
+import { createStickerSheetPdf, stickerSheetsPdfFilename } from "../../lib/pdf/stickers";
 import {
   HttpRequestError,
   assertSameOriginRequest,
@@ -48,6 +49,37 @@ type RuntimeEnvironment = PaymentRuntime & {
 };
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
+
+// "booklet" is the printable booklet; "stickers" its matching sticker sheets.
+type PdfKind = "booklet" | "stickers";
+
+function pdfKindFrom(value: unknown): PdfKind {
+  return value === "stickers" ? "stickers" : "booklet";
+}
+
+// Fonts and illustrations for the renderers: R2-stored illustrations by
+// key, anything else from the site's static assets. illustrationStorageKey
+// only matches the illustrations/v.../artwork.png shape, so /fonts/*.ttf
+// falls through to the static branch.
+function staticAssetResolver(request: Request, runtime: RuntimeEnvironment) {
+  return async (path: string) => {
+    const storedKey = illustrationStorageKey(path);
+    if (storedKey) {
+      const stored = await runtime.BOOKLET_FILES?.get(storedKey);
+      return stored?.arrayBuffer ? new Uint8Array(await stored.arrayBuffer()) : null;
+    }
+    if (!path.startsWith("/") || path.startsWith("//")) return null;
+    const assetRequest = new Request(new URL(path, request.url));
+    // Local dev has no ASSETS binding (vite.config.ts only simulates D1/R2),
+    // which silently rendered every dev PDF in Helvetica with no curated
+    // art; the dev server serves public/ itself, so fetch it from there.
+    const response = runtime.ASSETS
+      ? await runtime.ASSETS.fetch(assetRequest)
+      : await fetch(assetRequest);
+    if (!response.ok) return null;
+    return new Uint8Array(await response.arrayBuffer());
+  };
+}
 
 async function getRuntimeEnvironment(): Promise<RuntimeEnvironment> {
   try {
@@ -102,6 +134,7 @@ async function preparePdf(
   input: NormalizedPdfRequest,
   purchase: PurchaseRecord | null,
   requestedFingerprint = "",
+  kind: PdfKind = "booklet",
 ) {
   if (!runtime.DB || !runtime.BOOKLET_FILES) {
     return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
@@ -112,7 +145,7 @@ async function preparePdf(
   }
   const cacheKey = purchase?.cacheKey || computedCacheKey;
 
-  if (purchase?.pdfKey) {
+  if (purchase?.pdfKey && kind === "booklet") {
     const storedPurchasePdf = await readPurchasePdf(
       runtime.BOOKLET_FILES,
       purchase.pdfKey,
@@ -158,6 +191,16 @@ async function preparePdf(
     );
   }
   const personalizedBooklet = applySiblingPlan(storedBooklet, input.family);
+  const resolveStaticAsset = staticAssetResolver(request, runtime);
+  if (kind === "stickers") {
+    const stickers = await createStickerSheetPdf(
+      personalizedBooklet,
+      familyPackFor(input.family, input.events, input.days),
+      resolveStaticAsset,
+      { alignmentPage: true },
+    );
+    return pdfResponse(stickers, stickerSheetsPdfFilename(personalizedBooklet), "stickers", editionFingerprint);
+  }
   const filename = familyPackPdfFilename(personalizedBooklet);
   const reusablePdf = input.family.length <= 1 && !hasPersonalFamilyNames(input);
   if (reusablePdf) {
@@ -169,27 +212,6 @@ async function preparePdf(
   let job = pdfJobs.get(jobKey);
   if (!job) {
     const familyPack: FamilyPackContext = familyPackFor(input.family, input.events, input.days);
-    // Also reused as-is for font files (createBookletPdf's resolveFontBytes,
-    // below): illustrationStorageKey only matches the R2-backed
-    // illustrations/v.../artwork.png shape, so a /fonts/*.ttf path already
-    // falls through to the generic ASSETS.fetch branch correctly.
-    const resolveStaticAsset = async (path: string) => {
-      const storedKey = illustrationStorageKey(path);
-      if (storedKey) {
-        const stored = await runtime.BOOKLET_FILES?.get(storedKey);
-        return stored?.arrayBuffer ? new Uint8Array(await stored.arrayBuffer()) : null;
-      }
-      if (!path.startsWith("/") || path.startsWith("//")) return null;
-      const assetRequest = new Request(new URL(path, request.url));
-      // Local dev has no ASSETS binding (vite.config.ts only simulates D1/R2),
-      // which silently rendered every dev PDF in Helvetica with no curated
-      // art; the dev server serves public/ itself, so fetch it from there.
-      const response = runtime.ASSETS
-        ? await runtime.ASSETS.fetch(assetRequest)
-        : await fetch(assetRequest);
-      if (!response.ok) return null;
-      return new Uint8Array(await response.arrayBuffer());
-    };
     job = createBookletPdf(personalizedBooklet, familyPack, resolveStaticAsset, resolveStaticAsset);
     pdfJobs.set(jobKey, job);
     void job.finally(() => pdfJobs.delete(jobKey)).catch(() => undefined);
@@ -254,7 +276,7 @@ export async function POST(request: Request) {
         { status: 409 },
       );
     }
-    return preparePdf(request, runtime, input, purchase, requestedFingerprint);
+    return preparePdf(request, runtime, input, purchase, requestedFingerprint, pdfKindFrom(body.kind));
   } catch (error) {
     return errorResponse(error);
   }
@@ -263,7 +285,8 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const runtime = await getRuntimeEnvironment();
-    const sessionId = new URL(request.url).searchParams.get("session_id")?.trim() || "";
+    const url = new URL(request.url);
+    const sessionId = url.searchParams.get("session_id")?.trim() || "";
     if (!runtime.DB || !runtime.BOOKLET_FILES || !sessionId) {
       return Response.json({ error: "A completed checkout session is required." }, { status: 400 });
     }
@@ -273,7 +296,7 @@ export async function GET(request: Request) {
     if (!purchase) return Response.json({ error: "Payment has not completed or this purchase is not valid." }, { status: 402 });
     const requestValue = JSON.parse(purchase.requestJson) as Record<string, unknown>;
     const input = normalizePdfRequest(requestValue, runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3", runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6");
-    return preparePdf(request, runtime, input, purchase);
+    return preparePdf(request, runtime, input, purchase, "", pdfKindFrom(url.searchParams.get("kind")));
   } catch (error) {
     return errorResponse(error);
   }

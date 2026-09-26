@@ -755,11 +755,12 @@ function gamePrompt(
   }
 }
 
-function renameActivityForMechanic(value: string, replacement: string) {
+export function renameActivityForMechanic(value: string, replacement: string) {
   const cleaned = value
     .replace(/\bmini\s+crossword\b|\bcrossword\b|\bsudoku\b|\bmap\s+puzzle\b|\broute\s+mapper\b/gi, "")
     .replace(/\s+/g, " ")
-    .replace(/[\s:|-]+$/g, "")
+    // "Crossword: Tile Code" must not become ": Tile Code".
+    .replace(/^[\s:|-]+|[\s:|-]+$/g, "")
     .trim();
   return `${cleaned || "Local"} ${replacement}`.slice(0, 70);
 }

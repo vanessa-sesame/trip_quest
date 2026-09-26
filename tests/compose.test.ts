@@ -125,3 +125,30 @@ test("second in-place and queue games are varied across the trip", () => {
   }
   assert.ok(consecutiveQueueRepeats <= 4, `${consecutiveQueueRepeats} consecutive queue repeats across 18 week-long trips`);
 });
+
+test("flagged reveal claims are rewritten from the research instead of blanked", async () => {
+  const draft = usableDraftWithFillerLabels();
+  draft.dayPlans[0].slots.inThePlace = { ...draft.dayPlans[0].slots.inThePlace, items: ["Red lantern", "Paper crane", "Stone lion", "Shrine bell"].map((label) => ({ label, clue: `Look for the ${label.toLowerCase()} near the station.` })) };
+  const requests: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const name = JSON.parse(String(init?.body)).response_format?.json_schema?.name;
+    requests.push(name);
+    const content = name === "grounding_check"
+      ? JSON.stringify({ findings: [{ day: 1, field: "questReveal.targetLabel", issue: "Belongs to another stop." }] })
+      : name === "tripquest_reveal_fix"
+        ? JSON.stringify({ days: [{ day: 1, targetLabel: "STONE LION", targetKind: "object", bonusQuest: "Find the lion with an open mouth!", revealText: "Here it is! The stone lions guard the shrine gate.", chatPrompts: ["Why do you think lions guard gates?", "Which lion looked friendliest?"], factCard: [] }] })
+        : JSON.stringify(draft);
+    return Response.json({ choices: [{ message: { content } }] });
+  };
+  try {
+    const result = await composeBookletBatch(
+      "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
+      "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
+    );
+    assert.ok(requests.includes("tripquest_reveal_fix"));
+    assert.equal(result.dayPlans[0].slots.questReveal?.targetLabel, "STONE LION");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

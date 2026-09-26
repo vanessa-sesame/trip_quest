@@ -1,4 +1,5 @@
 import type { DayPlan } from "./booklet.ts";
+import { normalizePuzzleWord } from "./puzzles.ts";
 import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 
 export function wordCount(value: string) {
@@ -207,6 +208,13 @@ export function composedContentProblems(
             message: `Day ${day.day} "${game.title}" is a ${game.gameType} game but its clues are drawing/writing instructions ("${imperative[0].clue}"); write clues that describe or ask about a real local detail.`,
           });
         }
+      }
+      if (game.gameType === "codebreaker" && normalizePuzzleWord(items[0]?.label ?? "", 12).length < 3) {
+        problems.push({
+          day: day.day,
+          slot: game.slot,
+          message: `Day ${day.day} "${game.title}" is a codebreaker but its first label ("${items[0]?.label ?? ""}") is not a word; the first item's label is the decoded answer and must be a real 3-to-9-letter local word, and its clue must point to that word.`,
+        });
       }
       if (game.gameType === "quiz") {
         const notQuestions = items.filter((item) => !item.clue.includes("?"));

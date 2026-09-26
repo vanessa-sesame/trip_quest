@@ -76,3 +76,17 @@ export function gameInstruction(activity: GameCopyInput) {
       return "Use the story sparks to make up a tiny travel story.";
   }
 }
+
+// A title as printed: stored titles can start with a separator left behind
+// when a mechanic word was removed ("Crossword: Tile Code" -> ": Tile Code").
+export function displayTitle(title: string) {
+  return title.replace(/^[\s:|\-–—]+/, "").trim() || title;
+}
+
+// Whether the activity's intro paragraph is shown. Maze intros are
+// generated from item names ("from START to DETOUR") and would contradict
+// the Start/Finish board; spot-the-difference skips its intro too (its
+// how-to line says it all, and its look-and-find fallback has no pictures).
+export function showsActivityBody(activity: Pick<Activity, "gameType" | "body">) {
+  return Boolean(activity.body) && activity.gameType !== "maze" && activity.gameType !== "spot_the_difference";
+}

@@ -12,6 +12,7 @@ import {
   allowedGameTypesForAge,
   balancedGameTypePlanForTrip,
   normalizeItinerary,
+  renameActivityForMechanic,
   validateBookletDraft,
 } from "../app/lib/generation/booklet-ai.ts";
 import {
@@ -491,4 +492,10 @@ test("the game planner never repeats a game type on consecutive days", () => {
       }
     }
   }
+});
+
+test("renaming a converted game never leaves a dangling separator", () => {
+  assert.equal(renameActivityForMechanic("Crossword: Gaudi's Tile Code", "Word Search"), "Gaudi's Tile Code Word Search");
+  assert.equal(renameActivityForMechanic("Tile Code | Crossword", "Word Search"), "Tile Code Word Search");
+  assert.equal(renameActivityForMechanic("Crossword", "Word Search"), "Local Word Search");
 });

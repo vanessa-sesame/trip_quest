@@ -1,5 +1,6 @@
 import type { Activity } from "../../booklet/booklet.ts";
 import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
+import { displayTitle } from "../../booklet/game-copy.ts";
 import { answerFor } from "../games/index.ts";
 import {
   drawDestinationMotif,
@@ -45,7 +46,7 @@ export function drawAnswerKeyPage(ctx: PdfContext, entries: AnswerEntry[], part:
   flow.bullets(
     entries.map((entry) => ({
       marker: `${entry.day}.${entry.index + 1}`,
-      title: entry.activity.title,
+      title: displayTitle(entry.activity.title),
       text: answerFor(entry.activity, booklet.age),
     })),
     { size: type.small, marker: "number", markerColor: colors.yellow, maxLines: 2, gap: 9 },

@@ -1,6 +1,7 @@
 import type { PDFPage, RGB } from "pdf-lib";
 import type { Activity, DayPlan } from "../../booklet/booklet.ts";
 import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
+import { displayTitle, showsActivityBody } from "../../booklet/game-copy.ts";
 import { drawGame, gameHasOwnWritingSpace, gameInstruction } from "../games/index.ts";
 import { drawCard, drawDottedLine, drawPill, drawText, Flow, measureText } from "../layout.ts";
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, colors } from "../theme.ts";
@@ -20,17 +21,14 @@ export function drawActivityPage(ctx: PdfContext, day: DayPlan, activity: Activi
   const page = addPage(ctx, `Day ${day.day}`, options.accent);
   const top = drawPageHeader(ctx, page, {
     kicker: options.kicker,
-    title: activity.title,
+    title: displayTitle(activity.title),
     accent: options.accent,
     soft: options.soft,
     subtitle: day.landmark.place,
   });
 
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  // Spot-the-difference skips its intro: with pictures the how-to line says
-  // it all (and the pictures need the room); without them it plays as
-  // look-and-find, which the "compare the two pictures" intro would not match.
-  if (activity.body && activity.gameType !== "spot_the_difference") {
+  if (showsActivityBody(activity)) {
     flow.text(activity.body, { size: type.body, color: colors.ink, maxLines: 3 });
   }
   flow.space(6);

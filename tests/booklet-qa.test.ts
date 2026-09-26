@@ -184,3 +184,11 @@ test("numeric answers are not mistaken for numbered filler labels", () => {
   day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "scavenger_hunt", items: photos };
   assert.ok(composedContentIssues({ dayPlans: [day] }).some((issue) => /numbered filler/.test(issue)));
 });
+
+test("a codebreaker whose answer is not a word is flagged", () => {
+  const [day] = buildBooklet(9, "Barcelona", 1);
+  day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "codebreaker", items: ["4", "Orange", "Stall", "Cup"].map((label) => ({ label, clue: `How much does the ${label} juice cost?` })) };
+  assert.ok(composedContentIssues({ dayPlans: [day] }).some((issue) => /codebreaker but its first label/.test(issue)));
+  day.slots.inThePlace = { ...day.slots.inThePlace, items: ["Mosaic", "Orange", "Stall", "Cup"].map((label) => ({ label, clue: `What is the ${label}?` })) };
+  assert.ok(!composedContentIssues({ dayPlans: [day] }).some((issue) => /codebreaker but its first label/.test(issue)));
+});

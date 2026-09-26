@@ -39,6 +39,7 @@ import {
 import { ActivityGame } from "./components/activity-game";
 import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./components/doodles";
 import { activityContext, bookletCorePageTitles, bookletDayPageEntries } from "./lib/booklet/pages";
+import { displayTitle, showsActivityBody } from "./lib/booklet/game-copy";
 import {
   GenerationStreamError,
   readGenerationResponse,
@@ -1799,9 +1800,9 @@ function GeneratedPage({
     <article className="generated-sheet generated-day generated-game-page">
       <span>Day {day.day} · {kicker}</span>
       <p className="game-place">{day.landmark.place}</p>
-      <h3>{activity.title}</h3>
-      {/* Spot-the-difference skips its intro, matching the printed page. */}
-      {activity.body && activity.gameType !== "spot_the_difference" ? <p className="game-instructions">{activity.body}</p> : null}
+      <h3>{displayTitle(activity.title)}</h3>
+      {/* Same intro rule as the printed page. */}
+      {showsActivityBody(activity) ? <p className="game-instructions">{activity.body}</p> : null}
       <ActivityGame activity={activity} age={age} context={activityContext(day, slot)} />
       {activity.gameType === "coloring" || !activity.prompt ? null : <i>{activity.prompt}</i>}
     </article>

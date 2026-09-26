@@ -14,8 +14,8 @@ import {
   writeStoredBookletBatch,
 } from "../storage/booklet-storage.ts";
 import type { InterestPlanItem } from "../family.ts";
-import { checkGroundedClaims, sanitizeUngroundedClaims } from "./grounding.ts";
-import { composedContentProblems, type ContentProblem } from "../booklet/qa.ts";
+import { checkGroundedClaims, sanitizeUngroundedClaims, type GroundingFinding } from "./grounding.ts";
+import { composedContentProblems, wordCount, type ContentProblem } from "../booklet/qa.ts";
 import { kimiRequest } from "./kimi.ts";
 import { logStorageFailure } from "./log.ts";
 import type { ResearchResult } from "./research.ts";
@@ -358,6 +358,7 @@ CREATIVE DIRECTION
 - For all other games, labels can be 1 to 4 words. Every item clue must contain a specific, accurate local detail or a clear play instruction.
 - Exactly four items appear in each printed game. Never mention a fifth item, extra target, or different answer in the activity body or prompt.
 - Every item label names a different, specific local thing: a real object, place, food, word, or feature. Never number or order labels ("Treasure 1", "Food 2", "First red lantern", "Second find") and never reuse the same word across one game's labels. On a drawing or story page the four items are four different things to draw or write about, each labelled with that thing ("Roof", "Price tag", "Lantern"), not a numbered sequence.
+- For codebreaker games, the first item's label is the secret word the child decodes: a real 3-to-9-letter local word written in letters (never a number or price), and its clue points to that word.
 - For quiz games, each item's clue is a genuine question a child can answer by looking at the place (ending in "?"), and its label is the short correct answer.
 - For matching, bingo, quiz, and codebreaker games, clues describe or ask about a real detail; they are never drawing, colouring, or writing instructions.
 - For answerMode use closed only when the puzzle has one checkable answer. Use open for observations, drawings, and imaginative responses.
@@ -443,10 +444,16 @@ ${research.notes}`,
       if (remaining.length) {
         console.error("[TripQuest content] accepted with issues:", JSON.stringify(remaining.map((problem) => problem.message)));
       }
-      if (groundingFindings.length) {
-        console.info("[TripQuest grounding] neutralized unsupported claims:", JSON.stringify(groundingFindings));
-      }
-      return finalize(groundingFindings.length ? sanitizeUngroundedClaims(repaired, groundingFindings) : repaired);
+      if (!groundingFindings.length) return finalize(repaired);
+      // Rewrite the flagged reveal and facts from the research (one small
+      // request); only if that fails, neutralize them locally.
+      const context = { destination, age, days, research, apiKey, model, modelOptions, plannedTypes };
+      const rewritten = await rewriteUngroundedClaims(repaired, groundingFindings, context).catch((error) => {
+        console.error("[TripQuest grounding] rewrite failed; neutralizing instead:", error instanceof Error ? error.message : error);
+        return null;
+      });
+      console.info(`[TripQuest grounding] ${rewritten ? "rewrote" : "neutralized"} unsupported claims:`, JSON.stringify(groundingFindings));
+      return finalize(rewritten ?? sanitizeUngroundedClaims(repaired, groundingFindings));
     } catch (error) {
       lastError = error;
       console.info(
@@ -565,7 +572,7 @@ export async function repairGames(draft: BookletDraft, problems: ContentProblem[
       {
         role: "user",
         content: `Rewrite each game below for exactly age ${context.age}, visiting ${context.destination}, fixing its listed problems and nothing else.
-Rules: exactly four items; every label names a different, specific local thing (never numbered or ordinal like "Photo 1" or "First lantern"); quiz clues are genuine questions ending in "?" answered by the label; matching, bingo, quiz and codebreaker clues describe or ask about a real detail and are never draw, colour or write instructions; set requiresPresence=true for inThePlace and inThePlaceSecond, false for sitDown; crossword and word-search labels are unique 3-to-9-letter words.
+Rules: exactly four items; a codebreaker's first label is the decoded answer, a real 3-to-9-letter local word (never a number); every label names a different, specific local thing (never numbered or ordinal like "Photo 1" or "First lantern"); quiz clues are genuine questions ending in "?" answered by the label; matching, bingo, quiz and codebreaker clues describe or ask about a real detail and are never draw, colour or write instructions; set requiresPresence=true for inThePlace and inThePlaceSecond, false for sitDown; crossword and word-search labels are unique 3-to-9-letter words.
 
 ${briefs}
 
@@ -590,6 +597,90 @@ ${context.research.notes}`,
     };
   }
   for (const day of next.dayPlans) day.activities = [day.slots.inThePlace, day.slots.sitDown];
+  return validateBookletDraft(next, context.days, context.age);
+}
+
+// Rewrites the quest reveal and facts of each day the fact-check flagged,
+// grounded in that day's own place (a common slip is borrowing a famous
+// detail from another stop in the same city). Throws when the result does
+// not validate; the caller then neutralizes the claims locally instead.
+export async function rewriteUngroundedClaims(draft: BookletDraft, findings: GroundingFinding[], context: RepairContext) {
+  const next: BookletDraft = structuredClone(draft);
+  const flaggedDays = [...new Set(findings.map((finding) => finding.day))]
+    .map((dayNumber) => next.dayPlans.find((day) => day.day === dayNumber))
+    .filter((day): day is BookletDraft["dayPlans"][number] => Boolean(day?.slots.questReveal));
+  if (!flaggedDays.length) throw new Error("No flagged day has a quest reveal.");
+  const briefs = flaggedDays.map((day) => [
+    `DAY ${day.day} — place: ${day.landmark.place}. Theme: ${day.theme}.`,
+    `Problems: ${findings.filter((finding) => finding.day === day.day).map((finding) => `${finding.field}: ${finding.issue}`).join(" ")}`,
+    `Current: ${JSON.stringify({ questReveal: { ...day.slots.questReveal, photoPath: undefined }, factCard: day.slots.factCard })}`,
+  ].join("\n")).join("\n\n");
+  const schema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      days: {
+        type: "array",
+        minItems: flaggedDays.length,
+        maxItems: flaggedDays.length,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            day: { type: "integer" },
+            targetLabel: { type: "string" },
+            targetKind: { type: "string", enum: ["shape", "colour", "object", "sound", "person"] },
+            bonusQuest: { type: "string" },
+            revealText: { type: "string" },
+            chatPrompts: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+            factCard: { type: "array", minItems: 0, maxItems: 3, items: { type: "string" } },
+          },
+          required: ["day", "targetLabel", "targetKind", "bonusQuest", "revealText", "chatPrompts", "factCard"],
+        },
+      },
+    },
+    required: ["days"],
+  };
+  const payload = await kimiRequest("/chat/completions", context.apiKey, {
+    model: context.model,
+    ...context.modelOptions,
+    max_completion_tokens: 350 * flaggedDays.length + 200,
+    messages: [
+      { role: "system", content: "You fix facts in a children's travel activity booklet. Use only details stated in the supplied research." },
+      {
+        role: "user",
+        content: `For each day below (age ${context.age}, ${context.destination}), rewrite the secret target and its reveal, and the facts, so every claim is directly supported by the research about that day's own place. Fix the listed problems.
+targetLabel: 2-5 words, a specific thing a child can spot at that place. bonusQuest: one short extra challenge about the same target. revealText: 1-2 excited sentences naming where the target is and why it matters. chatPrompts: two short open questions a parent could ask. factCard: exactly three concrete facts under 15 words each, or an empty list; never instructions and never the word "you".
+
+${briefs}
+
+DESTINATION RESEARCH
+${context.research.notes}`,
+      },
+    ],
+    response_format: { type: "json_schema", json_schema: { name: "tripquest_reveal_fix", strict: true, schema } },
+  }, 45_000);
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const content = ((choices[0] as Record<string, unknown> | undefined)?.message as Record<string, unknown> | undefined)?.content;
+  if (typeof content !== "string") throw new Error("Kimi returned no rewritten claims.");
+  const parsed = JSON.parse(content) as { days?: Array<Record<string, unknown> & { day: number; factCard: string[] }> };
+  for (const fix of parsed.days ?? []) {
+    const day = flaggedDays.find((candidate) => candidate.day === fix.day);
+    if (!day?.slots.questReveal) continue;
+    day.slots.questReveal = {
+      ...day.slots.questReveal,
+      targetLabel: String(fix.targetLabel),
+      targetKind: fix.targetKind as NonNullable<typeof day.slots.questReveal>["targetKind"],
+      bonusQuest: String(fix.bonusQuest),
+      revealText: String(fix.revealText),
+      chatPrompts: fix.chatPrompts as [string, string],
+    };
+    // Same rules assertBookletQa applies to facts; a slip drops the facts
+    // rather than failing the whole booklet later.
+    const factsOk = fix.factCard.length === 3 && fix.factCard.every((fact) =>
+      wordCount(fact) <= 15 && !/^(?:look|find|count|draw|colour|color|trace|circle|tick|write|ask|try|spot)\b|\byou\b/i.test(fact));
+    day.slots.factCard = factsOk ? fix.factCard : [];
+  }
   return validateBookletDraft(next, context.days, context.age);
 }
 

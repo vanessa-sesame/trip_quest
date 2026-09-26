@@ -455,7 +455,9 @@ export async function repairGames(draft: BookletDraft, problems: ContentProblem[
     const day = next.dayPlans.find((plan) => plan.day === problem.day);
     if (!day) continue;
     if (problem.slot === "whileYouWait") {
-      const { gameType: _gameType, items: _items, ...queue } = day.slots.whileYouWait;
+      const queue = { ...day.slots.whileYouWait };
+      delete queue.gameType;
+      delete queue.items;
       day.slots.whileYouWait = queue;
       continue;
     }

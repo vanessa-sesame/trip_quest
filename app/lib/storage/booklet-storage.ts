@@ -175,8 +175,8 @@ export function bookletBatchArtifactKey(
 // One day per composition request: requests run in parallel, and a model
 // writes one day about three times faster than three, so a trip of any
 // length takes about as long as a single day.
-export function composeBatchSize(_days: number) {
-  return 1;
+export function composeBatchSize(days: number) {
+  return Math.min(1, days);
 }
 
 // Maps a 1-indexed day number back to the batch that composed it, so a

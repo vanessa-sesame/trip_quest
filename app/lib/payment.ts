@@ -3,12 +3,21 @@ import {
   type BookletDatabase,
   type BookletObjectStorage,
 } from "./storage/booklet-storage.ts";
+import {
+  PRODUCTS,
+  fulfilmentStatusFrom,
+  purchaseProductFrom,
+  type FulfilmentStatus,
+  type PurchaseProduct,
+} from "./products.ts";
 
 export type PaymentRuntime = {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_ID?: string;
   STRIPE_PRICE_CENTS?: string;
+  STRIPE_KIT_PRICE_ID?: string;
+  STRIPE_KIT_PRICE_CENTS?: string;
   STRIPE_CURRENCY?: string;
   TRIPQUEST_PUBLIC_URL?: string;
 };
@@ -22,11 +31,36 @@ export type PurchaseRecord = {
   status: "pending" | "paid" | "failed";
   pdfKey: string | null;
   edition: PurchaseEdition | null;
+  product: PurchaseProduct;
+  shipping: ShippingDetails | null;
+  fulfilmentStatus: FulfilmentStatus | null;
+};
+
+// Where a kit goes, as collected by Stripe Checkout.
+export type ShippingDetails = {
+  name: string;
+  phone: string;
+  email: string;
+  address: {
+    line1: string;
+    line2: string;
+    city: string;
+    postalCode: string;
+    country: string;
+  };
 };
 
 export type PurchaseEdition = {
   artifactKey: string;
   fingerprint: string;
+};
+
+type StripeAddress = {
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
 };
 
 type StripeSession = {
@@ -35,6 +69,10 @@ type StripeSession = {
   payment_status?: string;
   metadata?: Record<string, string>;
   client_reference_id?: string | null;
+  customer_details?: { name?: string | null; email?: string | null; phone?: string | null; address?: StripeAddress | null } | null;
+  // Newer API versions move shipping here; older ones use shipping_details.
+  collected_information?: { shipping_details?: { name?: string | null; address?: StripeAddress | null } | null } | null;
+  shipping_details?: { name?: string | null; address?: StripeAddress | null } | null;
 };
 
 const STRIPE_API = "https://api.stripe.com/v1";
@@ -65,16 +103,16 @@ export function familyCookie(familyId: string) {
 }
 
 export function paymentIsConfigured(runtime: PaymentRuntime) {
-  const cents = Number(runtime.STRIPE_PRICE_CENTS || "99");
-  return Boolean(secret(runtime) && (runtime.STRIPE_PRICE_ID?.trim() || Number.isInteger(cents) && cents > 0));
+  return Boolean(secret(runtime));
 }
 
-function paymentAmount(runtime: PaymentRuntime) {
-  const amount = Number(runtime.STRIPE_PRICE_CENTS || "99");
-  return Number.isInteger(amount) && amount > 0 ? amount : 99;
+export function paymentAmount(runtime: PaymentRuntime, product: PurchaseProduct = "pdf") {
+  const configured = product === "kit" ? runtime.STRIPE_KIT_PRICE_CENTS : runtime.STRIPE_PRICE_CENTS;
+  const amount = Number(configured || PRODUCTS[product].defaultCents);
+  return Number.isInteger(amount) && amount > 0 ? amount : PRODUCTS[product].defaultCents;
 }
 
-function currency(runtime: PaymentRuntime) {
+export function paymentCurrency(runtime: PaymentRuntime) {
   const value = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "sgd";
   return /^[a-z]{3}$/.test(value) ? value : "sgd";
 }
@@ -103,23 +141,30 @@ async function stripeRequest<T>(runtime: PaymentRuntime, path: string, init: Req
 export async function createCheckoutSession(
   runtime: PaymentRuntime,
   request: Request,
-  input: { purchaseId: string; cacheKey: string; familyId: string; edition: PurchaseEdition },
+  input: { purchaseId: string; cacheKey: string; familyId: string; edition: PurchaseEdition; product?: PurchaseProduct },
 ) {
   if (!paymentIsConfigured(runtime)) {
     throw new Error("Secure payment is not connected yet. Add the Stripe keys before accepting purchases.");
   }
+  const product = input.product ?? "pdf";
   const form = new URLSearchParams();
   form.set("mode", "payment");
   form.set("line_items[0][quantity]", "1");
-  const priceId = runtime.STRIPE_PRICE_ID?.trim();
+  const priceId = (product === "kit" ? runtime.STRIPE_KIT_PRICE_ID : runtime.STRIPE_PRICE_ID)?.trim();
   if (priceId) {
     form.set("line_items[0][price]", priceId);
   } else {
-    form.set("line_items[0][price_data][currency]", currency(runtime));
-    form.set("line_items[0][price_data][unit_amount]", String(paymentAmount(runtime)));
-    form.set("line_items[0][price_data][product_data][name]", "TripQuest printable family booklet");
+    form.set("line_items[0][price_data][currency]", paymentCurrency(runtime));
+    form.set("line_items[0][price_data][unit_amount]", String(paymentAmount(runtime, product)));
+    form.set("line_items[0][price_data][product_data][name]", PRODUCTS[product].name);
   }
-  form.set("success_url", `${publicUrl(runtime, request)}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`);
+  if (product === "kit") {
+    // Kits are posted within Singapore; Stripe collects the address and a
+    // phone number for the courier.
+    form.set("shipping_address_collection[allowed_countries][0]", "SG");
+    form.set("phone_number_collection[enabled]", "true");
+  }
+  form.set("success_url", `${publicUrl(runtime, request)}/?checkout=success&product=${product}&session_id={CHECKOUT_SESSION_ID}`);
   form.set("cancel_url", `${publicUrl(runtime, request)}/?checkout=cancelled`);
   form.set("client_reference_id", input.purchaseId);
   form.set("metadata[purchase_id]", input.purchaseId);
@@ -127,6 +172,7 @@ export async function createCheckoutSession(
   form.set("metadata[family_id]", input.familyId);
   form.set("metadata[edition_fingerprint]", input.edition.fingerprint);
   form.set("metadata[artifact_key]", input.edition.artifactKey);
+  form.set("metadata[product]", product);
   return stripeRequest<StripeSession>(runtime, "/checkout/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -150,21 +196,102 @@ export async function readPurchaseBySession(database: BookletDatabase, sessionId
   const row = await database
     .prepare(`SELECT purchase_id AS purchaseId, checkout_session_id AS checkoutSessionId,
       family_id AS familyId, cache_key AS cacheKey, request_json AS requestJson,
-      status, pdf_key AS pdfKey FROM purchase_entitlements WHERE checkout_session_id = ?`)
+      status, pdf_key AS pdfKey, ${PURCHASE_EXTRA_COLUMNS} FROM purchase_entitlements WHERE checkout_session_id = ?`)
     .bind(sessionId)
-    .first<Record<string, string | null>>();
+    .first<PurchaseRow>();
+  return purchaseFromRow(row);
+}
+
+const PURCHASE_EXTRA_COLUMNS = "product, shipping_json AS shippingJson, fulfilment_status AS fulfilmentStatus, amount_cents AS amountCents, currency, created_at AS createdAt";
+
+type PurchaseRow = Record<string, string | number | null>;
+
+function parseShipping(value: unknown): ShippingDetails | null {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const parsed = JSON.parse(value) as ShippingDetails;
+    return parsed && typeof parsed.name === "string" && parsed.address ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function purchaseFromRow(row: PurchaseRow | null): PurchaseRecord | null {
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
   if (!row || !row.purchaseId || !row.checkoutSessionId || !row.familyId || !row.cacheKey || !row.requestJson) return null;
   if (row.status !== "pending" && row.status !== "paid" && row.status !== "failed") return null;
   return {
-    purchaseId: row.purchaseId,
-    checkoutSessionId: row.checkoutSessionId,
-    familyId: row.familyId,
-    cacheKey: row.cacheKey,
-    requestJson: row.requestJson,
+    purchaseId: text(row.purchaseId),
+    checkoutSessionId: text(row.checkoutSessionId),
+    familyId: text(row.familyId),
+    cacheKey: text(row.cacheKey),
+    requestJson: text(row.requestJson),
     status: row.status,
-    pdfKey: row.pdfKey,
-    edition: purchaseEditionFromRequestJson(row.requestJson),
-  } satisfies PurchaseRecord;
+    pdfKey: text(row.pdfKey) || null,
+    edition: purchaseEditionFromRequestJson(text(row.requestJson)),
+    product: purchaseProductFrom(row.product),
+    shipping: parseShipping(row.shippingJson),
+    fulfilmentStatus: fulfilmentStatusFrom(row.fulfilmentStatus),
+  };
+}
+
+export async function readPurchaseById(database: BookletDatabase, purchaseId: string) {
+  if (!/^[a-f0-9-]{36}$/i.test(purchaseId)) return null;
+  const row = await database
+    .prepare(`SELECT purchase_id AS purchaseId, checkout_session_id AS checkoutSessionId,
+      family_id AS familyId, cache_key AS cacheKey, request_json AS requestJson,
+      status, pdf_key AS pdfKey, ${PURCHASE_EXTRA_COLUMNS} FROM purchase_entitlements WHERE purchase_id = ?`)
+    .bind(purchaseId)
+    .first<PurchaseRow>();
+  const purchase = purchaseFromRow(row);
+  return purchase ? { ...purchase, createdAt: Number(row?.createdAt) || 0 } : null;
+}
+
+export type KitOrder = PurchaseRecord & { amountCents: number; currency: string; createdAt: number };
+
+// Paid kit orders, newest first: the owner's print-and-post queue.
+export async function listKitOrders(database: BookletDatabase, limit = 100): Promise<KitOrder[]> {
+  const statement = database
+    .prepare(`SELECT purchase_id AS purchaseId, checkout_session_id AS checkoutSessionId,
+      family_id AS familyId, cache_key AS cacheKey, request_json AS requestJson,
+      status, pdf_key AS pdfKey, ${PURCHASE_EXTRA_COLUMNS} FROM purchase_entitlements
+      WHERE product = 'kit' AND status = 'paid' ORDER BY created_at DESC LIMIT ?`)
+    .bind(Math.max(1, Math.min(500, Math.floor(limit))));
+  if (!statement.all) throw new Error("This database cannot list orders.");
+  const { results } = await statement.all<PurchaseRow>();
+  return results.flatMap((row) => {
+    const purchase = purchaseFromRow(row);
+    return purchase
+      ? [{ ...purchase, amountCents: Number(row.amountCents) || 0, currency: String(row.currency || ""), createdAt: Number(row.createdAt) || 0 }]
+      : [];
+  });
+}
+
+export async function setFulfilmentStatus(database: BookletDatabase, purchaseId: string, status: FulfilmentStatus) {
+  const result = await database.prepare(`UPDATE purchase_entitlements SET fulfilment_status = ?, updated_at = ?
+    WHERE purchase_id = ? AND product = 'kit' AND status = 'paid'`)
+    .bind(status, Date.now(), purchaseId)
+    .run();
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+export function shippingFromStripeSession(session: StripeSession): ShippingDetails | null {
+  const shipping = session.collected_information?.shipping_details || session.shipping_details;
+  const address = shipping?.address;
+  if (!shipping || !address?.line1) return null;
+  const customer = session.customer_details || {};
+  return {
+    name: shipping.name?.trim() || customer.name?.trim() || "",
+    phone: customer.phone?.trim() || "",
+    email: customer.email?.trim() || "",
+    address: {
+      line1: address.line1.trim(),
+      line2: address.line2?.trim() || "",
+      city: address.city?.trim() || "",
+      postalCode: address.postal_code?.trim() || "",
+      country: address.country?.trim() || "",
+    },
+  };
 }
 
 function stripeMetadataMatchesPurchase(session: StripeSession, purchase: PurchaseRecord) {
@@ -184,24 +311,35 @@ function stripeMetadataMatchesPurchase(session: StripeSession, purchase: Purchas
 
 export async function writePendingPurchase(
   database: BookletDatabase,
-  input: Omit<PurchaseRecord, "status" | "pdfKey" | "edition">,
+  input: Omit<PurchaseRecord, "status" | "pdfKey" | "edition" | "product" | "shipping" | "fulfilmentStatus"> & { product?: PurchaseProduct },
   amountCents: number,
   currencyCode: string,
 ) {
   const now = Date.now();
   await database.prepare(`INSERT INTO purchase_entitlements
-    (purchase_id, checkout_session_id, family_id, cache_key, request_json, status, amount_cents, currency, pdf_key, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NULL, ?, ?)`)
-    .bind(input.purchaseId, input.checkoutSessionId, input.familyId, input.cacheKey, input.requestJson, amountCents, currencyCode, now, now)
+    (purchase_id, checkout_session_id, family_id, cache_key, request_json, status, amount_cents, currency, pdf_key, product, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NULL, ?, ?, ?)`)
+    .bind(input.purchaseId, input.checkoutSessionId, input.familyId, input.cacheKey, input.requestJson, amountCents, currencyCode, input.product ?? "pdf", now, now)
     .run();
 }
 
-export async function markPurchasePaid(database: BookletDatabase, purchaseId: string, sessionId: string) {
+// Marks a purchase paid. A kit joins the fulfilment queue as "new", and its
+// shipping details are kept the first time they arrive (from the webhook
+// or from the buyer's return to the site, whichever is first).
+export async function markPurchasePaid(database: BookletDatabase, purchaseId: string, sessionId: string, shipping?: ShippingDetails | null) {
+  const now = Date.now();
   await database.prepare(`UPDATE purchase_entitlements
-    SET status = 'paid', updated_at = ?
+    SET status = 'paid', updated_at = ?,
+      fulfilment_status = CASE WHEN product = 'kit' AND fulfilment_status IS NULL THEN 'new' ELSE fulfilment_status END
     WHERE purchase_id = ? AND checkout_session_id = ? AND status != 'paid'`)
-    .bind(Date.now(), purchaseId, sessionId)
+    .bind(now, purchaseId, sessionId)
     .run();
+  if (shipping) {
+    await database.prepare(`UPDATE purchase_entitlements SET shipping_json = ?, updated_at = ?
+      WHERE purchase_id = ? AND checkout_session_id = ? AND shipping_json IS NULL`)
+      .bind(JSON.stringify(shipping), now, purchaseId, sessionId)
+      .run();
+  }
 }
 
 export async function setPurchasePdfKey(database: BookletDatabase, purchaseId: string, pdfKey: string) {
@@ -226,8 +364,9 @@ export async function readVerifiedPaidPurchase(
     return null;
   }
   if (!stripeMetadataMatchesPurchase(session, purchase) || session.payment_status !== "paid") return null;
-  await markPurchasePaid(database, purchase.purchaseId, session.id);
-  return { ...purchase, status: "paid" as const };
+  const shipping = shippingFromStripeSession(session);
+  await markPurchasePaid(database, purchase.purchaseId, session.id, shipping);
+  return { ...purchase, status: "paid" as const, shipping: purchase.shipping ?? shipping };
 }
 
 export async function markPurchasePaidFromStripeSession(
@@ -237,7 +376,7 @@ export async function markPurchasePaidFromStripeSession(
   if (!session.id || !session.metadata?.purchase_id || session.payment_status !== "paid") return false;
   const purchase = await readPurchaseBySession(database, session.id);
   if (!purchase || !stripeMetadataMatchesPurchase(session, purchase)) return false;
-  await markPurchasePaid(database, purchase.purchaseId, session.id);
+  await markPurchasePaid(database, purchase.purchaseId, session.id, shippingFromStripeSession(session));
   return true;
 }
 

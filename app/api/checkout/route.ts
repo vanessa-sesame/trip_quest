@@ -8,6 +8,8 @@ import { normalizePdfRequest } from "../../lib/pdf/request";
 import {
   createCheckoutSession,
   familyCookie,
+  paymentAmount,
+  paymentCurrency,
   paymentIsConfigured,
   readFamilyId,
   writePendingPurchase,
@@ -18,6 +20,7 @@ import {
   assertSameOriginRequest,
   readJsonObject,
 } from "../../lib/request-security";
+import { purchaseProductFrom } from "../../lib/products";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +94,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const product = purchaseProductFrom(body.product);
     const familyId = readFamilyId(request) || crypto.randomUUID();
     const purchaseId = crypto.randomUUID();
     const session = await createCheckoutSession(runtime, request, {
@@ -98,6 +102,7 @@ export async function POST(request: Request) {
       cacheKey,
       familyId,
       edition: { artifactKey: edition.artifactKey, fingerprint: edition.fingerprint },
+      product,
     });
     if (!session.id || !session.url) throw new Error("Stripe did not return a checkout link.");
     const requestJson = JSON.stringify({
@@ -110,17 +115,17 @@ export async function POST(request: Request) {
       editionArtifactKey: edition.artifactKey,
       editionFingerprint: edition.fingerprint,
     });
-    const amountCents = Number(runtime.STRIPE_PRICE_CENTS || "99");
-    const currency = runtime.STRIPE_CURRENCY?.trim().toLocaleLowerCase() || "usd";
+    // The same amount and currency the Stripe line item charges.
     await writePendingPurchase(runtime.DB, {
       purchaseId,
       checkoutSessionId: session.id,
       familyId,
       cacheKey,
       requestJson,
-    }, Number.isInteger(amountCents) && amountCents > 0 ? amountCents : 99, currency);
+      product,
+    }, paymentAmount(runtime, product), paymentCurrency(runtime));
 
-    return response({ url: session.url, editionFingerprint: edition.fingerprint }, familyId);
+    return response({ url: session.url, editionFingerprint: edition.fingerprint, product }, familyId);
   } catch (error) {
     if (error instanceof HttpRequestError) return response({ error: error.message }, undefined, error.status);
     const message = error instanceof Error ? error.message : "Secure checkout could not be started.";

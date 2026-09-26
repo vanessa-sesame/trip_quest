@@ -54,6 +54,12 @@ export const purchaseEntitlements = sqliteTable("purchase_entitlements", {
   amountCents: integer("amount_cents").notNull(),
   currency: text("currency").notNull(),
   pdfKey: text("pdf_key"),
+  // "kit" (printed and mailed) or "pdf" (download only).
+  product: text("product").notNull().default("pdf"),
+  // Kit orders: the Stripe-collected name, address, phone and email.
+  shippingJson: text("shipping_json"),
+  // Kit orders: "new", "printed" or "shipped".
+  fulfilmentStatus: text("fulfilment_status"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

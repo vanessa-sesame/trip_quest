@@ -27,6 +27,7 @@ type D1Statement = {
   bind(...values: D1Value[]): D1Statement;
   first<T>(): Promise<T | null>;
   run(): Promise<D1RunResult>;
+  all?<T>(): Promise<{ results: T[] }>;
 };
 
 export type BookletDatabase = {

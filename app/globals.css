@@ -1137,44 +1137,6 @@ p {
   line-height: 1.5;
 }
 
-.included-list {
-  display: grid;
-  gap: 12px;
-  margin: 0 0 22px;
-  padding: 0;
-  list-style: none;
-}
-
-.included-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.9rem;
-  font-weight: 800;
-}
-
-.included-list svg {
-  color: var(--leaf);
-}
-
-.price-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 17px 0;
-}
-
-.price-row span {
-  color: var(--muted);
-  font-size: 0.83rem;
-}
-
-.price-row strong {
-  font-size: 1.55rem;
-}
-
 .checkout-button {
   width: 100%;
   margin-top: 18px;
@@ -1860,4 +1822,194 @@ p {
   color: var(--muted);
   font-size: 0.9rem;
   text-align: center;
+}
+
+/* Purchase window: kit or PDF */
+.product-options {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.product-option {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.product-option[aria-checked="true"] {
+  border-color: var(--ink);
+  background: var(--pale-yellow);
+  box-shadow: var(--shadow-sticker);
+}
+
+.product-option-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.product-option-head strong {
+  font-size: 0.95rem;
+}
+
+.product-option-price {
+  font-size: 1.05rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.product-option-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.product-option ul {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.product-option li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.product-option li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--leaf);
+}
+
+.paid-extra-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--teal-dark);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+/* Owner's kit queue (/orders) */
+.orders-page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) 64px;
+}
+
+.orders-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.orders-header h1 {
+  margin: 4px 0;
+  font-size: clamp(1.5rem, 4vw, 2.1rem);
+}
+
+.orders-actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.orders-empty {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--muted);
+}
+
+.orders-list {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sticker);
+}
+
+.order-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.order-card-top > div {
+  display: grid;
+  gap: 2px;
+}
+
+.order-card-top span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.order-status {
+  align-self: start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--pale-coral);
+  color: var(--ink) !important;
+  font-size: 0.75rem !important;
+  font-weight: 900;
+}
+
+.order-status-printed { background: var(--pale-blue); }
+.order-status-shipped { background: var(--pale-leaf); }
+.order-status-late { outline: 2px solid var(--coral); }
+
+.order-address {
+  font-style: normal;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.order-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.order-buttons .secondary-button,
+.order-buttons .primary-button {
+  min-height: 40px;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.order-done {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--leaf);
+  font-weight: 800;
 }

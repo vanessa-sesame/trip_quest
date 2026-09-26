@@ -61,6 +61,7 @@ import {
   type FamilyChild,
   type ItineraryEvent,
 } from "./lib/family";
+import { KIT_CONTENTS, KIT_SHIPS_WITHIN_DAYS, PRODUCTS, purchaseProductFrom, type PurchaseProduct } from "./lib/products";
 
 type Trip = {
   age: number;
@@ -101,29 +102,26 @@ function clampPage(page: number, pageCount: number) {
   return Math.max(0, Math.min(page, pageCount - 1));
 }
 
+function kitShippingNote() {
+  return `Your explorer kit will be printed and posted within ${KIT_SHIPS_WITHIN_DAYS} working days.`;
+}
+
 function checkoutContext() {
-  if (typeof window === "undefined") {
-    return { state: "idle" as PaidDownloadState, sessionId: "", pdfUrl: "", note: "" };
-  }
+  const idle = { state: "idle" as PaidDownloadState, sessionId: "", pdfUrl: "", note: "", product: "pdf" as PurchaseProduct };
+  if (typeof window === "undefined") return idle;
   const params = new URLSearchParams(window.location.search);
   const checkout = params.get("checkout");
+  const product = purchaseProductFrom(params.get("product"));
   if (checkout === "cancelled") {
-    return {
-      state: "idle" as PaidDownloadState,
-      sessionId: "",
-      pdfUrl: "",
-      note: "Payment was cancelled. Your booklet is still here whenever you are ready.",
-    };
+    return { ...idle, note: "Payment was cancelled. Your booklet is still here whenever you are ready." };
   }
-  if (checkout !== "success") {
-    return { state: "idle" as PaidDownloadState, sessionId: "", pdfUrl: "", note: "" };
-  }
+  if (checkout !== "success") return idle;
   const sessionId = params.get("session_id")?.trim() || "";
   if (!sessionId) {
     return {
+      ...idle,
       state: "error" as PaidDownloadState,
-      sessionId: "",
-      pdfUrl: "",
+      product,
       note: "Payment returned without a checkout session. Please start checkout again or contact support.",
     };
   }
@@ -131,7 +129,8 @@ function checkoutContext() {
     state: "preparing" as PaidDownloadState,
     sessionId,
     pdfUrl: `/api/pdf?session_id=${encodeURIComponent(sessionId)}`,
-    note: "Payment received. Preparing your PDF…",
+    note: product === "kit" ? `Payment received. ${kitShippingNote()} Preparing your PDF…` : "Payment received. Preparing your PDF…",
+    product,
   };
 }
 
@@ -226,6 +225,8 @@ export default function Home() {
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
   const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>(initialCheckout.state);
   const [paidPdfUrl] = useState(initialCheckout.pdfUrl);
+  const [paidProduct] = useState(initialCheckout.product);
+  const [checkoutProduct, setCheckoutProduct] = useState<PurchaseProduct>("kit");
   const [paidPdfObjectUrl, setPaidPdfObjectUrl] = useState("");
   const [checkoutSessionId] = useState(initialCheckout.sessionId);
   const autoDownloadAttempted = useRef(false);
@@ -309,7 +310,11 @@ export default function Home() {
               return objectUrl;
             });
             setPaidDownloadState("ready");
-            setCheckoutNote("Payment received. Your PDF is ready. If it does not download automatically, use the button below.");
+            setCheckoutNote(
+              paidProduct === "kit"
+                ? `Payment received. ${kitShippingNote()} Your PDF is ready too, and the sticker sheets are below.`
+                : "Payment received. Your PDF is ready. If it does not download automatically, use the button below.",
+            );
             if (!autoDownloadAttempted.current) {
               autoDownloadAttempted.current = true;
               window.setTimeout(() => {
@@ -343,7 +348,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [checkoutSessionId, paidPdfUrl]);
+  }, [checkoutSessionId, paidPdfUrl, paidProduct]);
 
   useEffect(() => () => {
     if (paidPdfObjectUrl) URL.revokeObjectURL(paidPdfObjectUrl);
@@ -712,6 +717,7 @@ export default function Home() {
         family: generatedBooklet.family || children,
         events: generatedBooklet.events || structuredEvents,
         editionFingerprint: generatedBooklet.editionFingerprint,
+        product: checkoutProduct,
       });
       const response = await fetch("/api/checkout", {
         method: "POST",
@@ -783,6 +789,12 @@ export default function Home() {
           ) : (
             <LoaderCircle className="payment-result-loader spin" size={24} aria-label="Preparing PDF" />
           )}
+          {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
+            <a className="paid-extra-link" href={`${paidPdfUrl}&kind=stickers`} download="TripQuest-stickers.pdf">
+              <Download size={15} />
+              {paidProduct === "kit" ? "Spare sticker sheets (PDF)" : "Sticker sheets: print on A5 sticker paper"}
+            </a>
+          ) : null}
         </section>
       ) : null}
 
@@ -1172,8 +1184,8 @@ export default function Home() {
 
           <div className="purchase-bar">
             <div>
-              <span>Printable A5 PDF</span>
-              <strong>S$0.99</strong>
+              <span>Mailed kit or PDF</span>
+              <strong>from {PRODUCTS.pdf.priceLabel}</strong>
             </div>
             {paidDownloadState === "preparing" ? (
               <span className="payment-inline-status" role="status">
@@ -1257,23 +1269,43 @@ export default function Home() {
             >
               <X size={19} />
             </button>
-            <p className="eyebrow">Printable keepsake</p>
+            <p className="eyebrow">Explorer kit</p>
             <h2 id="checkout-title">Unlock {destinationName} Explorer</h2>
             <p className="modal-subtitle">
-              The complete age-{trip.age} booklet, ready to print before the trip.
+              The complete age-{trip.age} booklet: {reportPageTitles.length} A5 pages of itinerary-matched games, a sticker for every game, a treat trail and a certificate.
             </p>
-            <ul className="included-list">
-              <li><Check size={17} /> {Math.ceil(reportPageTitles.length / 4) * 4} printable A5 pages</li>
-              <li><Check size={17} /> {trip.days * 3} itinerary-matched activity pages</li>
-              <li><Check size={17} /> Age-matched puzzles, tracing, art, and field games</li>
-              <li><Check size={17} /> Grown-up answer notes</li>
-              <li><Check size={17} /> Memory page and explorer certificate</li>
-              <li><Check size={17} /> Family relay, mission map, cards, badge tracker, and reward page</li>
-              <li><Check size={17} /> Print again for your own family</li>
-            </ul>
-            <div className="price-row">
-              <span>Early tester price</span>
-              <strong>S$0.99</strong>
+            <div className="product-options" role="radiogroup" aria-label="Choose how you want it">
+              <button
+                className="product-option"
+                type="button"
+                role="radio"
+                aria-checked={checkoutProduct === "kit"}
+                onClick={() => setCheckoutProduct("kit")}
+              >
+                <span className="product-option-head">
+                  <strong>Mail me the explorer kit</strong>
+                  <span className="product-option-price">{PRODUCTS.kit.priceLabel}</span>
+                </span>
+                <span className="product-option-note">{PRODUCTS.kit.note} · posted within {KIT_SHIPS_WITHIN_DAYS} working days</span>
+                <ul>
+                  {KIT_CONTENTS.map((item) => (
+                    <li key={item}><Check size={14} /> {item}</li>
+                  ))}
+                </ul>
+              </button>
+              <button
+                className="product-option"
+                type="button"
+                role="radio"
+                aria-checked={checkoutProduct === "pdf"}
+                onClick={() => setCheckoutProduct("pdf")}
+              >
+                <span className="product-option-head">
+                  <strong>PDF only</strong>
+                  <span className="product-option-price">{PRODUCTS.pdf.priceLabel}</span>
+                </span>
+                <span className="product-option-note">Print the booklet at home, plus sticker sheets for A5 sticker paper</span>
+              </button>
             </div>
             <button
               className="primary-button checkout-button"
@@ -1289,7 +1321,9 @@ export default function Home() {
               )}
               {pdfState === "generating"
                 ? "Opening secure checkout…"
-                : "Continue to secure payment"}
+                : checkoutProduct === "kit"
+                  ? `Pay ${PRODUCTS.kit.priceLabel} and add delivery address`
+                  : `Pay ${PRODUCTS.pdf.priceLabel} securely`}
             </button>
             {checkoutNote ? <p className="checkout-note">{checkoutNote}</p> : null}
           </section>

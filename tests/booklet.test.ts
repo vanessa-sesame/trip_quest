@@ -292,6 +292,41 @@ test("AI booklet validation repairs optional queue presentation labels", () => {
   assert.equal(result.dayPlans[0].slots.whileYouWait.countLabel, "I counted");
 });
 
+test("re-validating a validated booklet keeps its queue game", () => {
+  // Composition nests the queue game under whileYouWait.game, but the
+  // validated shape stores it flat. Re-validation (every PDF render and
+  // every re-read from storage) used to read only the nested form, so it
+  // dropped the queue game and changed the edition fingerprint.
+  const raw = {
+    profile: {
+      style: "Garden city clues",
+      intro: "Follow garden paths and notice how plants and buildings meet.",
+      word: "hello - a friendly greeting",
+      etiquette: "Stay with your grown-up and leave every planted detail where it belongs.",
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    dayPlans: structuredClone(buildBooklet(7, "Singapore", 1)) as any[],
+  };
+  const items = [
+    { label: "GARDEN", clue: "A planted place in the city." },
+    { label: "RIVER", clue: "Water flowing through the landscape." },
+    { label: "TOWER", clue: "A tall structure visible nearby." },
+    { label: "MARKET", clue: "A place where local goods are sold." },
+  ];
+  const slots = raw.dayPlans[0].slots;
+  slots.inThePlace = { ...slots.inThePlace, gameType: "word_search", items };
+  slots.sitDown = { ...slots.sitDown, gameType: "bingo", items };
+  delete slots.inThePlaceSecond;
+  delete slots.whileYouWait.gameType;
+  delete slots.whileYouWait.items;
+  slots.whileYouWait.game = { gameType: "matching", items };
+
+  const once = validateBookletDraft(raw, 1, 7);
+  assert.equal(once.dayPlans[0].slots.whileYouWait.gameType, "matching");
+  const twice = validateBookletDraft({ ...once }, 1, 7);
+  assert.deepEqual(twice, once);
+});
+
 test("coloring scenes vary deterministically instead of repeating one drawing", () => {
   const scenes = new Set(
     ["Harbour", "Garden", "Bridge", "Market", "Mountain", "Temple", "Lantern"].map((title) =>

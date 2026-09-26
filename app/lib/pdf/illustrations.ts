@@ -98,7 +98,8 @@ export function drawStampCircle(
   page.drawCircle({ x: cx, y: cy, size: radius, color: softColor, borderColor: color, borderWidth: 1.6 });
   page.drawCircle({ x: cx, y: cy, size: radius - 6, borderColor: color, borderWidth: 0.8 });
   const safe = label.toUpperCase();
-  const size = Math.max(6, Math.min(9, (radius * 1.6) / Math.max(6, safe.length)));
+  // Never below the booklet's 8pt print floor; long labels shrink only to it.
+  const size = Math.max(8, Math.min(10, (radius * 1.6) / Math.max(4, safe.length)));
   const width = fonts.bold.widthOfTextAtSize(safe, size);
   page.drawText(safe, { x: cx - width / 2, y: cy - size / 2.6, size, font: fonts.bold, color });
 }
@@ -240,22 +241,6 @@ export function drawSalamander(page: PDFPage, box: Box, theme: DestinationTheme,
   });
 }
 
-// One consistent small mark for destinations without a bespoke motif yet
-// (see pdf-theme.ts's DestinationTheme.motif) — a simple compass/map-pin,
-// so an untheme'd destination still looks intentional, not empty.
-function drawCompassMark(page: PDFPage, box: Box, color: RGB) {
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  const r = Math.min(box.width, box.height) / 2;
-  page.drawCircle({ x: cx, y: cy, size: r, borderColor: color, borderWidth: 1.6 });
-  page.drawCircle({ x: cx, y: cy, size: 2.4, color });
-  [0, 90, 180, 270].forEach((angle) => {
-    const radians = (angle * Math.PI) / 180;
-    const x2 = cx + Math.cos(radians) * (r - 4);
-    const y2 = cy + Math.sin(radians) * (r - 4);
-    page.drawLine({ start: { x: cx, y: cy }, end: { x: x2, y: y2 }, thickness: 1, color });
-  });
-}
 
 export function drawDestinationMotif(page: PDFPage, box: Box, theme: DestinationTheme, seed: string) {
   if (theme.motif === "salamander") {
@@ -266,7 +251,23 @@ export function drawDestinationMotif(page: PDFPage, box: Box, theme: Destination
     drawMosaicFragment(page, box, seed);
     return;
   }
-  drawCompassMark(page, box, theme.accent);
+  drawFriendlyPin(page, box, theme);
+}
+
+// The generic destination mark: a round-topped map pin with a sparkle,
+// sized to the box. Friendly rather than technical.
+export function drawFriendlyPin(page: PDFPage, box: Box, theme: DestinationTheme) {
+  const scale = Math.min(box.width / 80, box.height / 90);
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2 + 4 * scale;
+  const s = (value: number) => value * scale;
+  page.drawSvgPath(
+    `M 0,${s(-38)} C ${s(21)},${s(-38)} ${s(30)},${s(-22)} ${s(30)},${s(-10)} C ${s(30)},${s(10)} ${s(8)},${s(26)} 0,${s(44)} C ${s(-8)},${s(26)} ${s(-30)},${s(10)} ${s(-30)},${s(-10)} C ${s(-30)},${s(-22)} ${s(-21)},${s(-38)} 0,${s(-38)} Z`,
+    { x: cx, y: cy, color: theme.accent, borderColor: palette.ink, borderWidth: 1.4 },
+  );
+  page.drawCircle({ x: cx, y: cy + s(10), size: s(11), color: palette.white });
+  drawDoodleStar(page, cx + s(34), cy + s(26), s(6), palette.yellow);
+  drawDoodleSparkle(page, cx - s(36), cy + s(18), s(5), palette.yellow);
 }
 
 // ---------------------------------------------------------------------

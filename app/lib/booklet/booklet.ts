@@ -16,20 +16,15 @@ export const gameTypes = [
 
 export type GameType = (typeof gameTypes)[number];
 
-// Eligible for the second in-place game, sharing the in-place page with the
-// first. Excludes map_puzzle (shares a scarce once-per-booklet dedupe budget
-// with inThePlace/sitDown, not worth spending on a third slot) and coloring
-// (drawColoringActivityBoard's fixed ~313pt height band doesn't fit even a
-// top/bottom half of the page, only a full page or the queue page's taller
-// box).
+// Eligible for the second in-place game (which has its own page). Excludes
+// map_puzzle, which shares a scarce once-per-booklet dedupe budget with
+// inThePlace/sitDown, and coloring, which stays a single in-place feature.
 export const pairEligibleGameTypes: GameType[] = gameTypes.filter(
   (gameType) => gameType !== "map_puzzle" && gameType !== "coloring",
 );
 
-// Eligible for the queue page's optional real game. That page is already
-// full width and tall enough (~450-510pt) for every layout here, including
-// coloring — only map_puzzle stays excluded, for the same dedupe-budget
-// reason as above.
+// Eligible for the queue game page. Only map_puzzle is excluded, for the
+// same dedupe-budget reason as above.
 export const queueEligibleGameTypes: GameType[] = gameTypes.filter(
   (gameType) => gameType !== "map_puzzle",
 );

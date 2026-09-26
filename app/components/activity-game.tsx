@@ -17,22 +17,9 @@ import {
   mazeSizeForAge,
   normalizePuzzleWord,
 } from "../lib/booklet/puzzles";
+import { gameInstruction, gameTypeLabels } from "../lib/booklet/game-copy";
 
-const gameNames: Record<GameType, string> = {
-  coloring: "Coloring page",
-  drawing: "Drawing studio",
-  crossword: "Mini crossword",
-  word_search: "Word search",
-  maze: "Route maze",
-  matching: "Match-up",
-  bingo: "Explorer bingo",
-  spot_the_difference: "Spot the difference",
-  codebreaker: "Codebreaker",
-  map_puzzle: "Route planner",
-  scavenger_hunt: "Scavenger hunt",
-  quiz: "Quick quiz",
-  story: "Story studio",
-};
+const gameNames = gameTypeLabels as Record<GameType, string>;
 
 const fallbackItems: GameItem[] = [
   { label: "Look", clue: "Find one tiny detail." },
@@ -725,7 +712,7 @@ function MazeBoard({ activity, age, items }: { activity: Activity; age: number; 
           />
         )))}
       </div>
-      <small>{items[0].label} to {items[items.length - 1].label}</small>
+      <small>Start to Finish</small>
     </div>
   );
 }
@@ -750,19 +737,6 @@ function MatchingBoard({ items }: { items: GameItem[] }) {
 
 function BingoBoard({ items }: { items: GameItem[] }) {
   return <div className="bingo-board">{items.map((item) => <span key={item.label}>{item.label}</span>)}</div>;
-}
-
-function DifferenceBoard({ items }: { items: GameItem[] }) {
-  return (
-    <div className="difference-layout">
-      {[0, 1].map((version) => (
-        <div className={`difference-scene version-${version}`} key={version} aria-label={`Picture ${version + 1}`}>
-          <span /><span /><span /><i />
-        </div>
-      ))}
-      <small>Circle 3 changes inspired by {items[0].label}</small>
-    </div>
-  );
 }
 
 function CodebreakerBoard({ items }: { items: GameItem[] }) {
@@ -862,12 +836,18 @@ function ChecklistBoard({ items }: { items: GameItem[] }) {
   );
 }
 
+// Four short questions; each clue is a question and its label the answer,
+// which only the grown-up answer notes show.
 function QuizBoard({ items }: { items: GameItem[] }) {
   return (
-    <div className="quiz-board">
-      <strong>{items[0].clue}</strong>
-      <div>{items.map((item, index) => <span key={item.label}>{String.fromCharCode(65 + index)}. {item.label}</span>)}</div>
-    </div>
+    <ol className="quiz-board">
+      {items.map((item, index) => (
+        <li key={`${index}-${item.label}`}>
+          <strong>{item.clue}</strong>
+          <span className="quiz-answer">Answer:</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -881,34 +861,7 @@ function StoryBoard({ items }: { items: GameItem[] }) {
 }
 
 function GameEditorialHeader({ activity }: { activity: Activity }) {
-  const playCue: Partial<Record<GameType, string>> = {
-    word_search: "Circle every local word in the grid.",
-    crossword: "Solve each clue where the answers cross.",
-    maze: "Trace one continuous route without crossing a wall.",
-    matching: "Connect each local detail to its correct clue.",
-    bingo: "Mark a square only when you spot it for real.",
-    spot_the_difference: "Compare both pictures and prove each change.",
-    codebreaker: "Use the key to decode the hidden local word.",
-    map_puzzle: "Visit every stop while keeping the route short.",
-    scavenger_hunt: "Tick each detail when you find it at the place.",
-    quiz: "Choose an answer and point to your evidence.",
-    drawing: "Study the reference, then add one observed detail.",
-    story: "Use the local clues to build a tiny travel story.",
-  };
-  const details = (activity.items || []).slice(0, 3).map((item) => item.label).join(" · ");
-  return (
-    <div className="game-editorial-header">
-      <div className="game-editorial-meta">
-        <span>{activity.kind || "FIELD GAME"}</span>
-        <b>HOW TO PLAY</b>
-      </div>
-      <p>{playCue[activity.gameType || "story"]}</p>
-      <div className="game-editorial-note">
-        <b>LOOK FOR</b>
-        <span>{details || "one unmistakably local detail"}</span>
-      </div>
-    </div>
-  );
+  return <p className="game-how-to">{gameInstruction(activity)}</p>;
 }
 
 export function ActivityGame({ activity, age, context }: { activity: Activity; age: number; context?: string }) {
@@ -928,7 +881,8 @@ export function ActivityGame({ activity, age, context }: { activity: Activity; a
     case "maze": board = <MazeBoard activity={activity} age={age} items={items} />; break;
     case "matching": board = <MatchingBoard items={items} />; break;
     case "bingo": board = <BingoBoard items={items} />; break;
-    case "spot_the_difference": board = <DifferenceBoard items={items} />; break;
+    // Look-and-find until spot-the-difference has paired pictures.
+    case "spot_the_difference": board = <ChecklistBoard items={items} />; break;
     case "codebreaker": board = <CodebreakerBoard items={items} />; break;
     case "map_puzzle": board = <MapBoard activity={activity} age={age} items={items} />; break;
     case "scavenger_hunt": board = <ChecklistBoard items={items} />; break;

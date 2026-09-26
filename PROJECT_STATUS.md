@@ -58,7 +58,7 @@ Current public release: https://tripquestkids.com, source branch `main`.
   scene as an earlier day's (matched by `app/lib/booklet/coloring.ts`'s keyword system),
   it does not embed that picture a second time — it falls back to the
   abstract vector scene instead, so no two days show the literal same
-  image. This is deterministic (`app/lib/pdf/booklet-pdf.ts`'s `usedCuratedPaths`),
+  image. This is deterministic (`app/lib/pdf/document.ts`'s `usedCuratedPaths`),
   not a retry/regeneration mechanism — see Known Gaps for why a QA-and-retry
   approach was considered and rejected for this specific problem.
 - Word search clues (each word's meaning or the local fact that makes it the
@@ -185,14 +185,9 @@ Stripe credentials before charging customers:
   which needs the full page for its illustration; when it is, the second
   in-place game is not shown that day rather than forcing it into a broken
   half-page layout.
-- Pairing two in-place games no longer forces them side by side.
-  `wideOnlyGameTypes` (`word_search`, `crossword`, `scavenger_hunt`) need
-  full page width to stay legible — their PDF/CSS layouts use offsets that
-  go near-illegible at a half-width column — so whenever either game in a
-  pair is one of those, the page stacks them top/bottom at full width
-  instead (`drawStackedInPlaceGames` in `app/lib/pdf/booklet-pdf.ts`;
-  `.game-pair-stacked` in `app/globals.css`, chosen client-side by the same
-  `wideOnlyGameTypes` check in `app/page.tsx`).
+- Superseded 2026-09-26: the booklet is now A5 and every game has its own
+  page (queue game, both in-place games, sit-down), so games are never
+  paired or stacked on one page.
 - Word-search clues are now shown next to every word, not just the two
   surfaced in the fixed "LOCAL CLUES" strip: `drawWordSearch` (PDF) and
   `WordSearchBoard` (`app/components/activity-game.tsx`, web) both render a clue line
@@ -346,7 +341,7 @@ for prompt-quality checks, selected destination smoke tests, and release UAT.
   quest-mechanic planning.
 - `app/lib/generation/booklet-ai.ts`: generated-data schema, age-safe game plans, and content
   validation.
-- `app/lib/pdf/booklet-pdf.ts`: A4 family-pack PDF generation.
+- `app/lib/pdf/`: A5 booklet and family-pack PDF generation (see README "Project layout").
 - `app/lib/generation/illustration-ai.ts`: exact-landmark image generation and R2 reuse.
 - `app/api/illustration/route.ts`: immutable generated artwork delivery.
 - `app/lib/booklet/puzzles.ts`: deterministic crossword, word-search, maze, and route logic.

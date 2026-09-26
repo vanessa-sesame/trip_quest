@@ -66,18 +66,13 @@ export function createBookletPreview(
   return {
     ...booklet,
     dayPlans: booklet.dayPlans.map((day, dayIndex) => {
-      const inThePlaceLocked = isBookletPageLocked(
-        pageIndexFor(day, (entry) => entry.kind === "activity" && entry.activityIndex === 0),
-        false,
-      );
-      const sitDownLocked = isBookletPageLocked(
-        pageIndexFor(day, (entry) => entry.kind === "activity" && entry.activityIndex === 1),
-        false,
-      );
-      const revealLocked = isBookletPageLocked(
-        pageIndexFor(day, (entry) => entry.kind === "reveal"),
-        false,
-      );
+      const locked = (match: (entry: DayPageEntry) => boolean) => isBookletPageLocked(pageIndexFor(day, match), false);
+      const inThePlaceLocked = locked((entry) => entry.kind === "activity" && entry.slot === "inThePlace");
+      const secondLocked = locked((entry) => entry.kind === "activity" && entry.slot === "inThePlaceSecond");
+      const sitDownLocked = locked((entry) => entry.kind === "activity" && entry.slot === "sitDown");
+      const queueGameLocked = locked((entry) => entry.kind === "queueGame");
+      const revealLocked = locked((entry) => entry.kind === "reveal");
+      const queue = day.slots?.whileYouWait;
       return {
         ...day,
         theme: dayIndex === 0 ? day.theme : `Day ${day.day} adventure`,
@@ -90,7 +85,12 @@ export function createBookletPreview(
           ...day.slots,
           inThePlace: inThePlaceLocked ? lockedActivity() : day.slots.inThePlace,
           ...(day.slots?.inThePlaceSecond
-            ? { inThePlaceSecond: inThePlaceLocked ? lockedActivity() : day.slots.inThePlaceSecond }
+            ? { inThePlaceSecond: secondLocked ? lockedActivity() : day.slots.inThePlaceSecond }
+            : {}),
+          // The queue game has its own page; its board locks with that page
+          // while the counting prompt on the briefing page stays visible.
+          ...(queue && queueGameLocked
+            ? { whileYouWait: { ...queue, gameType: "story" as const, items: lockedItems.map((item) => ({ ...item })) } }
             : {}),
           sitDown: sitDownLocked ? lockedActivity() : day.slots.sitDown,
           ...(day.slots?.questReveal

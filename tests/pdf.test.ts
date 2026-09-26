@@ -9,24 +9,27 @@ import {
 } from "../app/lib/pdf/booklet-pdf.ts";
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
 import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
+import { bookletDayPageEntries } from "../app/lib/booklet/pages.ts";
 import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
-test("a generated booklet becomes a complete A4 PDF", async () => {
+test("a generated booklet becomes a complete A5 PDF", async () => {
   const booklet = sampleGeneratedBooklet();
   const bytes = await createBookletPdf(booklet);
   const document = await PDFDocument.load(bytes);
 
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
+  // cover, guide, 5 days x (queue + in-place + sit-down), answer notes,
+  // memory, certificate: already a multiple of 4, so no notes pages.
   assert.equal(document.getPageCount(), 20);
   assert.equal(document.getTitle(), "Singapore Explorer - Age 7");
   for (const page of document.getPages()) {
-    assert.ok(Math.abs(page.getWidth() - 595.28) < 0.1);
-    assert.ok(Math.abs(page.getHeight() - 841.89) < 0.1);
+    assert.ok(Math.abs(page.getWidth() - 419.53) < 0.1);
+    assert.ok(Math.abs(page.getHeight() - 595.28) < 0.1);
   }
 });
 
-test("a second in-place game and a real queue game do not add pages", async () => {
+test("every game gets its own A5 page and the total pads to a multiple of 4", async () => {
   const dayPlans = buildBooklet(5, "Paris", 2);
   // buildBooklet's own output never sets gameType/items (it is the offline
   // fallback generator, not the Kimi-validated shape) — patch every game
@@ -44,10 +47,7 @@ test("a second in-place game and a real queue game do not add pages", async () =
       day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "matching", items: fourItems };
     }
     day.activities = [day.slots.inThePlace, day.slots.sitDown];
-    // This test is specifically about inThePlaceSecond + the queue's bonus
-    // game NOT adding pages — the mystery/reveal pair is a separate,
-    // independently-gated feature (see "a wide game paired..." below), so
-    // strip it here to keep this test isolated to its original claim.
+    // The reveal page is covered by its own test below.
     delete day.slots.questReveal;
   });
   const booklet: GeneratedBookletData = {
@@ -75,9 +75,12 @@ test("a second in-place game and a real queue game do not add pages", async () =
   const bytes = await createBookletPdf(booklet);
   const document = await PDFDocument.load(bytes);
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
-  // Unchanged from the pre-existing 3-pages-per-day layout: cover, guide,
-  // (queue + in-place + sit-down) x 2 days, answer notes, memory, certificate.
-  assert.equal(document.getPageCount(), 11);
+  // cover, guide, (queue + queue game + in-place + second in-place +
+  // sit-down) x 2 days, answer notes, memory, certificate = 15, plus one
+  // "My notes" page so the booklet folds from whole sheets.
+  const kinds = bookletDayPageEntries(booklet.dayPlans).map((entry) => entry.kind === "activity" ? entry.slot : entry.kind);
+  assert.deepEqual(kinds.slice(0, 5), ["queue", "queueGame", "inThePlace", "inThePlaceSecond", "sitDown"]);
+  assert.equal(document.getPageCount(), 16);
 });
 
 test("a queue mystery with a reveal adds exactly one page for that day, and only that day", async () => {
@@ -127,10 +130,11 @@ test("a queue mystery with a reveal adds exactly one page for that day, and only
   const bytes = await createBookletPdf(booklet);
   const document = await PDFDocument.load(bytes);
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
-  // cover, guide, (queue + reveal + in-place + sit-down) day 1, (queue +
-  // in-place + sit-down) day 2, answer notes, memory, certificate — one more
-  // than the 11-page baseline in the test above, for day 1's reveal page only.
-  assert.equal(document.getPageCount(), 12);
+  const revealDays = bookletDayPageEntries(booklet.dayPlans)
+    .filter((entry) => entry.kind === "reveal")
+    .map((entry) => entry.day.day);
+  assert.deepEqual(revealDays, [1]);
+  assert.equal(document.getPageCount() % 4, 0);
 });
 
 test("a reveal photo path survives re-validation and is actually embedded", async () => {
@@ -311,7 +315,7 @@ test("two activities that land on the same curated scene do not embed the same p
   );
 });
 
-test("a wide game paired with a second in-place game stacks instead of breaking the page count", async () => {
+test("a wide in-place game and a drawing second game each render on their own page", async () => {
   const dayPlans = buildBooklet(7, "Singapore", 1);
   const wordSearchItems = [
     { label: "KOPI", clue: "Local coffee, often served with condensed milk." },
@@ -329,8 +333,6 @@ test("a wide game paired with a second in-place game stacks instead of breaking 
   day.slots.inThePlace = { ...day.slots.inThePlace, gameType: "word_search", items: wordSearchItems };
   day.slots.sitDown = { ...day.slots.sitDown, gameType: "story", items: fourItems };
   assert.ok(day.slots.inThePlaceSecond, "expected a second in-place activity from buildBooklet");
-  // drawing was previously excluded from pairing alongside coloring; it is
-  // now pair-eligible, and word_search forces the pair to stack top/bottom.
   day.slots.inThePlaceSecond = { ...day.slots.inThePlaceSecond, gameType: "drawing", items: fourItems };
   day.activities = [day.slots.inThePlace, day.slots.sitDown];
   (day.slots.whileYouWait as unknown as { game?: unknown }).game = { gameType: "drawing", items: fourItems };

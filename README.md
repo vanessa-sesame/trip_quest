@@ -25,7 +25,10 @@ This starter does not use `wrangler.jsonc`.
 - `app/api/*/route.ts`: HTTP handlers only; logic lives in `app/lib/`
 - `app/lib/booklet/`: booklet data model, offline builder, page manifest, QA rules, puzzles, coloring scenes
 - `app/lib/generation/`: Kimi research and composition, fact-checking, illustrations, streaming
-- `app/lib/pdf/`: printable PDF renderer, theme tokens and drawing primitives
+- `app/lib/pdf/`: the printable A5 booklet. `document.ts` plans and assembles the pages,
+  `layout.ts` holds the text/flow/bullet-list primitives, `theme.ts` the A5 page size and
+  type scale (nothing prints below 8 pt), `pages/` one module per page family, `games/` one
+  renderer per game mechanic. Page counts are padded to a multiple of 4 with notes pages.
 - `app/lib/storage/`: D1/R2 persistence and cache keys
 - `tests/`: `node --test` suites (run with `npm test`)
 - `scripts/`: sample, QA and benchmark generators; they write to `artifacts/`

@@ -27,7 +27,6 @@ import {
   buildBooklet,
   getAgeBand,
   getDestinationProfile,
-  pairEligibleGameTypes,
   sanitizeAge,
   sanitizeDays,
 } from "./lib/booklet/booklet";
@@ -39,7 +38,7 @@ import {
 } from "./lib/generation/booklet-ai";
 import { ActivityGame } from "./components/activity-game";
 import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./components/doodles";
-import { bookletCorePageTitles, bookletDayPageEntries } from "./lib/booklet/pages";
+import { activityContext, bookletCorePageTitles, bookletDayPageEntries } from "./lib/booklet/pages";
 import {
   GenerationStreamError,
   readGenerationResponse,
@@ -1699,8 +1698,7 @@ function GeneratedPage({
           </p>
         ) : null}
         <p className="game-place">{day.landmark.display}</p>
-        <h3>{queue.title}</h3>
-        <p className="game-instructions">{queue.instruction}</p>
+        <h3>{day.theme}</h3>
         {reveal?.targetLabel ? (
           <p className="queue-target">
             <strong>{queueTargetKindPrefix[reveal.targetKind || ""] || "Your secret target:"}</strong>
@@ -1712,19 +1710,15 @@ function GeneratedPage({
             <strong>Bonus quest</strong> {reveal.bonusQuest}
           </p>
         ) : null}
+        {/* With a queue game, its own page carries the instruction. */}
+        <p className="game-instructions">{queue.gameType && queue.items ? queue.countLabel : queue.instruction}</p>
         <div className="queue-counter" aria-label={`${queue.countLabel}, up to ${queue.countTo}`}>
           {Array.from({ length: Math.min(20, queue.countTo) }, (_, index) => (
             <span key={index} aria-hidden="true" />
           ))}
         </div>
-        {queue.gameType && queue.items ? (
-          <ActivityGame
-            activity={{ title: queue.title, kind: "Quick queue game", body: queue.instruction, prompt: "", gameType: queue.gameType, items: queue.items }}
-            age={age}
-            context={`${day.theme} - day ${day.day} - queue game`}
-          />
-        ) : null}
-        {day.slots.factCard.length === 3 ? (
+        {/* Facts move to the reveal page when there is one. */}
+        {!reveal && day.slots.factCard.length === 3 ? (
           <section className="fact-card">
             <strong>Did you know?</strong>
             <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
@@ -1751,6 +1745,12 @@ function GeneratedPage({
           <strong>Chat about it</strong>
           <ul>{reveal.chatPrompts.map((prompt) => <li key={prompt}>{prompt}</li>)}</ul>
         </section>
+        {day.slots.factCard.length === 3 ? (
+          <section className="fact-card">
+            <strong>Did you know?</strong>
+            <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
+          </section>
+        ) : null}
         <p className="reveal-badge"><DoodleSparkle className="jt-doodle" />Quest complete</p>
         <div className="reveal-photo-box" aria-hidden="true">
           <span>Draw or stick a photo of your discovery here</span>
@@ -1758,42 +1758,19 @@ function GeneratedPage({
       </article>
     );
   }
-  const { activity, activityIndex, day } = pageEntry;
-  // Coloring needs the full page for its illustration and is not paired with
-  // a second game; inThePlace is free to be any age-appropriate type
-  // (including coloring), so this only pairs when it is not.
-  const secondActivity = activityIndex === 0
-    && pairEligibleGameTypes.includes(activity.gameType)
-    ? day.slots.inThePlaceSecond
-    : undefined;
-  if (secondActivity) {
-    // Always stacks top/bottom, full width — mirrors drawPairedInPlaceGames
-    // in the PDF, which had the same side-by-side path removed (2026-09-22).
-    return (
-      <article className="generated-sheet generated-day generated-game-page generated-game-page-paired">
-        <span>Day {day.day} · In the place</span>
-        <p className="game-place">{day.landmark.place}</p>
-        <div className="game-pair game-pair-stacked">
-          {[activity, secondActivity].map((pairedActivity, index) => (
-            <div className="game-pair-item" key={pairedActivity.title}>
-              <h4>{pairedActivity.title}</h4>
-              <p className="game-instructions">{pairedActivity.body}</p>
-              <ActivityGame activity={pairedActivity} age={age} context={`${day.theme} - day ${day.day} - game ${index + 1}`} />
-            </div>
-          ))}
-        </div>
-      </article>
-    );
-  }
+  const { activity, day } = pageEntry;
+  const slot = pageEntry.kind === "queueGame" ? "queueGame" : pageEntry.slot;
+  const kicker = slot === "queueGame" ? "While you wait" : slot === "sitDown" ? "Sit-down page" : "In the place";
+  // One game per page, matching the printed A5 booklet page for page.
   return (
     <article className="generated-sheet generated-day generated-game-page">
-      <span>Day {day.day} · {activityIndex === 0 ? "In the place" : "Sit-down page"}</span>
+      <span>Day {day.day} · {kicker}</span>
       <p className="game-place">{day.landmark.place}</p>
       <h3>{activity.title}</h3>
-      <small className="game-kind">{activity.kind}</small>
-      <p className="game-instructions">{activity.body}</p>
-      <ActivityGame activity={activity} age={age} context={`${day.theme} - day ${day.day} - game ${activityIndex + 1}`} />
-      {activity.gameType === "coloring" ? null : <i>{activity.prompt}</i>}
+      {/* Spot-the-difference plays as look-and-find until it has paired pictures. */}
+      {activity.body && activity.gameType !== "spot_the_difference" ? <p className="game-instructions">{activity.body}</p> : null}
+      <ActivityGame activity={activity} age={age} context={activityContext(day, slot)} />
+      {activity.gameType === "coloring" || !activity.prompt ? null : <i>{activity.prompt}</i>}
     </article>
   );
 }

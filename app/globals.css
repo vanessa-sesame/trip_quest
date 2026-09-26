@@ -2340,59 +2340,11 @@ p {
 .bingo-board span {
   display: grid;
   place-items: center;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--pale-yellow);
   font-size: 0.33rem;
   font-weight: 900;
-  text-align: center;
-}
-
-.difference-layout {
-  display: grid;
-  height: 55px;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding-top: 9px;
-}
-
-.difference-layout > small {
-  position: absolute;
-  right: 4px;
-  bottom: 1px;
-  left: 4px;
-  font-size: 0.25rem;
-  text-align: center;
-}
-
-.difference-scene {
-  position: relative;
-  height: 39px;
-  overflow: hidden;
-  border-bottom: 2px solid var(--ink);
-  background: var(--pale-blue);
-}
-
-.difference-scene span {
-  position: absolute;
-  bottom: 0;
-  width: 17%;
-  background: var(--teal);
-}
-
-.difference-scene span:nth-child(1) { left: 8%; height: 42%; }
-.difference-scene span:nth-child(2) { left: 37%; height: 74%; background: var(--coral); }
-.difference-scene span:nth-child(3) { right: 8%; height: 56%; background: var(--sun); }
-.difference-scene i { position: absolute; top: 5px; right: 9px; width: 6px; height: 6px; border: 1px solid var(--ink); border-radius: 50%; }
-.difference-scene.version-1 span:nth-child(2) { height: 55%; }
-.difference-scene.version-1 span:nth-child(3) { border-radius: 50% 50% 0 0; }
-.difference-scene.version-1 i { right: 28px; }
-
-.code-board {
-  display: grid;
-  min-height: 55px;
-  align-content: center;
-  gap: 3px;
-  padding: 7px 4px 0;
   text-align: center;
 }
 
@@ -2540,7 +2492,10 @@ p {
   grid-template-columns: 8px minmax(0, 0.8fr) minmax(0, 1.2fr);
   align-items: start;
   gap: 3px;
-  border-bottom: 1px dotted var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  padding: 2px 4px;
   font-size: 0.27rem;
   line-height: 1.1;
 }
@@ -2562,28 +2517,49 @@ p {
 .quiz-board {
   display: grid;
   min-height: 55px;
-  align-content: center;
+  align-content: start;
   gap: 4px;
-  padding-top: 7px;
+  margin: 0;
+  padding: 7px 0 0;
+  list-style: none;
+  counter-reset: quiz;
 }
 
-.quiz-board > strong {
-  overflow: hidden;
-  font-size: 0.32rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.quiz-board > div {
+.quiz-board li {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
+  grid-template-columns: 11px minmax(0, 1fr);
+  gap: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  padding: 4px 6px;
+  counter-increment: quiz;
 }
 
-.quiz-board span {
-  border: 1px solid var(--line);
+.quiz-board li::before {
+  display: grid;
+  width: 11px;
+  height: 11px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sun);
+  color: var(--white);
+  content: counter(quiz);
   font-size: 0.28rem;
-  padding: 2px;
+  font-weight: 900;
+}
+
+.quiz-board strong {
+  font-size: 0.32rem;
+  line-height: 1.25;
+}
+
+.quiz-answer {
+  grid-column: 2;
+  border-bottom: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 0.26rem;
+  padding-bottom: 1px;
 }
 
 .story-board {
@@ -2997,66 +2973,13 @@ p {
   padding: 6% 4%;
 }
 
-.game-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: 0;
-  flex: 1;
-  gap: 4%;
-}
-
 /* word_search/crossword/scavenger_hunt need full width to stay legible, so
    the pair stacks top/bottom instead of side-by-side when either one needs
    it — see the useStack check in page.tsx and drawPairedInPlaceGames in
    booklet-pdf.ts. */
-.game-pair.game-pair-stacked {
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr 1fr;
-}
-
-.game-pair-item {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-}
-
-.game-pair-item h4 {
-  margin: 3% 0 2%;
-  font-size: 0.62rem;
-  line-height: 1.15;
-}
-
-.game-pair-item .game-instructions {
-  margin: 0 0 2%;
-  font-size: 0.42rem;
-  line-height: 1.3;
-  color: var(--muted);
-}
-
-.game-pair-item .activity-game {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  margin: 0;
-  border-width: 1.2px;
-  padding: 4%;
-}
-
 /* The "LOOK FOR" side note previews item labels already shown in full
    inside the board itself; at this width it is redundant and cramps the
    "HOW TO PLAY" text next to it, so it is dropped here only. */
-.game-pair-item .game-editorial-header {
-  grid-template-columns: 1fr;
-  gap: 2px;
-  margin: 4px 0 2px;
-  padding: 3px 0;
-}
-
-.game-pair-item .game-editorial-note {
-  display: none;
-}
-
 .generated-game-page .activity-game > b {
   position: static;
   border-bottom: 1px solid var(--line);
@@ -3329,7 +3252,6 @@ p {
 .generated-game-page .draw-board,
 .generated-game-page .matching-board,
 .generated-game-page .bingo-board,
-.generated-game-page .difference-layout,
 .generated-game-page .code-board,
 .generated-game-page .map-board,
 .generated-game-page .checklist-board,
@@ -3413,10 +3335,6 @@ p {
   padding: 4%;
 }
 
-.generated-game-page .difference-scene {
-  height: 75%;
-}
-
 .generated-game-page .code-board > div span {
   width: 24px;
   height: 28px;
@@ -3484,8 +3402,7 @@ p {
   }
 
   .draw-board,
-  .bingo-board,
-  .difference-layout {
+  .bingo-board {
     height: 42px;
   }
 
@@ -3605,72 +3522,6 @@ p {
 /* Editorial board treatment for non-coloring games. The activity data remains
    unchanged; this gives every puzzle the same brief, context, and reflection
    rhythm as the illustrated coloring page. */
-.game-editorial-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(110px, .72fr);
-  gap: 4px 8px;
-  margin: 8px 0 4px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 5px 0;
-}
-
-.game-editorial-meta {
-  display: flex;
-  grid-column: 1 / -1;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  color: var(--coral);
-  font-size: .34rem;
-  font-weight: 900;
-  letter-spacing: .04em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.game-editorial-meta b {
-  color: var(--teal-dark);
-}
-
-.game-editorial-header > p {
-  display: -webkit-box;
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  font-size: .39rem;
-  line-height: 1.25;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.game-editorial-note {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  min-width: 0;
-  border-radius: 4px;
-  background: var(--pale-coral);
-  padding: 4px 6px;
-}
-
-.game-editorial-note b {
-  color: var(--coral);
-  font-size: .3rem;
-  letter-spacing: .03em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.game-editorial-note span {
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: .34rem;
-  line-height: 1.15;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
 .game-board-content {
   display: flex;
   min-height: 0;
@@ -3683,35 +3534,6 @@ p {
   padding: 4px;
 }
 
-.generated-game-page .game-editorial-header {
-  grid-template-columns: minmax(0, 1fr) minmax(125px, .72fr);
-  gap: 5px 10px;
-  margin: 2% 0 1.5%;
-  padding: 2.5% 0;
-}
-
-.generated-game-page .game-editorial-meta {
-  font-size: .4rem;
-}
-
-.generated-game-page .game-editorial-header > p {
-  font-size: .48rem;
-  line-height: 1.28;
-}
-
-.generated-game-page .game-editorial-note {
-  padding: 5px 7px;
-}
-
-.generated-game-page .game-editorial-note b {
-  font-size: .34rem;
-}
-
-.generated-game-page .game-editorial-note span {
-  font-size: .4rem;
-  line-height: 1.18;
-}
-
 .generated-game-page .game-board-content {
   padding: 3% 4% 2.5%;
 }
@@ -3721,7 +3543,6 @@ p {
 .generated-game-page .maze-layout,
 .generated-game-page .matching-board,
 .generated-game-page .bingo-board,
-.generated-game-page .difference-layout,
 .generated-game-page .code-board,
 .generated-game-page .map-board,
 .generated-game-page .checklist-board,
@@ -3868,66 +3689,6 @@ p {
   background: var(--pale-blue);
 }
 
-.generated-game-page .difference-layout {
-  height: auto;
-  grid-template-rows: 1fr auto;
-  gap: 5%;
-  padding: 5%;
-}
-
-.generated-game-page .difference-scene {
-  height: 100%;
-  min-height: 130px;
-  border: 1px solid var(--teal-dark);
-  background: var(--pale-blue);
-}
-
-.generated-game-page .difference-scene::before {
-  position: absolute;
-  right: 9%;
-  top: 10%;
-  width: 22px;
-  height: 22px;
-  border: 2px solid var(--sun);
-  border-radius: 50%;
-  background: var(--pale-yellow);
-  content: "";
-}
-
-.generated-game-page .difference-scene::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 24%;
-  border-top: 1px solid var(--teal);
-  background: #edf3e5;
-  content: "";
-}
-
-.generated-game-page .difference-scene span {
-  z-index: 1;
-  border: 1px solid var(--teal-dark);
-  border-bottom: 0;
-}
-
-.generated-game-page .difference-scene i {
-  z-index: 2;
-  width: 12px;
-  height: 12px;
-  border-color: var(--coral);
-  background: var(--white);
-}
-
-.generated-game-page .difference-layout > small {
-  position: static;
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--line);
-  padding-top: 4%;
-  font-size: .44rem;
-  text-align: left;
-}
-
 .generated-game-page .code-board {
   justify-content: center;
   background: var(--pale-blue);
@@ -4044,38 +3805,8 @@ p {
 }
 
 @container (max-width: 310px) {
-  .generated-game-page .game-editorial-header {
-    grid-template-columns: minmax(0, 1fr) minmax(88px, .72fr);
-    gap: 3px 5px;
-    padding: 2% 0;
-  }
-
-  .generated-game-page .game-editorial-meta {
-    font-size: .3rem;
-  }
-
-  .generated-game-page .game-editorial-header > p {
-    font-size: .38rem;
-  }
-
-  .generated-game-page .game-editorial-note {
-    padding: 3px 4px;
-  }
-
-  .generated-game-page .game-editorial-note b {
-    font-size: .27rem;
-  }
-
-  .generated-game-page .game-editorial-note span {
-    font-size: .31rem;
-  }
-
   .generated-game-page .game-board-content {
     padding: 2% 3% 1.5%;
-  }
-
-  .generated-game-page .difference-scene {
-    min-height: 92px;
   }
 
   .generated-game-page .bingo-board span {
@@ -4307,4 +4038,15 @@ p {
     scroll-behavior: auto !important;
     transition: none !important;
   }
+}
+
+/* One how-to-play line per game, the same copy the printed page uses. */
+.game-how-to {
+  margin: 6px 0 2px;
+  border-radius: var(--radius-pill);
+  background: var(--pale-blue);
+  color: var(--teal-dark);
+  font-size: .36rem;
+  line-height: 1.3;
+  padding: 3px 9px;
 }

@@ -1000,9 +1000,15 @@ export function validateBookletDraft(
     const queueValue = slotValue?.whileYouWait && typeof slotValue.whileYouWait === "object"
       ? slotValue.whileYouWait as Record<string, unknown>
       : null;
+    // Composition returns the game nested under `game`; the validated
+    // (stored) shape keeps it flat on whileYouWait. Accept both, so
+    // re-validating a stored booklet keeps its queue game (and its edition
+    // fingerprint) instead of silently dropping it.
     const queueGameValue = queueValue?.game && typeof queueValue.game === "object"
       ? queueValue.game as Record<string, unknown>
-      : null;
+      : queueValue && typeof queueValue.gameType === "string" && Array.isArray(queueValue.items)
+        ? { gameType: queueValue.gameType, items: queueValue.items }
+        : null;
     const queueItemsRaw = queueGameValue && Array.isArray(queueGameValue.items) ? queueGameValue.items : null;
     const queueGameTypeRaw = queueGameValue?.gameType;
     let queueGame: { gameType: GameType; items: { label: string; clue: string }[] } | undefined;

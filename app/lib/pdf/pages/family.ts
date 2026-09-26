@@ -6,13 +6,11 @@ import {
   mechanicLabel,
   mechanicMissionPrompt,
 } from "../../family.ts";
-import { addPage, drawPageHeader, type FamilyPackContext, type PdfContext } from "../context.ts";
-import { drawIllustratedCheckbox } from "../illustrations.ts";
+import { STICKER_DIAMETER, addPage, drawPageHeader, drawStickerSpot, type FamilyPackContext, type PdfContext } from "../context.ts";
 import { drawBulletList, drawCard, drawDottedLine, drawPill, drawText, Flow, measureText, pdfText } from "../layout.ts";
+import { RELAY_DAYS_PER_PAGE } from "../plan.ts";
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, colors } from "../theme.ts";
 
-// Day cards per family-relay page (two columns of three).
-export const RELAY_DAYS_PER_PAGE = 6;
 
 const fills = [colors.yellowSoft, colors.greenSoft, colors.tealSoft, colors.coralSoft];
 const inks = [colors.yellow, colors.green, colors.teal, colors.coral];
@@ -171,26 +169,30 @@ export function drawBadgeTrackerPage(ctx: PdfContext) {
     titleLines: 1,
   });
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  flow.text("Give a tick, sticker or tiny drawing to each badge when someone in the family earns it.", { size: type.small, color: colors.muted, maxLines: 2 });
-  flow.space(12);
-  const rewardHeight = 64;
-  const gap = 10;
-  const width = (CONTENT_WIDTH - gap) / 2;
-  const rows = Math.ceil(FAMILY_BADGES.length / 2);
-  const height = Math.min(62, (flow.remaining() - rewardHeight - gap * rows) / rows);
-  FAMILY_BADGES.forEach((badge, index) => {
-    const x = MARGIN + (index % 2) * (width + gap);
-    const y = flow.y - (Math.floor(index / 2) + 1) * height - Math.floor(index / 2) * gap;
-    drawCard(page, { x, y, width, height }, { fill: fills[index % 4] });
-    drawIllustratedCheckbox(page, x + 12, y + height / 2 - 11, 22, inks[index % 4]);
-    drawText(page, badge, fonts, { x: x + 48, top: y + height / 2 + 14, width: width - 56 }, { size: type.small, font: fonts.bold, color: colors.ink, maxLines: 1 });
-    drawText(page, "Earned on", fonts, { x: x + 48, top: y + height / 2 - 2, width: 60 }, { size: 8, color: colors.muted, maxLines: 1 });
-    drawDottedLine(page, x + 96, x + width - 10, y + height / 2 - 10, colors.line, 3, 3);
+  flow.text("Each badge has a sticker in the mystery envelope. Stick it on when someone in the family earns it.", { size: type.small, color: colors.muted, maxLines: 2 });
+  flow.space(10);
+  // Three columns of 30mm sticker spots; the ninth cell is the family reward.
+  const gap = 8;
+  const width = (CONTENT_WIDTH - gap * 2) / 3;
+  const height = (flow.y - CONTENT_BOTTOM - gap * 2) / 3;
+  const cell = (index: number) => ({
+    x: MARGIN + (index % 3) * (width + gap),
+    y: flow.y - (Math.floor(index / 3) + 1) * height - Math.floor(index / 3) * gap,
+    width,
+    height,
   });
-  const reward = { x: MARGIN, y: CONTENT_BOTTOM, width: CONTENT_WIDTH, height: rewardHeight - 6 };
+  FAMILY_BADGES.forEach((badge, index) => {
+    const box = cell(index);
+    drawCard(page, box, { fill: fills[index % 4] });
+    drawStickerSpot(ctx, page, { page: "badges", index }, box.x + width / 2, box.y + height - STICKER_DIAMETER / 2 - 10);
+    drawText(page, badge, fonts, { x: box.x + 6, top: box.y + height - STICKER_DIAMETER - 20, width: width - 12 }, { size: type.label, font: fonts.bold, color: colors.ink, maxLines: 2, align: "center" });
+    drawDottedLine(page, box.x + 10, box.x + width - 10, box.y + 12, colors.line, 3, 3);
+  });
+  const reward = cell(FAMILY_BADGES.length);
   drawCard(page, reward, { fill: colors.white, border: colors.softLine });
-  const pill = drawPill(page, fonts, "Family reward", { x: MARGIN + 12, top: reward.y + reward.height - 8, color: colors.teal, fill: colors.tealSoft, size: type.label });
-  drawText(page, `Collect ${Math.min(8, Math.max(3, booklet.days + 1))} badges, then choose a shared reward: a favorite snack, a sunset story, or one more page in the memory museum.`, fonts, {
-    x: MARGIN + 12, top: pill.y - 4, width: CONTENT_WIDTH - 24,
-  }, { size: 8.5, color: colors.muted, maxLines: 2 });
+  const pill = drawPill(page, fonts, "Family reward", { x: reward.x + 8, top: reward.y + reward.height - 8, color: colors.teal, fill: colors.tealSoft, size: type.label });
+  drawText(page, `Collect ${Math.min(8, Math.max(3, booklet.days + 1))} badges, then choose a shared treat together.`, fonts, {
+    x: reward.x + 8, top: pill.y - 6, width: width - 16,
+  }, { size: 8.5, color: colors.muted, maxLines: 5 });
+  drawDottedLine(page, reward.x + 10, reward.x + width - 10, reward.y + 14, colors.line, 3, 3);
 }

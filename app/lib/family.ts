@@ -465,3 +465,10 @@ export function normalizeItineraryEvents(value: unknown, days: number): Itinerar
     } satisfies ItineraryEvent];
   });
 }
+
+// The family-pack context the printed booklet uses (explorer roles, trip
+// thread, mission cards). Shared by the PDF route and the web preview so
+// both draw exactly the same family pages.
+export function familyPackFor(children: FamilyChild[], events: ItineraryEvent[], days: number) {
+  return { children, events, mechanicsByDay: mechanicPlanForTrip(children, days) };
+}

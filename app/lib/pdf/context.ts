@@ -2,6 +2,8 @@ import type { PDFDocument, PDFImage, PDFPage, RGB } from "pdf-lib";
 import type { Activity } from "../booklet/booklet.ts";
 import { coloringSceneFor, curatedColoringImagePath } from "../booklet/coloring.ts";
 import type { FamilyChild, ItineraryEvent, QuestMechanic } from "../family.ts";
+import { stickerForSpot, type Sticker, type StickerSpot } from "../booklet/stickers.ts";
+import { drawStickerIcon } from "./art/icons.ts";
 import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { drawRoundedRect } from "./illustrations.ts";
 import { drawPill, drawText, fitTextSize, pdfText, type Fonts } from "./layout.ts";
@@ -40,7 +42,37 @@ export type PdfContext = {
   revealArtwork: Record<number, PDFImage>;
   coverArtwork?: PDFImage;
   familyPack?: FamilyPackContext;
+  // Every sticker in the kit and its spot (app/lib/booklet/stickers.ts).
+  stickers: Sticker[];
+  // Test hook: called for every sticker spot drawn.
+  onStickerSpot?: (sticker: Sticker) => void;
 };
+
+// Stickers are 30mm circles (the kit's circle punch).
+export const STICKER_DIAMETER = (30 / 25.4) * 72;
+export const STICKER_TONES = [
+  { ink: colors.coral, soft: colors.coralSoft },
+  { ink: colors.teal, soft: colors.tealSoft },
+  { ink: colors.yellow, soft: colors.yellowSoft },
+  { ink: colors.green, soft: colors.greenSoft },
+] as const;
+
+// A dashed circle, a little larger than the sticker, marking where the
+// sticker for `spot` goes, with that sticker's icon so children can match
+// them. Returns the sticker drawn for, if the kit has one.
+export function drawStickerSpot(ctx: PdfContext, page: PDFPage, spot: StickerSpot, cx: number, cy: number, caption = "Sticker here") {
+  const sticker = stickerForSpot(ctx.stickers, spot);
+  if (!sticker) return undefined;
+  const tone = STICKER_TONES[sticker.tone % STICKER_TONES.length];
+  const radius = STICKER_DIAMETER / 2 + 3;
+  page.drawCircle({ x: cx, y: cy, size: radius, color: colors.white, borderColor: tone.ink, borderWidth: 1.4, borderDashArray: [4, 3] });
+  drawStickerIcon(page, ctx.fonts, sticker.icon, cx, cy + 9, 22, tone.soft);
+  const size = ctx.type.label;
+  const width = ctx.fonts.bold.widthOfTextAtSize(caption, size);
+  page.drawText(caption, { x: cx - width / 2, y: cy - 20, size, font: ctx.fonts.bold, color: tone.ink });
+  ctx.onStickerSpot?.(sticker);
+  return sticker;
+}
 
 export function coloringArtworkKey(activity: Activity, context: string) {
   const scene = coloringSceneFor(activity, context);
@@ -81,20 +113,34 @@ export function addPage(ctx: PdfContext, section: string, accent: RGB) {
 export function drawPageHeader(
   ctx: PdfContext,
   page: PDFPage,
-  options: { kicker: string; title: string; accent: RGB; soft: RGB; subtitle?: string; titleLines?: number },
+  options: { kicker: string; title: string; accent: RGB; soft: RGB; subtitle?: string; titleLines?: number; stickerSpot?: StickerSpot },
 ) {
   const { fonts, type } = ctx;
+  // A sticker spot sits in the header's top-right corner; the title wraps
+  // beside it.
+  const spotSticker = options.stickerSpot ? stickerForSpot(ctx.stickers, options.stickerSpot) : undefined;
+  const headerWidth = spotSticker ? CONTENT_WIDTH - STICKER_DIAMETER - 14 : CONTENT_WIDTH;
+  if (options.stickerSpot && spotSticker) {
+    drawStickerSpot(
+      ctx,
+      page,
+      options.stickerSpot,
+      PAGE_WIDTH - MARGIN - STICKER_DIAMETER / 2 - 2,
+      CONTENT_TOP - STICKER_DIAMETER / 2 - 1,
+      spotSticker.kind === "day" ? "Day badge!" : "Done? Sticker!",
+    );
+  }
   const pill = drawPill(page, fonts, options.kicker, {
     x: MARGIN,
     top: CONTENT_TOP,
     color: options.accent,
     fill: options.soft,
     size: type.label,
-    maxWidth: CONTENT_WIDTH,
+    maxWidth: headerWidth,
   });
   const titleLines = options.titleLines ?? 2;
-  const titleSize = fitTextSize(options.title, fonts.display, CONTENT_WIDTH, type.title, 15, titleLines);
-  const title = drawText(page, options.title, fonts, { x: MARGIN, top: pill.y - 6, width: CONTENT_WIDTH }, {
+  const titleSize = fitTextSize(options.title, fonts.display, headerWidth, type.title, 15, titleLines);
+  const title = drawText(page, options.title, fonts, { x: MARGIN, top: pill.y - 6, width: headerWidth }, {
     size: titleSize,
     font: fonts.display,
     color: colors.ink,
@@ -103,14 +149,15 @@ export function drawPageHeader(
   });
   let y = title.bottom;
   if (options.subtitle) {
-    y = drawText(page, options.subtitle, fonts, { x: MARGIN, top: y - 2, width: CONTENT_WIDTH }, {
+    y = drawText(page, options.subtitle, fonts, { x: MARGIN, top: y - 2, width: headerWidth }, {
       size: type.small,
       font: fonts.bold,
       color: colors.muted,
       maxLines: 1,
     }).bottom;
   }
-  return y - 10;
+  // Content starts below the sticker spot too.
+  return spotSticker ? Math.min(y - 10, CONTENT_TOP - STICKER_DIAMETER - 10) : y - 10;
 }
 
 // A soft rounded "sticker" behind a block of content.

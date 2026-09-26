@@ -327,10 +327,21 @@ export function enrichOfflinePreviewGameplay(
         : inPlaceType;
       inThePlaceSecond = withGameplay(day.slots.inThePlaceSecond, secondType);
     }
+    // The offline queue game is not age-checked either; swap it for an
+    // allowed standing-in-line type, or drop it (it is optional).
+    const queue = day.slots.whileYouWait;
+    const queueTypes = (["bingo", "scavenger_hunt", "matching", "quiz", "maze"] as GameType[])
+      .filter((type) => allowed.includes(type) && queueEligibleGameTypes.includes(type) && type !== inPlaceType && type !== sitDownType);
+    const whileYouWait = queue.gameType && !allowed.includes(queue.gameType)
+      ? queueTypes.length
+        ? { ...queue, gameType: seededPick(queueTypes, `${destination}-${day.day}-queue`) }
+        : { ...queue, gameType: undefined, items: undefined }
+      : queue;
     return {
       ...day,
       slots: {
         ...day.slots,
+        whileYouWait,
         inThePlace,
         ...(inThePlaceSecond ? { inThePlaceSecond } : {}),
         sitDown,

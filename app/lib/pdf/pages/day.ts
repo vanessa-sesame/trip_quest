@@ -3,11 +3,9 @@ import type { DayPlan } from "../../booklet/booklet.ts";
 import { queueGameActivity } from "../../booklet/pages.ts";
 import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
 import {
-  drawConfettiBurst,
   drawDoodleSparkle,
   drawRoundedRect,
   drawSpeechBubble,
-  drawStampCircle,
   drawTicketEdge,
 } from "../illustrations.ts";
 import {
@@ -66,6 +64,8 @@ export function drawQueuePage(ctx: PdfContext, day: DayPlan) {
     accent: colors.yellow,
     soft: colors.yellowSoft,
     subtitle: day.landmark.display,
+    // With no reveal page, the day's badge goes on its opening page.
+    stickerSpot: reveal ? undefined : { page: "dayBadge", day: day.day },
   });
 
   if (day.mission) {
@@ -172,6 +172,7 @@ export function drawRevealPage(ctx: PdfContext, day: DayPlan, dayIndex: number) 
     accent: theme.accent,
     soft: theme.accentSoft,
     subtitle: reveal.targetLabel ? `The secret: ${reveal.targetLabel}` : day.landmark.display,
+    stickerSpot: { page: "dayBadge", day: day.day },
   });
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
 
@@ -210,19 +211,8 @@ export function drawRevealPage(ctx: PdfContext, day: DayPlan, dayIndex: number) 
     flow.space(14);
   }
 
-  // Completion stamp, then a drawing space if the page still has room.
-  const stampRadius = 20;
-  if (flow.remaining() >= stampRadius * 2 + 4) {
-    const stampRow = flow.take(stampRadius * 2 + 4);
-    const cx = stampRow.x + stampRadius + 4;
-    const cy = stampRow.y + stampRow.height / 2;
-    drawConfettiBurst(page, cx, cy, 30, [theme.accent, colors.teal, colors.yellow, colors.green], `reveal-confetti-${dayIndex}`);
-    drawStampCircle(page, fonts, cx, cy, stampRadius, theme.accent, theme.accentSoft, "DONE");
-    drawText(page, "Quest complete!", fonts, { x: cx + stampRadius + 14, top: cy + type.heading * 0.7, width: 200 }, {
-      size: type.heading, font: fonts.display, color: theme.accent, maxLines: 1,
-    });
-    flow.space(12);
-  }
+  // The day's badge sticker is in the header; then a drawing space if the
+  // page still has room.
   if (flow.remaining() >= 90) {
     const box = flow.rest();
     drawRoundedRect(page, box, 14, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });

@@ -1,7 +1,7 @@
 import type { PDFPage } from "pdf-lib";
 import { getAgeBand } from "../../booklet/booklet.ts";
 import { familyChildDisplayName } from "../../family.ts";
-import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
+import { STICKER_DIAMETER, addPage, drawPageHeader, drawStickerSpot, type PdfContext } from "../context.ts";
 import {
   drawDestinationMotif,
   drawDoodleCloud,
@@ -76,6 +76,8 @@ export function drawCover(ctx: PdfContext) {
     drawPostcardScene(page, hero, theme, `cover-${booklet.destination}`);
   }
   // Travel stamps overlapping the picture's bottom edge.
+  // The child's name sticker, on the picture's bottom-left corner.
+  drawStickerSpot(ctx, page, { page: "cover" }, hero.x + STICKER_DIAMETER / 2 + 10, hero.y + STICKER_DIAMETER / 2 + 10, "My name");
   drawStampCircle(page, fonts, hero.x + hero.width - 88, hero.y + 4, 26, theme.accent, theme.accentSoft, `Age ${booklet.age}`);
   drawStampCircle(page, fonts, hero.x + hero.width - 30, hero.y + 16, 26, colors.teal, colors.tealSoft, booklet.days === 1 ? "1 day" : `${booklet.days} days`);
   flow.space(24);

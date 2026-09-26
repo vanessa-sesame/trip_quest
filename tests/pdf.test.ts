@@ -19,9 +19,9 @@ test("a generated booklet becomes a complete A5 PDF", async () => {
 
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
-  // cover, guide, 5 days x (queue + in-place + sit-down), answer notes,
-  // memory, certificate: already a multiple of 4, so no notes pages.
-  assert.equal(document.getPageCount(), 20);
+  // cover, guide, treat trail, 5 days x (queue + in-place + sit-down),
+  // answer notes, memory, certificate = 21, padded with "My notes" to 24.
+  assert.equal(document.getPageCount(), 24);
   assert.equal(document.getTitle(), "Singapore Explorer - Age 7");
   for (const page of document.getPages()) {
     assert.ok(Math.abs(page.getWidth() - 419.53) < 0.1);
@@ -75,9 +75,9 @@ test("every game gets its own A5 page and the total pads to a multiple of 4", as
   const bytes = await createBookletPdf(booklet);
   const document = await PDFDocument.load(bytes);
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
-  // cover, guide, (queue + queue game + in-place + second in-place +
-  // sit-down) x 2 days, answer notes, memory, certificate = 15, plus one
-  // "My notes" page so the booklet folds from whole sheets.
+  // cover, guide, treat trail, (queue + queue game + in-place + second
+  // in-place + sit-down) x 2 days, answer notes, memory, certificate = 16:
+  // already whole sheets, so no "My notes" page.
   const kinds = bookletDayPageEntries(booklet.dayPlans).map((entry) => entry.kind === "activity" ? entry.slot : entry.kind);
   assert.deepEqual(kinds.slice(0, 5), ["queue", "queueGame", "inThePlace", "inThePlaceSecond", "sitDown"]);
   assert.equal(document.getPageCount(), 16);

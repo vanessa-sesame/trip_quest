@@ -8,6 +8,7 @@
 export {
   bookletPdfFilename,
   bookletPdfPageCount,
+  bookletPdfPageTitles,
   createBookletPdf,
   familyPackPdfFilename,
   type ColoringImageResolver,

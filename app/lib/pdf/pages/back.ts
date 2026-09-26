@@ -1,5 +1,5 @@
-import type { Activity } from "../../booklet/booklet.ts";
-import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
+import type { AnswerEntry } from "../plan.ts";
+import { addPage, drawPageHeader, drawStickerSpot, type PdfContext } from "../context.ts";
 import { displayTitle } from "../../booklet/game-copy.ts";
 import { answerFor } from "../games/index.ts";
 import {
@@ -9,16 +9,9 @@ import {
   drawHandLine,
   drawMosaicFragment,
   drawRoundedRect,
-  drawStampCircle,
 } from "../illustrations.ts";
 import { drawPill, drawText, drawWriteLines, fitTextSize, Flow, pdfText } from "../layout.ts";
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, colors } from "../theme.ts";
-
-export type AnswerEntry = { day: number; index: number; activity: Activity };
-
-// Closed-answer entries per answer-notes page. Each entry is at most one
-// title line plus two answer lines, so this always fits an A5 page.
-export const ANSWERS_PER_PAGE = 8;
 
 export function drawAnswerKeyPage(ctx: PdfContext, entries: AnswerEntry[], part: number, parts: number) {
   const { fonts, type, booklet } = ctx;
@@ -113,9 +106,8 @@ export function drawCertificate(ctx: PdfContext) {
 
   const sealCy = top - 40;
   const sealCx = PAGE_WIDTH / 2;
-  drawStampCircle(page, fonts, sealCx, sealCy, 38, theme.accent, theme.accentSoft, "");
-  page.drawCircle({ x: sealCx, y: sealCy, size: 24, color: theme.accent });
-  page.drawText("TQ", { x: sealCx - fonts.display.widthOfTextAtSize("TQ", 20) / 2, y: sealCy - 7, size: 20, font: fonts.display, color: colors.white });
+  // The gold seal is a sticker from the mystery envelope.
+  drawStickerSpot(ctx, page, { page: "certificate" }, sealCx, sealCy, "Gold seal");
   [0, 45, 90, 135, 180, 225, 270, 315].forEach((angle, index) => {
     const radians = (angle * Math.PI) / 180;
     page.drawCircle({ x: sealCx + Math.cos(radians) * 47, y: sealCy + Math.sin(radians) * 47, size: 2, color: [theme.accent, colors.teal, colors.yellow, colors.green][index % 4] });

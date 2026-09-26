@@ -1,10 +1,9 @@
 import { PDFDocument, StandardFonts, type PDFImage } from "pdf-lib";
 import * as fontkit from "fontkit";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
-import { hasDifferencePictures } from "../booklet/game-copy.ts";
-import { activityContext, bookletDayPageEntries, dayGameActivities, type DayPageEntry } from "../booklet/pages.ts";
+import { activityContext, bookletDayPageEntries, type DayPageEntry } from "../booklet/pages.ts";
 import { assertBookletQa } from "../booklet/qa.ts";
-import { type GeneratedBookletData, validateBookletDraft } from "../generation/booklet-ai.ts";
+import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { sniffImageContentType } from "../generation/illustration-ai.ts";
 import {
   coloringArtworkKey,
@@ -18,25 +17,26 @@ import type { Fonts } from "./layout.ts";
 import { pdfText } from "./layout.ts";
 import { drawActivityPage } from "./pages/activity.ts";
 import {
-  ANSWERS_PER_PAGE,
   drawAnswerKeyPage,
   drawCertificate,
   drawMemoryPage,
   drawNotesPage,
-  type AnswerEntry,
 } from "./pages/back.ts";
 import { drawQueuePage, drawRevealPage } from "./pages/day.ts";
 import {
-  RELAY_DAYS_PER_PAGE,
   drawBadgeTrackerPage,
   drawFamilyMissionPage,
   drawFamilyRelayPage,
   drawMissionCardsPage,
 } from "./pages/family.ts";
 import { drawCover, drawGuide } from "./pages/front.ts";
+import { drawTreatTrail } from "./pages/treats.ts";
 import { colors, getDestinationTheme, typeScale } from "./theme.ts";
 
 export type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
+import { normalizedBooklet, planBookletPages } from "./plan.ts";
+import { stickersForBooklet } from "../booklet/stickers.ts";
+export { bookletPdfPageCount, bookletPdfPageTitles } from "./plan.ts";
 
 // Self-hosted in public/fonts/ (see public/fonts/manifest.json, both OFL).
 // pdf-lib has no complex-shaping support, so only faces without required
@@ -46,65 +46,6 @@ const FONT_ASSETS = {
   regular: "/fonts/NunitoSans-Regular.ttf",
   bold: "/fonts/NunitoSans-Bold.ttf",
 } as const;
-
-type BookletPage =
-  | { kind: "cover" }
-  | { kind: "guide" }
-  | { kind: "day"; entry: DayPageEntry }
-  | { kind: "notes" }
-  | { kind: "answers"; entries: AnswerEntry[]; part: number; parts: number }
-  | { kind: "memory" }
-  | { kind: "certificate" }
-  | { kind: "relay"; days: GeneratedBookletData["dayPlans"]; part: number; parts: number }
-  | { kind: "familyMission" }
-  | { kind: "missionCards" }
-  | { kind: "badges" };
-
-function chunk<T>(values: T[], size: number) {
-  const chunks: T[][] = [];
-  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
-  return chunks.length ? chunks : [[]];
-}
-
-function normalizedBooklet(booklet: GeneratedBookletData): GeneratedBookletData {
-  return { ...booklet, ...validateBookletDraft(booklet, booklet.days, booklet.age) };
-}
-
-// The printed page order. A5 booklets are printed as folded sheets, so the
-// total is padded to a multiple of 4 with "My notes" pages after the days.
-function planBookletPages(booklet: GeneratedBookletData, includeFamilyPack: boolean): BookletPage[] {
-  const answers: AnswerEntry[] = booklet.dayPlans.flatMap((day) =>
-    dayGameActivities(day)
-      .map((activity, index) => ({ day: day.day, index, activity }))
-      .filter((entry) => entry.activity.answerMode === "closed" || hasDifferencePictures(entry.activity)),
-  );
-  const answerChunks = chunk(answers, ANSWERS_PER_PAGE);
-  const relayChunks = chunk(booklet.dayPlans, RELAY_DAYS_PER_PAGE);
-  const front: BookletPage[] = [
-    { kind: "cover" },
-    { kind: "guide" },
-    ...bookletDayPageEntries(booklet.dayPlans).map((entry) => ({ kind: "day" as const, entry })),
-  ];
-  const back: BookletPage[] = [
-    ...answerChunks.map((entries, index) => ({ kind: "answers" as const, entries, part: index + 1, parts: answerChunks.length })),
-    { kind: "memory" },
-    { kind: "certificate" },
-    ...(includeFamilyPack
-      ? [
-          ...relayChunks.map((days, index) => ({ kind: "relay" as const, days, part: index + 1, parts: relayChunks.length })),
-          { kind: "familyMission" as const },
-          { kind: "missionCards" as const },
-          { kind: "badges" as const },
-        ]
-      : []),
-  ];
-  const padding = (4 - ((front.length + back.length) % 4)) % 4;
-  return [...front, ...Array.from({ length: padding }, () => ({ kind: "notes" as const })), ...back];
-}
-
-export function bookletPdfPageCount(booklet: GeneratedBookletData, includeFamilyPack = false) {
-  return planBookletPages(normalizedBooklet(booklet), includeFamilyPack).length;
-}
 
 export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
   const destination = pdfText(booklet.destination)
@@ -207,6 +148,7 @@ function drawDayEntry(ctx: PdfContext, entry: DayPageEntry) {
       return drawRevealPage(ctx, day, dayIndex);
     case "queueGame":
       return drawActivityPage(ctx, day, entry.activity, {
+        stickerSpot: { page: "activity", day: day.day, slot: "queueGame" },
         kicker: `Day ${day.day} / While you wait`,
         accent: colors.yellow,
         soft: colors.yellowSoft,
@@ -215,6 +157,7 @@ function drawDayEntry(ctx: PdfContext, entry: DayPageEntry) {
     case "activity": {
       const sitDown = entry.slot === "sitDown";
       return drawActivityPage(ctx, day, entry.activity, {
+        stickerSpot: { page: "activity", day: day.day, slot: entry.slot },
         kicker: `Day ${day.day} / ${sitDown ? "Sit-down page" : "In the place"}`,
         accent: sitDown ? colors.teal : entry.slot === "inThePlaceSecond" ? colors.green : theme.accent,
         soft: sitDown ? colors.tealSoft : entry.slot === "inThePlaceSecond" ? colors.greenSoft : theme.accentSoft,
@@ -229,6 +172,7 @@ export async function createBookletPdf(
   familyPack?: FamilyPackContext,
   resolveColoringImage?: ColoringImageResolver,
   resolveFontBytes?: FontResolver,
+  hooks: { onStickerSpot?: PdfContext["onStickerSpot"] } = {},
 ) {
   const booklet = normalizedBooklet(inputBooklet);
   assertBookletQa(booklet);
@@ -267,11 +211,14 @@ export async function createBookletPdf(
     revealArtwork: art.revealArtwork,
     coverArtwork: art.coverArtwork,
     familyPack,
+    stickers: stickersForBooklet(booklet, familyPack),
+    onStickerSpot: hooks.onStickerSpot,
   };
   for (const page of plan) {
     switch (page.kind) {
       case "cover": drawCover(ctx); break;
       case "guide": drawGuide(ctx); break;
+      case "treats": drawTreatTrail(ctx); break;
       case "day": drawDayEntry(ctx, page.entry); break;
       case "notes": drawNotesPage(ctx); break;
       case "answers": drawAnswerKeyPage(ctx, page.entries, page.part, page.parts); break;

@@ -1,5 +1,6 @@
 import type { PDFPage, RGB } from "pdf-lib";
 import type { Activity, DayPlan } from "../../booklet/booklet.ts";
+import type { StickerSpot } from "../../booklet/stickers.ts";
 import { addPage, drawPageHeader, type PdfContext } from "../context.ts";
 import { displayTitle, showsActivityBody } from "../../booklet/game-copy.ts";
 import { drawGame, gameHasOwnWritingSpace, gameInstruction } from "../games/index.ts";
@@ -7,6 +8,7 @@ import { drawCard, drawDottedLine, drawPill, drawText, Flow, measureText } from 
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, colors } from "../theme.ts";
 
 export type ActivityPageOptions = {
+  stickerSpot?: StickerSpot;
   kicker: string;
   accent: RGB;
   soft: RGB;
@@ -25,6 +27,7 @@ export function drawActivityPage(ctx: PdfContext, day: DayPlan, activity: Activi
     accent: options.accent,
     soft: options.soft,
     subtitle: day.landmark.place,
+    stickerSpot: options.stickerSpot,
   });
 
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });

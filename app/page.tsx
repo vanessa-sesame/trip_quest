@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import Image from "next/image";
 import {
   BookOpenCheck,
   CalendarDays,
@@ -31,15 +30,14 @@ import {
   sanitizeDays,
 } from "./lib/booklet/booklet";
 import {
+  applySiblingPlan,
   enrichOfflinePreviewGameplay,
   type GeneratedBookletData,
   type GeneratedBookletProfile,
   isGeneratedBookletData,
 } from "./lib/generation/booklet-ai";
-import { ActivityGame } from "./components/activity-game";
-import { DoodleCloud, DoodleMapPin, DoodleSparkle, DoodleStar } from "./components/doodles";
-import { activityContext, bookletCorePageTitles, bookletDayPageEntries } from "./lib/booklet/pages";
-import { displayTitle, showsActivityBody } from "./lib/booklet/game-copy";
+import { PdfPreview } from "./components/pdf-preview";
+import { bookletPdfPageTitles } from "./lib/pdf/plan";
 import {
   GenerationStreamError,
   readGenerationResponse,
@@ -52,12 +50,9 @@ import {
   defaultFamilyWorkspace,
   eventsToDailyPlans,
   eventTypeLabel,
-  FAMILY_BADGES,
+  familyPackFor,
   familyChildDisplayName,
-  familyRoleDescription,
   mechanicLabel,
-  mechanicMissionPrompt,
-  mechanicPlanForTrip,
   normalizeFamilyChildren,
   parseFamilyTags,
   parseItineraryText,
@@ -382,15 +377,45 @@ export default function Home() {
       ),
     [generatedBooklet, partialPreview, trip.age, destinationName, trip.days],
   );
-  const pageTitles = bookletCorePageTitles(generatedDays);
-  const familyPageTitles = [
-    "Family relay & interest lens",
-    "Family mission map",
-    "Mission cards",
-    "Badge tracker",
-  ];
-  const familyPageStart = pageTitles.length;
-  const reportPageTitles = [...pageTitles, ...familyPageTitles];
+  const editionChildren = generatedBooklet?.family?.length
+    ? generatedBooklet.family
+    : children;
+  // The booklet the preview draws: the finished edition, the days finished
+  // so far while generating, or the offline sample before either.
+  // Before generating, the sample uses a neutral explorer at the sample's
+  // age, not the saved family (whose age may not match the sample).
+  const previewChildren = useMemo(
+    () => (generatedBooklet || partialPreview ? editionChildren : [{ ...defaultFamilyWorkspace().children[0], age: trip.age }]),
+    [generatedBooklet, partialPreview, editionChildren, trip.age],
+  );
+  const previewBooklet = useMemo((): GeneratedBookletData => {
+    if (generatedBooklet) return applySiblingPlan(generatedBooklet, generatedBooklet.family || children);
+    return {
+      destination: destinationName,
+      age: trip.age,
+      days: generatedDays.length,
+      itinerary: Array(generatedDays.length).fill(""),
+      profile: destinationProfile,
+      dayPlans: generatedDays,
+      sources: [],
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      family: previewChildren,
+    };
+  }, [generatedBooklet, generatedDays, destinationName, destinationProfile, trip.age, children, previewChildren]);
+  const previewFamilyPack = useMemo(
+    () => familyPackFor(previewChildren, generatedBooklet?.events || structuredEvents, previewBooklet.days),
+    [previewChildren, generatedBooklet, structuredEvents, previewBooklet.days],
+  );
+  const previewKey = generatedBooklet?.editionFingerprint
+    ?? `${partialPreview ? "partial" : "sample"}-${destinationName}-${trip.age}-${generatedDays.length}-${generatedDays.map((day) => day.theme).join("|")}-${previewChildren.map((child) => `${child.name}:${child.age}`).join(",")}`;
+  // One title per printed page, from the same page plan the PDF uses.
+  const reportPageTitles = useMemo(() => {
+    try {
+      return bookletPdfPageTitles(previewBooklet, true);
+    } catch {
+      return ["Cover"];
+    }
+  }, [previewBooklet]);
   const outlineItems = generatedDays.map((day) => day.theme).map((title, index) => ({
     title:
       !FULL_PREVIEW_FOR_TESTERS && index > 0
@@ -401,9 +426,6 @@ export default function Home() {
   const currentPage = clampPage(page, reportPageTitles.length);
   const currentPageLocked = isBookletPageLocked(currentPage);
   const leadChild = children[0] || defaultFamilyWorkspace().children[0];
-  const editionChildren = generatedBooklet?.family?.length
-    ? generatedBooklet.family
-    : children;
   const familyInterests = [...new Set(editionChildren.flatMap((child) => child.interests))];
 
   function updateLeadAge(value: number) {
@@ -1074,23 +1096,13 @@ export default function Home() {
                     setCheckoutOpen(true);
                   }}
                 />
-              ) : currentPage >= familyPageStart ? (
-                <FamilyPackPreviewPage
-                  key={`family-${currentPage - familyPageStart}`}
-                  destination={destinationName}
-                  page={currentPage - familyPageStart}
-                  explorers={editionChildren}
-                  days={trip.days}
-                  dayPlans={generatedDays}
-                />
               ) : (
-                <GeneratedPage
-                  key={`generated-${currentPage}`}
-                  age={trip.age}
-                  destination={destinationName}
+                <PdfPreview
+                  booklet={previewBooklet}
+                  familyPack={previewFamilyPack}
+                  documentKey={previewKey}
                   page={currentPage}
-                  profile={destinationProfile}
-                  days={generatedDays}
+                  zoom={previewZoom}
                 />
               )}
             </div>
@@ -1479,332 +1491,6 @@ function LockedPreviewPage({
         <Download size={14} aria-hidden="true" />
         Unlock PDF
       </button>
-    </article>
-  );
-}
-
-function FamilyPackPreviewPage({
-  destination,
-  page,
-  explorers,
-  days,
-  dayPlans,
-}: {
-  destination: string;
-  page: number;
-  explorers: FamilyChild[];
-  days: number;
-  dayPlans: Array<{
-    day: number;
-    theme: string;
-    interestHook?: string;
-    siblingMission?: string;
-  }>;
-}) {
-  if (page === 0) {
-    return (
-      <article className="generated-sheet family-preview-sheet family-preview-relay" data-preview-page="family-relay">
-        <span>Family relay &amp; interest lens</span>
-        <h3>Every day gets a handoff</h3>
-        <p>Interests and sibling roles appear on the day they matter, then move to a different child the next day.</p>
-        <div className="family-relay-preview-list">
-          {dayPlans.slice(0, 6).map((day) => (
-            <div className="family-relay-preview-row" key={day.day}>
-              <strong>DAY {day.day}</strong>
-              <span>{day.theme}</span>
-              <small>{day.interestHook || day.siblingMission || "Share one local discovery."}</small>
-            </div>
-          ))}
-        </div>
-        <small>{days} adventure days · roles change, the place stays shared</small>
-      </article>
-    );
-  }
-
-  if (page === 1) {
-    return (
-      <article className="generated-sheet family-preview-sheet family-map-preview" data-preview-page="family-map">
-        <span>Family mission map</span>
-        <h3>{destination} family explorers</h3>
-        <p>Same place, different ways to notice it. Each explorer gets a role that matches their age and reading level.</p>
-        <div className="family-preview-roles">
-          {explorers.map((child, index) => (
-            <div key={child.id}>
-              <strong>{index === 0 ? "Lead · " : ""}{familyChildDisplayName(child, index)} · age {child.age}</strong>
-              <span>{familyRoleDescription(child, index)}</span>
-              {child.interests.length ? <small>Interest missions: {child.interests.slice(0, 3).join(", ")}</small> : null}
-            </div>
-          ))}
-        </div>
-        <small>{days} adventure days · share the place, not every answer</small>
-      </article>
-    );
-  }
-
-  if (page === 2) {
-    const mechanicsByDay = mechanicPlanForTrip(explorers, days);
-    const cards = Array.from({ length: 4 }, (_, index) => {
-      const dayIndex = index % Math.max(1, dayPlans.length);
-      const day = dayPlans[dayIndex] || { day: index + 1, theme: destination };
-      const plan = mechanicsByDay[dayIndex]?.mechanics || ["spot" as const];
-      const mechanic = plan[index % plan.length] || "spot";
-      return {
-        label: `DAY ${day.day} / ${mechanicLabel(mechanic).toUpperCase()}`,
-        prompt: mechanicMissionPrompt(mechanic, day.theme),
-      };
-    });
-    return (
-      <article className="generated-sheet family-preview-sheet family-cards-preview" data-preview-page="mission-cards">
-        <span>Mission cards</span>
-        <h3>Pick a family spark</h3>
-        <p>Use one card when the day needs a small, screen-free challenge.</p>
-        <div className="family-preview-card-grid">
-          {cards.map((card) => <div key={card.label}><strong>{card.label}</strong><span>{card.prompt}</span></div>)}
-        </div>
-      </article>
-    );
-  }
-
-  return page === 3 ? (
-    <article className="generated-sheet family-preview-sheet family-badges-preview" data-preview-page="badge-tracker">
-      <span>Badge tracker</span>
-      <h3>Collect the way you traveled</h3>
-      <p>Give each explorer a tick, sticker, or tiny drawing when the family earns a badge.</p>
-      <div className="family-preview-badges">
-        {FAMILY_BADGES.map((badge) => <div key={badge}><b>OK</b><span>{badge}</span></div>)}
-      </div>
-    </article>
-  ) : (
-    <article className="generated-sheet family-preview-sheet family-cards-preview">
-      <span>Mission cards</span>
-      <h3>Pick a family spark</h3>
-      <p>Use one card when the day needs a small, screen-free challenge.</p>
-      <div className="family-preview-card-grid">
-        {["Spot one tiny local detail.", "Draw a shape, texture, or pattern.", "Solve a clue, then find the evidence.", "Work together to tell one trip story."].map((card, index) => <div key={card}><strong>MISSION {index + 1}</strong><span>{card}</span></div>)}
-      </div>
-    </article>
-  );
-}
-
-// Label prefix for the queue page's secret-target badge, keyed by
-// QueueTargetKind. Purely presentational (never AI-authored), mirrors
-// queueTargetKindCopy in app/lib/pdf/booklet-pdf.ts; an unexpected kind falls back
-// to a neutral default rather than showing nothing.
-const queueTargetKindPrefix: Record<string, string> = {
-  shape: "Your secret shape:",
-  colour: "Your secret colour:",
-  object: "Your secret object:",
-  sound: "Your secret sound:",
-  person: "Who to spot:",
-};
-
-function GeneratedPage({
-  age,
-  destination,
-  page,
-  profile,
-  days,
-}: {
-  age: number;
-  destination: string;
-  page: number;
-  profile: GeneratedBookletProfile;
-  days: ReturnType<typeof buildBooklet>;
-}) {
-  const activityPages = bookletDayPageEntries(days);
-
-  if (page === 0) {
-    return (
-      <article className="generated-sheet generated-cover">
-        <span>TripQuest Explorer Book</span>
-        <p className="cover-subtitle">A trip made for curious hands</p>
-        <h3>{destination}</h3>
-        <p>{profile.style}</p>
-        <div className="cover-stamps">
-          <span className="jt-stamp">Age {age}</span>
-          <span className="jt-stamp cover-stamp-days">{days.length === 1 ? "1 day" : `${days.length} days`}</span>
-        </div>
-        <div className="cover-motif" aria-hidden="true">
-          <DoodleMapPin className="jt-doodle" />
-          <DoodleStar className="jt-doodle" />
-          <DoodleCloud className="jt-doodle" />
-        </div>
-        <div className="cover-sign-area">
-          <p className="cover-section-label">Draw your explorer mark</p>
-          <div className="cover-sign-box" />
-        </div>
-        <div className="cover-dates-area">
-          <p className="cover-section-label">Trip dates</p>
-          <div className="cover-dates-line" />
-        </div>
-        <div className="cover-tagline">
-          <p className="cover-tagline-text">Pack a pencil. Notice everything.</p>
-          <p className="cover-tagline-sub">Games, drawing spaces, local clues, and family missions made for this exact trip.</p>
-        </div>
-      </article>
-    );
-  }
-
-  if (page === 1) {
-    return (
-      <article className="generated-sheet generated-guide">
-        <span>A quick note for grown-ups</span>
-        <h3>{getAgeBand(age).label}</h3>
-        <p>{profile.intro}</p>
-        <div>
-          <strong>{getAgeBand(age).minutes} minutes</strong>
-          <strong>{profile.word}</strong>
-        </div>
-        <h4>Local care clue</h4>
-        <p>{profile.etiquette}</p>
-        <h4>Using this booklet</h4>
-        <p>What to bring: pencils or colored pencils, this booklet, and about {getAgeBand(age).minutes} unhurried minutes at each stop.</p>
-        <p>How it works: a quick game while you wait in line, two hands-on games once you arrive, then a calm page to unwind after — no reading required until your child is ready.</p>
-        <p className="guide-pitch">Real places become real adventures — that&apos;s the whole idea.</p>
-      </article>
-    );
-  }
-
-  if (page === activityPages.length + 2) {
-    return (
-      <article className="generated-sheet generated-guide generated-answer">
-        <span>Grown-up answer notes</span>
-        <h3>Keep this page tucked away</h3>
-        <p>Use it after the child has had a proper go. Observation and imagination pages can have more than one good answer.</p>
-        <div className="answer-preview-list">
-          {days.slice(0, 5).map((day) => (
-            <strong key={day.day}>Day {day.day}: {day.activities[0]?.title || "Open observation"}</strong>
-          ))}
-        </div>
-      </article>
-    );
-  }
-
-  if (page === activityPages.length + 3) {
-    return (
-      <article className="generated-sheet generated-memory">
-        <span>Memory museum</span>
-        <h3>{destination} moments worth keeping</h3>
-        <p>Draw the details that made your family stop, laugh, taste, or look twice.</p>
-        <div>
-          <strong>Smallest detail</strong>
-          <strong>Biggest surprise</strong>
-          <strong>Kindest moment</strong>
-          <strong>Most {destination}</strong>
-        </div>
-      </article>
-    );
-  }
-
-  if (page === activityPages.length + 4) {
-    return (
-      <article className="generated-sheet generated-certificate">
-        <span>Official TripQuest certificate</span>
-        <h3>{destination} Explorer</h3>
-        <p>Awarded for curious noticing and kind traveling.</p>
-        <div aria-hidden="true" />
-        <strong>Explorer name</strong>
-      </article>
-    );
-  }
-
-  const pageEntry = activityPages[page - 2];
-  if (pageEntry.kind === "queue") {
-    const { day } = pageEntry;
-    const queue = day.slots.whileYouWait;
-    // Surfaced here (the day's first activity page) rather than only on the
-    // family-relay summary page near the back, which is the only place this
-    // content used to appear.
-    const cueText = day.interestHook || day.siblingMission;
-    const reveal = day.slots.questReveal;
-    return (
-      <article className="generated-sheet generated-day generated-queue-page">
-        <span>Day {day.day} · Before you go</span>
-        {day.mission ? (
-          <span className="queue-mission-pill">
-            <b>Mission</b> {day.mission}
-          </span>
-        ) : null}
-        <p className="grown-up-line">{day.slots.beforeYouGo}</p>
-        {cueText ? (
-          <p className="family-cue">
-            <strong>Family lens</strong> {cueText}
-          </p>
-        ) : null}
-        <p className="game-place">{day.landmark.display}</p>
-        <h3>{day.theme}</h3>
-        {reveal?.targetLabel ? (
-          <p className="queue-target">
-            <strong>{queueTargetKindPrefix[reveal.targetKind || ""] || "Your secret target:"}</strong>
-            <span>{reveal.targetLabel.toUpperCase()}</span>
-          </p>
-        ) : null}
-        {reveal?.bonusQuest ? (
-          <p className="queue-bonus-quest">
-            <strong>Bonus quest</strong> {reveal.bonusQuest}
-          </p>
-        ) : null}
-        {/* With a queue game, its own page carries the instruction. */}
-        <p className="game-instructions">{queue.gameType && queue.items ? queue.countLabel : queue.instruction}</p>
-        <div className="queue-counter" aria-label={`${queue.countLabel}, up to ${queue.countTo}`}>
-          {Array.from({ length: Math.min(20, queue.countTo) }, (_, index) => (
-            <span key={index} aria-hidden="true" />
-          ))}
-        </div>
-        {/* Facts move to the reveal page when there is one. */}
-        {!reveal && day.slots.factCard.length === 3 ? (
-          <section className="fact-card">
-            <strong>Did you know?</strong>
-            <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
-          </section>
-        ) : null}
-      </article>
-    );
-  }
-  if (pageEntry.kind === "reveal") {
-    const { day } = pageEntry;
-    const reveal = day.slots.questReveal;
-    if (!reveal) return null;
-    return (
-      <article className="generated-sheet generated-day generated-reveal-page">
-        <span>Day {day.day} · At the destination</span>
-        <h3>Found It!</h3>
-        {reveal.photoPath ? (
-          <div className="reveal-photo">
-            <Image src={reveal.photoPath} alt="" fill sizes="(max-width: 760px) 340px, 400px" unoptimized />
-          </div>
-        ) : null}
-        <p className="game-instructions">{reveal.revealText}</p>
-        <section className="reveal-chat">
-          <strong>Chat about it</strong>
-          <ul>{reveal.chatPrompts.map((prompt) => <li key={prompt}>{prompt}</li>)}</ul>
-        </section>
-        {day.slots.factCard.length === 3 ? (
-          <section className="fact-card">
-            <strong>Did you know?</strong>
-            <ul>{day.slots.factCard.map((fact) => <li key={fact}>{fact}</li>)}</ul>
-          </section>
-        ) : null}
-        <p className="reveal-badge"><DoodleSparkle className="jt-doodle" />Quest complete</p>
-        <div className="reveal-photo-box" aria-hidden="true">
-          <span>Draw or stick a photo of your discovery here</span>
-        </div>
-      </article>
-    );
-  }
-  const { activity, day } = pageEntry;
-  const slot = pageEntry.kind === "queueGame" ? "queueGame" : pageEntry.slot;
-  const kicker = slot === "queueGame" ? "While you wait" : slot === "sitDown" ? "Sit-down page" : "In the place";
-  // One game per page, matching the printed A5 booklet page for page.
-  return (
-    <article className="generated-sheet generated-day generated-game-page">
-      <span>Day {day.day} · {kicker}</span>
-      <p className="game-place">{day.landmark.place}</p>
-      <h3>{displayTitle(activity.title)}</h3>
-      {/* Same intro rule as the printed page. */}
-      {showsActivityBody(activity) ? <p className="game-instructions">{activity.body}</p> : null}
-      <ActivityGame activity={activity} age={age} context={activityContext(day, slot)} />
-      {activity.gameType === "coloring" || !activity.prompt ? null : <i>{activity.prompt}</i>}
     </article>
   );
 }

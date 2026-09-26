@@ -6,7 +6,7 @@ import {
 } from "../../lib/pdf/booklet-pdf";
 import {
   familyChildDisplayName,
-  mechanicPlanForTrip,
+  familyPackFor,
 } from "../../lib/family";
 import {
   type BookletDatabase,
@@ -168,11 +168,7 @@ async function preparePdf(
   const jobKey = `${purchase?.purchaseId || "test"}:${cacheKey}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
   let job = pdfJobs.get(jobKey);
   if (!job) {
-    const familyPack: FamilyPackContext = {
-      children: input.family,
-      events: input.events,
-      mechanicsByDay: mechanicPlanForTrip(input.family, input.days),
-    };
+    const familyPack: FamilyPackContext = familyPackFor(input.family, input.events, input.days);
     // Also reused as-is for font files (createBookletPdf's resolveFontBytes,
     // below): illustrationStorageKey only matches the R2-backed
     // illustrations/v.../artwork.png shape, so a /fonts/*.ttf path already

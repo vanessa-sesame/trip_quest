@@ -51,22 +51,53 @@ function usableDraftWithFillerLabels() {
   };
 }
 
-test("an unusable final attempt falls back to the last draft that passed validation", async () => {
-  const composeReplies = [JSON.stringify(usableDraftWithFillerLabels()), "{}", "{}"];
+test("a draft with a filler-label game is fixed by rewriting only that game", async () => {
+  const draft = usableDraftWithFillerLabels();
+  const repairedGame = {
+    ...draft.dayPlans[0].slots.inThePlace,
+    items: ["Red lantern", "Paper crane", "Stone lion", "Shrine bell"].map((label) => ({ label, clue: `Look for the ${label.toLowerCase()} near the station.` })),
+  };
+  const requests: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
     const body = JSON.parse(String(init?.body));
-    const isGrounding = body.response_format?.json_schema?.name === "grounding_check";
-    const content = isGrounding ? JSON.stringify({ findings: [] }) : composeReplies.shift();
+    const name = body.response_format?.json_schema?.name;
+    requests.push(name);
+    const content = name === "grounding_check"
+      ? JSON.stringify({ findings: [] })
+      : name === "tripquest_repair"
+        ? JSON.stringify({ games: [{ day: 1, slot: "inThePlace", activity: repairedGame }] })
+        : JSON.stringify(draft);
     return Response.json({ choices: [{ message: { content } }] });
   };
   try {
-    const draft = await composeBookletBatch(
+    const result = await composeBookletBatch(
       "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
       "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
     );
-    assert.equal(composeReplies.length, 0, "all three attempts were made");
-    assert.equal(draft.dayPlans[0].slots.inThePlace.items?.[0].label, "First red lantern");
+    assert.deepEqual(requests.filter((name) => name === "tripquest_booklet").length, 1, "the day is composed once");
+    assert.ok(requests.includes("tripquest_repair"), "the bad game is repaired on its own");
+    assert.equal(result.dayPlans[0].slots.inThePlace.items?.[0].label, "Red lantern");
+    assert.equal(result.dayPlans[0].slots.inThePlace.title, draft.dayPlans[0].slots.inThePlace.title, "the title is kept");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a failed repair keeps the composed draft instead of failing the day", async () => {
+  const draft = usableDraftWithFillerLabels();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const name = JSON.parse(String(init?.body)).response_format?.json_schema?.name;
+    const content = name === "grounding_check" ? JSON.stringify({ findings: [] }) : name === "tripquest_repair" ? "{}" : JSON.stringify(draft);
+    return Response.json({ choices: [{ message: { content } }] });
+  };
+  try {
+    const result = await composeBookletBatch(
+      "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
+      "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
+    );
+    assert.equal(result.dayPlans[0].slots.inThePlace.items?.[0].label, "First red lantern");
   } finally {
     globalThis.fetch = originalFetch;
   }

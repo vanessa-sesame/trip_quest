@@ -237,6 +237,12 @@ export default function Home() {
   const resumeAttempted = useRef(false);
   const [generatedBooklet, setGeneratedBooklet] =
     useState<GeneratedBookletData | null>(null);
+  // Days that finished while the rest of the booklet is still composing,
+  // shown in the preview so the wait has something to look at.
+  const [partialPreview, setPartialPreview] = useState<{
+    profile: GeneratedBookletProfile;
+    dayPlans: GeneratedBookletData["dayPlans"];
+  } | null>(null);
   const [generationState, setGenerationState] = useState<
     "idle" | "generating" | "error"
   >("idle");
@@ -349,8 +355,8 @@ export default function Home() {
 
   const destinationName = trip.destination.trim() || "Your destination";
   const destinationProfile = useMemo(
-    () => generatedBooklet?.profile ?? getDestinationProfile(destinationName),
-    [destinationName, generatedBooklet],
+    () => generatedBooklet?.profile ?? partialPreview?.profile ?? getDestinationProfile(destinationName),
+    [destinationName, generatedBooklet, partialPreview],
   );
   // Before a real booklet exists, this falls back to buildBooklet's
   // deterministic offline generator — the same live GeneratedPage
@@ -362,6 +368,7 @@ export default function Home() {
   const generatedDays = useMemo(
     () =>
       generatedBooklet?.dayPlans ??
+      partialPreview?.dayPlans ??
       // buildBooklet varies each day's theme/landmark/titles but never
       // assigns a gameType or items to inThePlace/sitDown — enrich it with
       // the same destination-rotated variety a real generation gets so the
@@ -372,7 +379,7 @@ export default function Home() {
         trip.age,
         destinationName,
       ),
-    [generatedBooklet, trip.age, destinationName, trip.days],
+    [generatedBooklet, partialPreview, trip.age, destinationName, trip.days],
   );
   const pageTitles = bookletCorePageTitles(generatedDays);
   const familyPageTitles = [
@@ -485,6 +492,7 @@ export default function Home() {
     setGenerationState("generating");
     setGenerationError("");
     setGenerationMessage("Looking for a saved edition…");
+    setPartialPreview(null);
     setDays(nextTrip.days);
     writePendingGeneration(nextTrip);
 
@@ -516,7 +524,22 @@ export default function Home() {
                 },
                 body: requestBody,
               });
-              payload = await readGenerationResponse(response, setGenerationMessage);
+              let showedPartial = false;
+              payload = await readGenerationResponse(response, (message, partial) => {
+                setGenerationMessage(message);
+                if (!partial) return;
+                setPartialPreview({
+                  profile: partial.profile as GeneratedBookletProfile,
+                  dayPlans: partial.dayPlans as GeneratedBookletData["dayPlans"],
+                });
+                if (!showedPartial) {
+                  // First finished day: switch the preview to this trip.
+                  showedPartial = true;
+                  setGeneratedBooklet(null);
+                  setTrip({ age: nextTrip.age, destination: nextTrip.destination, days: nextTrip.days });
+                  setPage(0);
+                }
+              });
               const errorPayload = payload as { error?: string };
 
               if (!response.ok || typeof errorPayload?.error === "string") {
@@ -539,6 +562,7 @@ export default function Home() {
           }
 
           setGeneratedBooklet(payload);
+          setPartialPreview(null);
           setTrip({
             age: payload.age,
             destination: payload.destination,
@@ -571,6 +595,7 @@ export default function Home() {
       throw lastError;
     } catch (error) {
       if (!isConnectionIssue(error)) clearPendingGeneration();
+      setPartialPreview(null);
       setGenerationState("error");
       setGenerationError(
         error instanceof Error &&
@@ -970,7 +995,7 @@ export default function Home() {
             </button>
             {generationState === "generating" ? (
               <p className="generation-note" role="status">
-                {generationMessage} A new place can take up to two minutes.
+                {generationMessage} Usually under a minute; a destination we have not researched before adds about a minute.
               </p>
             ) : null}
             {generationError ? (
@@ -994,7 +1019,13 @@ export default function Home() {
         >
           <div className="preview-toolbar">
             <div>
-              <p className="eyebrow">{generatedBooklet ? "Your exact edition" : "Sample preview"}</p>
+              <p className="eyebrow">
+                {generatedBooklet
+                  ? "Your exact edition"
+                  : partialPreview
+                    ? `Your booklet · ${partialPreview.dayPlans.length} of ${trip.days} days ready`
+                    : "Sample preview"}
+              </p>
               <h2 id="preview-title">{destinationName} Explorer</h2>
               <p>
                 Age {trip.age} <span aria-hidden="true">•</span> {trip.days} days{" "}

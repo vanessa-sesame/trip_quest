@@ -36,6 +36,9 @@ const scenarios: Scenario[] = [
   { name: "istanbul-age14-3d", destination: "Istanbul", age: 14, days: 3 },
   { name: "bangkok-age4-2d", destination: "Bangkok", age: 4, days: 2 },
   { name: "reykjavik-age13-7d", destination: "Reykjavik", age: 13, days: 7 },
+  { name: "lisbon-age8-3d", destination: "Lisbon", age: 8, days: 3 },
+  { name: "seoul-age11-5d", destination: "Seoul", age: 11, days: 5 },
+  { name: "marrakech-age6-2d", destination: "Marrakech", age: 6, days: 2 },
 ];
 
 const baseUrl = process.env.TRIPQUEST_URL || "http://localhost:3000";

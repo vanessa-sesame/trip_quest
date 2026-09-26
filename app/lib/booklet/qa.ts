@@ -133,33 +133,52 @@ const COUNTER_SUFFIX = /\s*#?\d+$/;
 const IMPERATIVE_CLUE = /^(draw|colou?r|write|sketch|trace)\b/i;
 const CLUE_MECHANICS = new Set(["matching", "quiz", "bingo", "codebreaker"]);
 
-type ComposedGame = { title: string; gameType?: string; items?: { label: string; clue: string }[] };
+export type RepairableSlot = "inThePlace" | "inThePlaceSecond" | "sitDown" | "whileYouWait";
+
+// One composition-time content problem, tied to the game that has it so a
+// repair can rewrite just that game instead of the whole day.
+export type ContentProblem = { day: number; slot: RepairableSlot; message: string };
+
+type ComposedGame = { slot: RepairableSlot; title: string; gameType?: string; items?: { label: string; clue: string }[] };
 
 function composedGames(day: DayPlan): ComposedGame[] {
   const queue = day.slots.whileYouWait;
   const games: Array<ComposedGame | undefined> = [
-    day.slots.inThePlace,
-    day.slots.inThePlaceSecond,
-    day.slots.sitDown,
-    queue.items ? { title: queue.title, gameType: queue.gameType, items: queue.items } : undefined,
+    { slot: "inThePlace", ...day.slots.inThePlace },
+    day.slots.inThePlaceSecond ? { slot: "inThePlaceSecond", ...day.slots.inThePlaceSecond } : undefined,
+    { slot: "sitDown", ...day.slots.sitDown },
+    queue.items ? { slot: "whileYouWait", title: queue.title, gameType: queue.gameType, items: queue.items } : undefined,
   ];
   return games.filter((game): game is ComposedGame => Boolean(game));
 }
 
-// Composition-time content rules. Unlike assertBookletQa these return
-// messages instead of throwing and never run on stored booklets, so they
-// can tighten over time without invalidating editions already saved.
-export function composedContentIssues(draft: { dayPlans: DayPlan[] }) {
-  const issues: string[] = [];
+// Composition-time content rules. Unlike assertBookletQa these never run on
+// stored booklets, so they can tighten over time without invalidating
+// editions already saved. `plannedTypes` (inThePlace, sitDown) decides which
+// game to change when two share a type: the one that left its schedule.
+export function composedContentProblems(
+  draft: { dayPlans: DayPlan[] },
+  plannedTypes: Array<{ day: number; gameTypes: string[] }> = [],
+): ContentProblem[] {
+  const problems: ContentProblem[] = [];
   for (const day of draft.dayPlans) {
-    const dayGames = [day.slots.inThePlace, day.slots.inThePlaceSecond, day.slots.sitDown]
-      .filter((game) => Boolean(game?.gameType));
-    const types = dayGames.map((game) => game!.gameType);
-    const repeated = types.filter((type, index) => types.indexOf(type) !== index);
-    if (repeated.length) {
-      issues.push(
-        `Day ${day.day} uses ${repeated[0]} for more than one game; its in-place, second in-place and sit-down games must be three different game types (follow the assigned schedule).`,
-      );
+    const slots = (["inThePlace", "inThePlaceSecond", "sitDown"] as const)
+      .filter((slot) => day.slots[slot]?.gameType)
+      .map((slot) => ({ slot, gameType: day.slots[slot]!.gameType! }));
+    const plan = plannedTypes.find((entry) => entry.day === day.day)?.gameTypes ?? [];
+    const planned: Partial<Record<RepairableSlot, string>> = { inThePlace: plan[0], sitDown: plan[1] };
+    for (const [index, entry] of slots.entries()) {
+      const clash = slots.slice(0, index).find((other) => other.gameType === entry.gameType);
+      if (!clash) continue;
+      // Change the free second game first, then whichever left its schedule.
+      const target = [entry, clash].find((candidate) => candidate.slot === "inThePlaceSecond")
+        ?? [entry, clash].find((candidate) => planned[candidate.slot] && planned[candidate.slot] !== candidate.gameType)
+        ?? entry;
+      problems.push({
+        day: day.day,
+        slot: target.slot,
+        message: `Day ${day.day} uses ${entry.gameType} for more than one game; its in-place, second in-place and sit-down games must be three different game types (follow the assigned schedule).`,
+      });
     }
     for (const game of composedGames(day)) {
       const items = game.items ?? [];
@@ -173,27 +192,37 @@ export function composedContentIssues(draft: { dayPlans: DayPlan[] }) {
       );
       const filler = [...new Set([...ordinal, ...counted])];
       if (filler.length) {
-        issues.push(
-          `Day ${day.day} "${game.title}" uses numbered filler labels (${filler.join(", ")}); give its four items four different, specific local things instead.`,
-        );
+        problems.push({
+          day: day.day,
+          slot: game.slot,
+          message: `Day ${day.day} "${game.title}" uses numbered filler labels (${filler.join(", ")}); give its four items four different, specific local things instead.`,
+        });
       }
       if (game.gameType && CLUE_MECHANICS.has(game.gameType)) {
         const imperative = items.filter((item) => IMPERATIVE_CLUE.test(item.clue.trim()));
         if (imperative.length) {
-          issues.push(
-            `Day ${day.day} "${game.title}" is a ${game.gameType} game but its clues are drawing/writing instructions ("${imperative[0].clue}"); write clues that describe or ask about a real local detail.`,
-          );
+          problems.push({
+            day: day.day,
+            slot: game.slot,
+            message: `Day ${day.day} "${game.title}" is a ${game.gameType} game but its clues are drawing/writing instructions ("${imperative[0].clue}"); write clues that describe or ask about a real local detail.`,
+          });
         }
       }
       if (game.gameType === "quiz") {
         const notQuestions = items.filter((item) => !item.clue.includes("?"));
         if (notQuestions.length) {
-          issues.push(
-            `Day ${day.day} "${game.title}" is a quiz but "${notQuestions[0].clue}" is not a question; each quiz clue must be a real question whose answer is its label.`,
-          );
+          problems.push({
+            day: day.day,
+            slot: game.slot,
+            message: `Day ${day.day} "${game.title}" is a quiz but "${notQuestions[0].clue}" is not a question; each quiz clue must be a real question whose answer is its label.`,
+          });
         }
       }
     }
   }
-  return issues;
+  return problems;
+}
+
+export function composedContentIssues(draft: { dayPlans: DayPlan[] }) {
+  return composedContentProblems(draft).map((problem) => problem.message);
 }

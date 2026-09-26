@@ -614,17 +614,12 @@ test("a composed day-batch can be saved, restored, and independently invalidated
 });
 
 test("a day number maps back to the exact batch that composed it", () => {
-  // Trips of four days or fewer compose as one batch; longer trips compose
-  // in three-day batches. A whole-booklet QA failure on any given day must
-  // resolve to the same batch composeBooklet used, or a repair would
-  // recompose the wrong days.
+  // Every day composes as its own batch (they run in parallel). A
+  // whole-booklet QA failure on a day must resolve to that day's batch, or
+  // a repair would recompose the wrong day.
   assert.deepEqual(batchRangeForDay(1, 1), { offset: 0, dayCount: 1 });
-  assert.deepEqual(batchRangeForDay(3, 3), { offset: 0, dayCount: 3 });
-  assert.deepEqual(batchRangeForDay(1, 5), { offset: 0, dayCount: 3 });
-  assert.deepEqual(batchRangeForDay(3, 5), { offset: 0, dayCount: 3 });
-  assert.deepEqual(batchRangeForDay(4, 5), { offset: 3, dayCount: 2 });
-  assert.deepEqual(batchRangeForDay(5, 5), { offset: 3, dayCount: 2 });
-  assert.deepEqual(batchRangeForDay(1, 14), { offset: 0, dayCount: 3 });
-  assert.deepEqual(batchRangeForDay(7, 14), { offset: 6, dayCount: 3 });
-  assert.deepEqual(batchRangeForDay(14, 14), { offset: 12, dayCount: 2 });
+  assert.deepEqual(batchRangeForDay(3, 3), { offset: 2, dayCount: 1 });
+  assert.deepEqual(batchRangeForDay(4, 5), { offset: 3, dayCount: 1 });
+  assert.deepEqual(batchRangeForDay(14, 14), { offset: 13, dayCount: 1 });
 });
+

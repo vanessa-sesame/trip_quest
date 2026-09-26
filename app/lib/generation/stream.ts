@@ -1,5 +1,12 @@
+// Days finished so far, in order from day 1, sent while the rest compose.
+export type PartialBooklet = {
+  profile: unknown;
+  dayPlans: unknown[];
+};
+
 export type GenerationProgress = {
   message: string;
+  partial?: PartialBooklet;
 };
 
 export type GenerationTask<T> = {
@@ -22,13 +29,15 @@ export class GenerationStreamError extends Error {
 
 export function createGenerationTask<T>(
   initialMessage: string,
-  run: (publish: (message: string) => void) => Promise<T>,
+  run: (publish: (message: string, partial?: PartialBooklet) => void) => Promise<T>,
 ): GenerationTask<T> {
-  let progress = { message: initialMessage };
+  let progress: GenerationProgress = { message: initialMessage };
   const listeners = new Set<(nextProgress: GenerationProgress) => void>();
-  const publish = (message: string) => {
-    progress = { message };
-    for (const listener of listeners) listener(progress);
+  // The latest partial booklet sticks until a newer one replaces it, so a
+  // client that reconnects mid-generation still gets the finished days.
+  const publish = (message: string, partial?: PartialBooklet) => {
+    progress = { message, partial: partial ?? progress.partial };
+    for (const listener of listeners) listener(partial ? progress : { message });
   };
   const promise = Promise.resolve().then(() => run(publish));
 
@@ -85,7 +94,8 @@ export function createGenerationStreamResponse<T, TResult = T>(
         unsubscribe = task.subscribe((progress) => send("progress", progress));
         sendPadding();
         heartbeat = setInterval(() => {
-          send("progress", task.getProgress());
+          // Heartbeats carry only the status line; days are sent on change.
+          send("progress", { message: task.getProgress().message });
           sendPadding();
         }, 4_000);
 
@@ -134,7 +144,7 @@ function parseFrame(frame: string) {
 
 export async function readGenerationResponse(
   response: Response,
-  onProgress: (message: string) => void,
+  onProgress: (message: string, partial?: PartialBooklet) => void,
 ): Promise<unknown> {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("text/event-stream")) {
@@ -169,8 +179,10 @@ export async function readGenerationResponse(
         }
 
         if (frame.event === "progress") {
-          const message = (payload as { message?: unknown })?.message;
-          if (typeof message === "string") onProgress(message);
+          const { message, partial } = payload as { message?: unknown; partial?: PartialBooklet };
+          if (typeof message === "string") {
+            onProgress(message, partial && Array.isArray(partial.dayPlans) ? partial : undefined);
+          }
         } else if (frame.event === "complete") {
           return payload;
         } else if (frame.event === "error") {

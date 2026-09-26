@@ -93,3 +93,25 @@ test("cached JSON responses remain compatible with the stream reader", async () 
   const result = await readGenerationResponse(response, () => undefined);
   assert.deepEqual(result, { destination: "Tokyo", age: 5 });
 });
+
+test("finished days reach the client, and a client that rejoins gets them at once", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const task = createGenerationTask("Starting…", async (publish) => {
+    publish("Day 1 of 2 is ready", { profile: { style: "Test" }, dayPlans: [{ day: 1 }] });
+    publish("Still designing…");
+    await gate;
+    return { done: true };
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  // A client that subscribes after the day was published still gets it.
+  assert.deepEqual(task.getProgress().partial?.dayPlans, [{ day: 1 }]);
+
+  const seen: Array<{ message: string; days?: number }> = [];
+  const response = createGenerationStreamResponse(task, () => "failed");
+  const reading = readGenerationResponse(response, (message, partial) => seen.push({ message, days: partial?.dayPlans.length }));
+  release();
+  assert.deepEqual(await reading, { done: true });
+  assert.ok(seen.some((entry) => entry.days === 1), "the rejoining client received the finished day");
+});

@@ -172,8 +172,11 @@ export function bookletBatchArtifactKey(
 
 // Long, single model calls are fragile on mobile. Three-day batches keep
 // each request bounded and can be restored independently after a reconnect.
-export function composeBatchSize(days: number) {
-  return days > 3 ? 3 : days;
+// One day per composition request: requests run in parallel, and a model
+// writes one day about three times faster than three, so a trip of any
+// length takes about as long as a single day.
+export function composeBatchSize(_days: number) {
+  return 1;
 }
 
 // Maps a 1-indexed day number back to the batch that composed it, so a

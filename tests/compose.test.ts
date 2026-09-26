@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildBooklet } from "../app/lib/booklet/booklet.ts";
-import { bookletSchema, composeBookletBatch, secondaryGamePlan } from "../app/lib/generation/compose.ts";
+import { bookletSchema, composeBookletBatch, secondaryGamePlan, withPlaceThemes } from "../app/lib/generation/compose.ts";
 import { balancedGameTypePlanForTrip } from "../app/lib/generation/booklet-ai.ts";
 
 function propertyNames(schema: unknown, path = "$"): Array<{ path: string; name: string }> {
@@ -151,4 +151,12 @@ test("flagged reveal claims are rewritten from the research instead of blanked",
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("a theme copied from the quest plan becomes the day's landmark", () => {
+  const [day] = buildBooklet(9, "Barcelona", 1);
+  const fixed = withPlaceThemes({ profile: {} as never, dayPlans: [{ ...day, theme: "draw + imagine" }] });
+  assert.equal(fixed.dayPlans[0].theme, day.landmark.display);
+  const kept = withPlaceThemes({ profile: {} as never, dayPlans: [{ ...day, theme: "Dragon mosaics of Park Guell" }] });
+  assert.equal(kept.dayPlans[0].theme, "Dragon mosaics of Park Guell");
 });

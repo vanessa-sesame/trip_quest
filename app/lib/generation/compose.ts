@@ -67,6 +67,20 @@ function activitySchemaFor(gameTypes: GameType[]) {
   };
 }
 
+const MECHANIC_ONLY_THEME = /^\s*(?:spot|draw|count|talk|imagine|navigate|photograph|solve|move|cooperate)(?:\s*[+&,/]\s*(?:spot|draw|count|talk|imagine|navigate|photograph|solve|move|cooperate))*\s*$/i;
+
+// A one-day request sometimes copies that day's line from the balanced quest
+// plan ("draw + imagine") into the theme; the day is about its landmark, so
+// use the landmark's header name instead.
+export function withPlaceThemes<T extends BookletDraft>(draft: T): T {
+  return {
+    ...draft,
+    dayPlans: draft.dayPlans.map((day) => MECHANIC_ONLY_THEME.test(day.theme)
+      ? { ...day, theme: (day.landmark?.display || day.landmark?.place || day.theme).slice(0, 80) }
+      : day),
+  };
+}
+
 // Queue games are played standing in line: no table, no reading needed.
 const queueFriendlyGameTypes: GameType[] = ["bingo", "scavenger_hunt", "matching", "quiz", "codebreaker", "maze"];
 
@@ -390,7 +404,7 @@ ${research.notes}`,
   // literal word "etiquette") even though earlier attempts were usable.
   let lastValidDraft: BookletDraft | undefined;
   const finalize = (draft: BookletDraft) => applySiblingPlan(
-    applyInterestPlan(draft, assignedInterests, dayOffset),
+    applyInterestPlan(withPlaceThemes(draft), assignedInterests, dayOffset),
     hasSiblings,
   );
 

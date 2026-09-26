@@ -1196,13 +1196,19 @@ p {
   z-index: 50;
   inset: 0;
   display: grid;
-  place-items: center;
+  justify-items: center;
+  /* Scrolls when the panel is taller than the screen (a phone held
+     sideways): the panel's auto margins centre it when it fits and let it
+     start at the top when it does not, so its buttons stay reachable. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(18, 44, 41, 0.7);
   padding: 18px;
 }
 
 .checkout-modal {
   position: relative;
+  margin-block: auto;
   width: min(480px, 100%);
   border: 2px solid var(--ink);
   border-radius: 8px;
@@ -1289,6 +1295,7 @@ p {
 
 .family-modal {
   position: relative;
+  margin-block: auto;
   width: min(700px, 100%);
   max-height: min(88vh, 820px);
   overflow: auto;

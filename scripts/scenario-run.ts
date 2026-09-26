@@ -32,6 +32,7 @@ const scenarios: Scenario[] = [
   { name: "sydney-age9-1d", destination: "Sydney", age: 9, days: 1 },
   { name: "london-age10-4d-custom", destination: "London", age: 10, days: 4, itinerary: ["Tower of London", "British Museum", "Kew Gardens", "Borough Market and the Thames"] },
   { name: "barcelona-age11-2d", destination: "Barcelona", age: 11, days: 2 },
+  { name: "barcelona-age9-3d", destination: "Barcelona", age: 9, days: 3 },
   { name: "new-york-age12-5d-siblings", destination: "New York", age: 12, days: 5, family: [{ name: "Sam", age: 12 }, { name: "Jo", age: 9 }] },
   { name: "istanbul-age14-3d", destination: "Istanbul", age: 14, days: 3 },
   { name: "bangkok-age4-2d", destination: "Bangkok", age: 4, days: 2 },

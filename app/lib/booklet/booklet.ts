@@ -111,6 +111,8 @@ export type DaySlots = {
     revealText: string;
     chatPrompts: [string, string];
     photoPath?: string;
+    // Credit printed under a real (Wikimedia Commons) photo.
+    photoCredit?: string;
   };
 };
 

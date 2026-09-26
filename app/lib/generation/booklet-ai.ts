@@ -1109,6 +1109,9 @@ export function validateBookletDraft(
     const questRevealPhotoPath = typeof questRevealValue?.photoPath === "string" && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(questRevealValue.photoPath)
       ? questRevealValue.photoPath
       : undefined;
+    const questRevealPhotoCredit = questRevealPhotoPath && typeof questRevealValue?.photoCredit === "string"
+      ? questRevealValue.photoCredit.replace(/\s+/g, " ").trim().slice(0, 150)
+      : "";
     const questReveal = questRevealValue
       ? {
           ...(targetLabel ? { targetLabel } : {}),
@@ -1122,6 +1125,7 @@ export function validateBookletDraft(
           // provider made addRevealPhoto actually succeed in practice; the
           // OpenAI path had failed on quota every time before that.
           ...(questRevealPhotoPath ? { photoPath: questRevealPhotoPath } : {}),
+          ...(questRevealPhotoCredit ? { photoCredit: questRevealPhotoCredit } : {}),
           revealText: requireText(questRevealValue.revealText, `Day ${dayIndex + 1} quest reveal text`, 10, 260),
           chatPrompts: (() => {
             const rawPrompts = Array.isArray(questRevealValue.chatPrompts) ? questRevealValue.chatPrompts : [];

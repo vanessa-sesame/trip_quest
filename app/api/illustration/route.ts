@@ -1,4 +1,4 @@
-import { illustrationStorageKey } from "../../lib/generation/illustration-ai";
+import { illustrationStorageKey, sniffImageContentType } from "../../lib/generation/illustration-ai";
 import type { BookletObjectStorage } from "../../lib/storage/booklet-storage";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +20,13 @@ export async function GET(request: Request) {
   if (!key || !runtime.BOOKLET_FILES) return new Response("Not found", { status: 404 });
   const stored = await runtime.BOOKLET_FILES.get(key);
   if (!stored?.arrayBuffer) return new Response("Not found", { status: 404 });
-  return new Response(await stored.arrayBuffer(), {
+  const bytes = await stored.arrayBuffer();
+  // Stored as artwork.png whatever the format: AI art can be JPEG, and real
+  // reveal photos from Wikimedia Commons usually are.
+  return new Response(bytes, {
     headers: {
       "Cache-Control": "public, max-age=31536000, immutable",
-      "Content-Type": "image/png",
+      "Content-Type": sniffImageContentType(new Uint8Array(bytes)),
       "X-Content-Type-Options": "nosniff",
     },
   });

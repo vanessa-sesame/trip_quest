@@ -67,18 +67,6 @@ function printableArtPrompt(destination: string, day: DayPlan, activity: DayPlan
   ].join(" ");
 }
 
-function printableRevealPhotoPrompt(targetLabel: string, destination: string, day: DayPlan) {
-  return [
-    "Create a warm, realistic travel photograph for a printable children's travel-booklet page.",
-    `The exact place is ${day.landmark?.place || day.theme}, in ${destination}.`,
-    `The photo should clearly show: ${targetLabel}.`,
-    "The real landmark or local subject must be immediately recognizable and geographically accurate, not a generic substitute.",
-    "Bright natural daylight, candid travel-photography style, sharply in focus.",
-    "No identifiable faces, no text, no watermark, no logo, no decorative frame or border.",
-    "Portrait composition suitable for a printed page.",
-  ].join(" ");
-}
-
 // The cover's hero illustration, in one of two candidate styles (see
 // CoverArtStyle) so a real generated example of each can be compared before
 // committing to one — see addCoverIllustration below. "line-art" matches the
@@ -315,75 +303,6 @@ export async function addBookletIllustrations(
         ...day.slots,
         inThePlace: activities[0],
         sitDown: activities[1],
-      },
-    };
-  });
-}
-
-// Generates one real photo-style image per booklet, for the first day whose
-// questReveal has a targetLabel (the "Found It!" reveal page itself shows
-// for any day with questReveal, even without a targetLabel, but a photo
-// needs a concrete subject to depict, so this is a stricter subset).
-// Deliberately separate from addBookletIllustrations above: it does not
-// share or count against that function's up-to-3-image cap, so this always
-// costs at most one extra image generation call per booklet, regardless of
-// trip length.
-export async function addRevealPhoto(
-  runtime: IllustrationRuntime,
-  input: { destination: string; age: number; dayPlans: DayPlan[] },
-  publish?: (message: string) => void,
-) {
-  const storage = runtime.BOOKLET_FILES;
-  const provider = resolveImageProvider(runtime);
-  if (!storage || !provider) return input.dayPlans;
-
-  const dayIndex = input.dayPlans.findIndex((day) => day.slots?.questReveal?.targetLabel);
-  if (dayIndex === -1) return input.dayPlans;
-  const day = input.dayPlans[dayIndex];
-  const targetLabel = day.slots.questReveal?.targetLabel as string;
-
-  const identity = JSON.stringify({
-    version: ILLUSTRATION_VERSION,
-    kind: "reveal-photo",
-    destination: input.destination.toLocaleLowerCase(),
-    landmark: day.landmark?.place,
-    targetLabel,
-  });
-  const hash = await digest(identity);
-  const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
-
-  let available = false;
-  try {
-    available = Boolean(await storage.get(key));
-  } catch (error) {
-    console.error("[TripQuest illustration cache] reveal photo", error);
-  }
-
-  if (!available) {
-    publish?.("Finding a photo for the reveal page…");
-    try {
-      const prompt = printableRevealPhotoPrompt(targetLabel, input.destination, day);
-      const png = await generateIllustrationPng(provider, prompt);
-      await storage.put(key, png, {
-        httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
-        customMetadata: { destination: input.destination, title: `Reveal: ${targetLabel}`, model: provider.model },
-      });
-      available = true;
-    } catch (error) {
-      console.error("[TripQuest illustration] reveal photo", error);
-    }
-  }
-
-  if (!available) return input.dayPlans;
-
-  const photoPath = `/api/illustration?key=${encodeURIComponent(key)}`;
-  return input.dayPlans.map((plan, index): DayPlan => {
-    if (index !== dayIndex || !plan.slots.questReveal) return plan;
-    return {
-      ...plan,
-      slots: {
-        ...plan.slots,
-        questReveal: { ...plan.slots.questReveal, photoPath },
       },
     };
   });

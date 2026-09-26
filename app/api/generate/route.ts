@@ -40,7 +40,8 @@ import {
   createGenerationStreamResponse,
   createGenerationTask,
 } from "../../lib/generation/stream";
-import { addBookletIllustrations, addCoverIllustration, addRevealPhoto } from "../../lib/generation/illustration-ai";
+import { addBookletIllustrations, addCoverIllustration } from "../../lib/generation/illustration-ai";
+import { addRevealPhotos } from "../../lib/generation/landmark-photo";
 import { addSpotTheDifference, applyDifferencePaths } from "../../lib/generation/spot-difference";
 import { assertBookletQa } from "../../lib/booklet/qa";
 import { composeBooklet } from "../../lib/generation/compose";
@@ -622,20 +623,22 @@ export async function POST(request: Request) {
                 age,
                 dayPlans: preparedDraft.dayPlans,
               }, publish),
-              addRevealPhoto(runtime, {
+              addRevealPhotos(runtime, {
                 destination,
-                age,
                 dayPlans: preparedDraft.dayPlans,
               }, publish),
               addCoverIllustration(runtime, { destination }, publish),
               addSpotTheDifference(runtime, { destination, dayPlans: preparedDraft.dayPlans }, publish),
             ]);
             const revealedDayPlans = applyDifferencePaths(illustratedDayPlans, spotPictures).map((day, index) => {
-              const photoPath = revealPhotoDayPlans[index]?.slots?.questReveal?.photoPath;
-              if (!photoPath || !day.slots.questReveal) return day;
+              const photoReveal = revealPhotoDayPlans[index]?.slots?.questReveal;
+              if (!photoReveal?.photoPath || !day.slots.questReveal) return day;
               return {
                 ...day,
-                slots: { ...day.slots, questReveal: { ...day.slots.questReveal, photoPath } },
+                slots: {
+                  ...day.slots,
+                  questReveal: { ...day.slots.questReveal, photoPath: photoReveal.photoPath, photoCredit: photoReveal.photoCredit },
+                },
               };
             });
             logGenerationTiming(cacheKey, "illustrations", stageStartedAt);

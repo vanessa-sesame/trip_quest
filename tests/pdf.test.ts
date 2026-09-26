@@ -10,7 +10,7 @@ import {
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
 import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
 import { bookletDayPageEntries } from "../app/lib/booklet/pages.ts";
-import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
+import { validateBookletDraft, type GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 
 test("a generated booklet becomes a complete A5 PDF", async () => {
   const booklet = sampleGeneratedBooklet();
@@ -164,6 +164,7 @@ test("a reveal photo path survives re-validation and is actually embedded", asyn
   dayPlans[0].slots.questReveal = {
     ...dayPlans[0].slots.questReveal!,
     photoPath,
+    photoCredit: "Photo: A. Photographer / CC BY-SA 4.0 / Wikimedia Commons",
   };
   const booklet: GeneratedBookletData = {
     destination: "Rome",
@@ -191,6 +192,11 @@ test("a reveal photo path survives re-validation and is actually embedded", asyn
 
   assert.ok(requestedPaths.includes(photoPath), "the reveal photo path should have survived validation and reached the image resolver");
   assert.ok(bytesWithPhoto.length > bytesWithoutPhoto.length, "the PDF with an embedded reveal photo should be larger");
+  assert.equal(
+    validateBookletDraft(booklet, 1, 6).dayPlans[0].slots.questReveal?.photoCredit,
+    "Photo: A. Photographer / CC BY-SA 4.0 / Wikimedia Commons",
+    "a real photo's credit must survive re-validation so it is printed",
+  );
 });
 
 test("a coloring in-place activity keeps its full illustrated page instead of being paired away", async () => {

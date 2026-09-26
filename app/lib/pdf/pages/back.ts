@@ -3,7 +3,6 @@ import { addPage, drawPageHeader, drawStickerSpot, type PdfContext } from "../co
 import { displayTitle } from "../../booklet/game-copy.ts";
 import { answerFor } from "../games/index.ts";
 import {
-  drawDestinationMotif,
   drawDoodleSparkle,
   drawDoodleStar,
   drawHandLine,
@@ -130,9 +129,15 @@ export function drawCertificate(ctx: PdfContext) {
     size: type.small, color: colors.muted, align: "center", maxLines: 3,
   }).bottom - 10;
 
+  // A quiet row of stars above the signatures (the drawn destination motif
+  // looked crude at this size, and cover art is mostly empty background).
   const signY = frame.y + 70;
-  if (top - signY > 70) {
-    drawDestinationMotif(page, { x: PAGE_WIDTH / 2 - 55, y: signY + 18, width: 110, height: Math.min(54, top - signY - 30) }, theme, `cert-motif-${booklet.destination}`);
+  const starsY = Math.min(top - 20, signY + 40);
+  if (starsY - signY > 16) {
+    [-60, -30, 0, 30, 60].forEach((offset, index) => {
+      if (index % 2) drawDoodleSparkle(page, PAGE_WIDTH / 2 + offset, starsY, 6, index === 1 ? colors.teal : colors.green);
+      else drawDoodleStar(page, PAGE_WIDTH / 2 + offset, starsY, index === 2 ? 11 : 7, index === 2 ? colors.yellow : theme.accent);
+    });
   }
   const lineWidth = (column.width - 30) / 2;
   [

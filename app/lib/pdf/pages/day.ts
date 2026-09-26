@@ -176,18 +176,35 @@ export function drawRevealPage(ctx: PdfContext, day: DayPlan, dayIndex: number) 
   });
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
 
+  // Everything below the photo, measured first so the photo takes only
+  // the space that is left.
+  const prompts: BulletItem[] = reveal.chatPrompts.filter(Boolean);
+  const inner = CONTENT_WIDTH - 28;
+  const listHeight = -drawBulletList(null, fonts, prompts, { x: 0, top: 0, width: inner, size: type.small, maxLines: 3 }).bottom;
+  const bubbleHeight = 10 + type.label * 2 + 8 + listHeight + 12;
+  const facts = factItems(day);
+  const factsHeight = facts.length
+    ? type.label * 2 + 8 - drawBulletList(null, fonts, facts, { x: 0, top: 0, width: CONTENT_WIDTH, size: type.small, maxLines: 2 }).bottom
+    : 0;
+  const textHeight = measureText(reveal.revealText, fonts, CONTENT_WIDTH, { size: type.body, maxLines: 4 }).height + 14;
+  const creditHeight = reveal.photoCredit ? 3 + 8 * 1.3 * 2 : 0;
+  const belowPhoto = 10 + creditHeight + textHeight + bubbleHeight + 20 + factsHeight;
+
   const photo = ctx.revealArtwork[dayIndex];
   if (photo) {
-    const frame = flow.take(150);
-    drawRoundedRect(page, frame, 14, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
+    // A white print-style border hugging the photo, centred.
+    const row = flow.take(Math.max(100, Math.min(170, flow.remaining() - belowPhoto)));
     const dims = photo.scale(1);
-    const scale = Math.min((frame.width - 16) / dims.width, (frame.height - 16) / dims.height);
-    page.drawImage(photo, {
-      x: frame.x + (frame.width - dims.width * scale) / 2,
-      y: frame.y + (frame.height - dims.height * scale) / 2,
-      width: dims.width * scale,
-      height: dims.height * scale,
-    });
+    const scale = Math.min((row.width - 16) / dims.width, (row.height - 16) / dims.height);
+    const width = dims.width * scale;
+    const height = dims.height * scale;
+    const frame = { x: row.x + (row.width - width - 16) / 2, y: row.y + (row.height - height - 16) / 2, width: width + 16, height: height + 16 };
+    drawRoundedRect(page, frame, 10, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
+    page.drawImage(photo, { x: frame.x + 8, y: frame.y + 8, width, height });
+    if (reveal.photoCredit) {
+      flow.space(3);
+      flow.text(reveal.photoCredit, { size: 8, color: colors.muted, maxLines: 2, align: "center" });
+    }
     flow.space(10);
   }
 
@@ -195,17 +212,12 @@ export function drawRevealPage(ctx: PdfContext, day: DayPlan, dayIndex: number) 
   flow.space(14);
 
   // Chat prompts in a speech bubble.
-  const prompts: BulletItem[] = reveal.chatPrompts.filter(Boolean);
-  const inner = CONTENT_WIDTH - 28;
-  const listHeight = -drawBulletList(null, fonts, prompts, { x: 0, top: 0, width: inner, size: type.small, maxLines: 3 }).bottom;
-  const bubbleHeight = 10 + type.label * 2 + 8 + listHeight + 12;
   const bubble = flow.take(bubbleHeight);
   drawSpeechBubble(page, bubble, colors.tealSoft, colors.teal, 36);
   const pill = drawPill(page, fonts, "Chat about it", { x: bubble.x + 14, top: bubble.y + bubbleHeight - 10, color: colors.teal, fill: colors.white, size: type.label });
   drawBulletList(page, fonts, prompts, { x: bubble.x + 14, top: pill.y - 8, width: inner, size: type.small, markerColor: colors.teal, maxLines: 3 });
   flow.space(20);
 
-  const facts = factItems(day);
   if (facts.length) {
     flow.y = drawFacts(ctx, page, facts, flow.y, theme.accent);
     flow.space(14);

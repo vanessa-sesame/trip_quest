@@ -431,7 +431,7 @@ ${research.notes}`,
       lastValidDraft = draft;
       const problems = composedContentProblems(draft, plannedTypes);
       const [groundingFindings, repaired] = await Promise.all([
-        checkGroundedClaims(draft, research, apiKey, model, modelOptions),
+        checkGroundedClaims(draft, research, apiKey, model, modelOptions, dayOffset),
         problems.length
           ? repairGames(draft, problems, { destination, age, days, research, apiKey, model, modelOptions, plannedTypes })
             .catch((error) => {
@@ -465,7 +465,7 @@ ${research.notes}`,
   }
 
   if (lastValidDraft) {
-    const findings = await checkGroundedClaims(lastValidDraft, research, apiKey, model, modelOptions);
+    const findings = await checkGroundedClaims(lastValidDraft, research, apiKey, model, modelOptions, dayOffset);
     console.error(
       "[TripQuest composition] final attempt unusable; falling back to the last draft that passed validation:",
       lastError instanceof Error ? lastError.message : String(lastError),

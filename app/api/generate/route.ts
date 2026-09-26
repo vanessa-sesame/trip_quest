@@ -557,6 +557,7 @@ export async function POST(request: Request) {
                 const failedDay = qaError instanceof Error
                   ? Number(qaError.message.match(/^Day (\d+)/)?.[1])
                   : NaN;
+                console.info("[TripQuest qa] whole-booklet check failed:", qaError instanceof Error ? qaError.message : qaError);
                 if (!Number.isInteger(failedDay) || repairAttempt >= MAX_QA_REPAIRS) throw qaError;
 
                 const { offset, dayCount } = batchRangeForDay(failedDay, days);

@@ -6,7 +6,7 @@ import {
   sanitizeUngroundedClaims,
   type GroundingResearch,
 } from "../app/lib/generation/grounding.ts";
-import { buildBooklet } from "../app/lib/booklet/booklet.ts";
+import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
 import type { BookletDraft } from "../app/lib/generation/booklet-ai.ts";
 
 function draftWithClaim(text: string): BookletDraft {
@@ -157,4 +157,25 @@ test("a neutralized reveal still names the target when the target itself was fin
     sanitized.dayPlans[0].slots.questReveal!.revealText,
     "You found the spiky ball! Look closely: what makes it special here?",
   );
+});
+
+test("claims are checked under the trip's real day number and place", async () => {
+  const [day] = buildBooklet(9, "Barcelona", 1);
+  day.slots.questReveal = { ...day.slots.questReveal!, targetLabel: "IRON LANTERN" };
+  const draft = { profile: getDestinationProfile("Barcelona"), dayPlans: [day] };
+  let sentClaims: Array<{ day: number; place: string }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body));
+    const content = String(body.messages[1].content);
+    sentClaims = JSON.parse(content.slice(content.indexOf("[", content.indexOf("CLAIMS TO CHECK")), content.lastIndexOf("]") + 1));
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [{ day: 3, field: "questReveal.targetLabel", issue: "unsupported" }] }) } }] });
+  };
+  try {
+    const findings = await checkGroundedClaims(draft, { notes: "notes" }, "key", "kimi-k2.6", {}, 2);
+    assert.ok(sentClaims.length > 0 && sentClaims.every((claim) => claim.day === 3 && claim.place === day.landmark.place));
+    assert.deepEqual(findings.map((finding) => finding.day), [1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

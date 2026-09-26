@@ -76,15 +76,22 @@ export async function checkGroundedClaims(
   apiKey: string,
   model: string,
   modelOptions: Record<string, unknown>,
+  // Days compose one request at a time, each numbered from 1; the offset
+  // restores the trip's real day numbers so the checker does not match a
+  // day-3 claim against the research for day 1. Findings come back
+  // renumbered the same way the draft is.
+  dayOffset = 0,
 ): Promise<GroundingFinding[]> {
   const claims = draft.dayPlans.flatMap((day) => {
     const reveal = day.slots.questReveal;
-    const entries: { day: number; field: string; text: string }[] = [];
-    if (reveal?.targetLabel) entries.push({ day: day.day, field: "questReveal.targetLabel", text: reveal.targetLabel });
-    if (reveal?.bonusQuest) entries.push({ day: day.day, field: "questReveal.bonusQuest", text: reveal.bonusQuest });
-    if (reveal?.revealText) entries.push({ day: day.day, field: "questReveal.revealText", text: reveal.revealText });
+    const tripDay = day.day + dayOffset;
+    const place = day.landmark?.place || day.theme;
+    const entries: { day: number; place: string; field: string; text: string }[] = [];
+    if (reveal?.targetLabel) entries.push({ day: tripDay, place, field: "questReveal.targetLabel", text: reveal.targetLabel });
+    if (reveal?.bonusQuest) entries.push({ day: tripDay, place, field: "questReveal.bonusQuest", text: reveal.bonusQuest });
+    if (reveal?.revealText) entries.push({ day: tripDay, place, field: "questReveal.revealText", text: reveal.revealText });
     day.slots.factCard.forEach((fact, index) => {
-      if (fact) entries.push({ day: day.day, field: `factCard[${index}]`, text: fact });
+      if (fact) entries.push({ day: tripDay, place, field: `factCard[${index}]`, text: fact });
     });
     return entries;
   });
@@ -123,7 +130,7 @@ export async function checkGroundedClaims(
       },
       {
         role: "user",
-        content: `RESEARCH:\n${research.notes}\n\nCLAIMS TO CHECK (JSON array of {day, field, text}):\n${JSON.stringify(claims)}\n\nReturn only the claims that are NOT grounded in the research above, each with a short reason. Return an empty findings array if every claim is fine.`,
+        content: `RESEARCH:\n${research.notes}\n\nCLAIMS TO CHECK (JSON array of {day, place, field, text}; each claim is about its own place):\n${JSON.stringify(claims)}\n\nReturn only the claims that are NOT grounded in the research above, each with a short reason. Return an empty findings array if every claim is fine.`,
       },
     ],
     response_format: {
@@ -141,7 +148,9 @@ export async function checkGroundedClaims(
 
   try {
     const parsed = JSON.parse(message.content) as { findings?: GroundingFinding[] };
-    return Array.isArray(parsed.findings) ? parsed.findings : [];
+    return Array.isArray(parsed.findings)
+      ? parsed.findings.map((finding) => ({ ...finding, day: finding.day - dayOffset }))
+      : [];
   } catch {
     return [];
   }

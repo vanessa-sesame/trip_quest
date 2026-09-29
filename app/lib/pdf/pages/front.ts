@@ -1,4 +1,4 @@
-import type { PDFPage } from "pdf-lib";
+import { clip, endPath, popGraphicsState, pushGraphicsState, rectangle, type PDFPage } from "pdf-lib";
 import { getAgeBand } from "../../booklet/booklet.ts";
 import { familyChildDisplayName } from "../../family.ts";
 import { STICKER_DIAMETER, addPage, drawPageHeader, drawStickerSpot, type PdfContext } from "../context.ts";
@@ -48,36 +48,47 @@ export function drawCover(ctx: PdfContext) {
   const { fonts, type, theme, booklet, familyPack } = ctx;
   const page = addPage(ctx, "Cover", theme.accent);
   const flow = new Flow(page, fonts, { x: MARGIN, top: CONTENT_TOP, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
+  // The child's name sticker sits top right, as the game stickers do on
+  // the inside pages; the title lines stop short of it.
+  drawStickerSpot(ctx, page, { page: "cover" }, PAGE_WIDTH - MARGIN - STICKER_DIAMETER / 2 - 2, CONTENT_TOP - STICKER_DIAMETER / 2 - 1, "My name");
+  const titleWidth = CONTENT_WIDTH - STICKER_DIAMETER - 14;
   const pill = drawPill(page, fonts, "TripQuest Explorer Book", { x: MARGIN, top: CONTENT_TOP, color: theme.accent, fill: theme.accentSoft, size: type.label });
+  const title = (value: string, style: Parameters<typeof drawText>[4]) => {
+    flow.y = drawText(page, value, fonts, { x: MARGIN, top: flow.y, width: titleWidth }, style).bottom;
+  };
   flow.y = pill.y - 10;
-  flow.text("A trip made for curious hands", { size: type.heading, font: fonts.display, color: theme.accent, maxLines: 1 });
+  title("A trip made for curious hands", { size: type.heading, font: fonts.display, color: theme.accent, maxLines: 1 });
   const destination = pdfText(booklet.destination);
-  const destinationSize = fitTextSize(destination, fonts.display, CONTENT_WIDTH, 40, 26, 2);
-  flow.text(destination, { size: destinationSize, font: fonts.display, color: colors.ink, maxLines: 2, lineHeight: destinationSize * 1.08 });
+  const destinationSize = fitTextSize(destination, fonts.display, titleWidth, 40, 24, 2);
+  title(destination, { size: destinationSize, font: fonts.display, color: colors.ink, maxLines: 2, lineHeight: destinationSize * 1.08 });
   flow.space(2);
-  flow.text(booklet.profile.style, { size: type.body, font: fonts.bold, color: colors.muted, maxLines: 2 });
-  flow.space(12);
+  title(booklet.profile.style, { size: type.body, font: fonts.bold, color: colors.muted, maxLines: 2 });
+  flow.y = Math.min(flow.y - 12, CONTENT_TOP - STICKER_DIAMETER - 12);
 
   // Picture: AI/curated hero art when available, otherwise the postcard.
   // The picture takes whatever the name fields and tagline leave over.
   const reservedBelow = 24 + 44 + type.label * 2 + 6 + 96;
   const hero = flow.take(Math.max(150, Math.min(300, flow.remaining() - reservedBelow)));
   if (ctx.coverArtwork) {
+    // The art fills the frame, cropped to it: models return pictures of
+    // any shape, often with a paper-coloured background that would show
+    // as a block inside the frame.
     drawRoundedRect(page, hero, 18, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
+    const inner = { x: hero.x + 6, y: hero.y + 6, width: hero.width - 12, height: hero.height - 12 };
     const dims = ctx.coverArtwork.scale(1);
-    const scale = Math.min((hero.width - 16) / dims.width, (hero.height - 16) / dims.height);
+    const scale = Math.max(inner.width / dims.width, inner.height / dims.height);
+    page.pushOperators(pushGraphicsState(), rectangle(inner.x, inner.y, inner.width, inner.height), clip(), endPath());
     page.drawImage(ctx.coverArtwork, {
-      x: hero.x + (hero.width - dims.width * scale) / 2,
-      y: hero.y + (hero.height - dims.height * scale) / 2,
+      x: inner.x + (inner.width - dims.width * scale) / 2,
+      y: inner.y + (inner.height - dims.height * scale) / 2,
       width: dims.width * scale,
       height: dims.height * scale,
     });
+    page.pushOperators(popGraphicsState());
   } else {
     drawPostcardScene(page, hero, theme, `cover-${booklet.destination}`);
   }
   // Travel stamps overlapping the picture's bottom edge.
-  // The child's name sticker, on the picture's bottom-left corner.
-  drawStickerSpot(ctx, page, { page: "cover" }, hero.x + STICKER_DIAMETER / 2 + 10, hero.y + STICKER_DIAMETER / 2 + 10, "My name");
   drawStampCircle(page, fonts, hero.x + hero.width - 88, hero.y + 4, 26, theme.accent, theme.accentSoft, `Age ${booklet.age}`);
   drawStampCircle(page, fonts, hero.x + hero.width - 30, hero.y + 16, 26, colors.teal, colors.tealSoft, booklet.days === 1 ? "1 day" : `${booklet.days} days`);
   flow.space(24);

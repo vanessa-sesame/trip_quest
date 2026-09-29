@@ -1,6 +1,7 @@
 import type { DayPlan } from "../booklet/booklet.ts";
 import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
+import { askAboutImage } from "./vision.ts";
 
 const ILLUSTRATION_VERSION = "v2";
 const encoder = new TextEncoder();
@@ -26,6 +27,9 @@ export type IllustrationRuntime = {
   // when configured, since it's free, else OpenAI). Set to "openai" or
   // "cloudflare"; any other value is ignored.
   IMAGE_PROVIDER?: string;
+  // Kimi, which looks at each new cover and rejects ones with lettering.
+  MOONSHOT_API_KEY?: string;
+  KIMI_COMPOSER_MODEL?: string;
 };
 
 export type CoverArtStyle = "line-art" | "photo";
@@ -75,23 +79,28 @@ function printableArtPrompt(destination: string, day: DayPlan, activity: DayPlan
 // typography and mascot it would replace; "photo" instead matches the
 // reveal page's warm travel-photography style.
 function printableCoverArtPrompt(destination: string, style: CoverArtStyle) {
+  // Naming the place invites the model to write it into the picture, so the
+  // no-writing rule comes first and is repeated last.
+  const wordless = "A wordless picture: there is no writing of any kind anywhere in it, no letters, no title, no captions, no signs.";
   if (style === "photo") {
     return [
-      "Create a warm, beautiful travel photograph for the cover of a children's travel activity booklet.",
-      `The exact destination is ${destination}.`,
-      "Show one iconic, immediately recognizable landmark or scene from this exact destination, geographically accurate, not a generic substitute.",
-      "Bright natural daylight, inviting and joyful, shot like a beloved family travel photo — not a stock-photo cliche.",
-      "No identifiable faces, no text, no watermark, no logo, no decorative frame or border, no UI.",
-      "Landscape composition with generous open sky or open ground so it can sit next to bold cover typography without feeling cramped.",
+      wordless,
+      "A warm, beautiful travel photograph for the cover of a children's travel activity booklet.",
+      `It shows one iconic, immediately recognizable landmark or scene of ${destination}, geographically accurate, not a generic substitute.`,
+      "Bright natural daylight, inviting and joyful, shot like a beloved family travel photo, not a stock-photo cliche.",
+      "No identifiable faces, no watermark, no logo, no decorative frame or border, no UI.",
+      "Landscape composition with generous open sky or open ground.",
+      "Remember: absolutely no text or lettering.",
     ].join(" ");
   }
   return [
-    "Create a premium editorial children's-book illustration for the cover of a printable travel activity booklet.",
-    `The exact destination is ${destination}.`,
-    "Show one beautiful, immediately recognizable landmark or scene from this exact destination, geographically accurate, not a generic substitute.",
-    "Hand-drawn editorial line-art style: confident ink outlines, a few flat contemporary colour accents (terracotta, teal, warm yellow, muted green), warm cream paper background — like a beautifully illustrated explorer's field journal, not a cartoon and not photorealistic.",
+    wordless,
+    "A premium editorial children's-book illustration for the cover of a printable travel activity booklet.",
+    `It shows one beautiful, immediately recognizable landmark or scene of ${destination}, geographically accurate, not a generic substitute, large enough to fill most of the picture.`,
+    "Hand-drawn editorial line-art style: confident ink outlines, a few flat contemporary colour accents (terracotta, teal, warm yellow, muted green), warm cream paper background, like a beautifully illustrated explorer's field journal, not a cartoon and not photorealistic.",
     "No large saturated ink fills, no dark background, no gradient, no glow, no shadow.",
-    "Landscape composition with generous open space so it can sit next to bold cover typography without feeling cramped. No decorative frame, no text, no letters, no logos, no watermark.",
+    "Landscape composition. No decorative frame, no logos, no watermark.",
+    "Remember: absolutely no text or lettering.",
   ].join(" ");
 }
 
@@ -331,6 +340,9 @@ export async function addCoverIllustration(
     kind: "cover-art",
     style,
     destination: input.destination.toLocaleLowerCase(),
+    // Covers made before the lettering check could have the city's name
+    // written into the picture; this makes every destination draw afresh.
+    check: "no-text-1",
   });
   const hash = await digest(identity);
   const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
@@ -346,7 +358,14 @@ export async function addCoverIllustration(
     publish?.("Illustrating the cover…");
     try {
       const prompt = printableCoverArtPrompt(input.destination, style);
-      const png = await generateIllustrationPng(provider, prompt, "1536x1024");
+      // Image models often write the place's name into the picture despite
+      // the prompt, so Kimi looks at each attempt; up to three tries, then
+      // the last attempt is used anyway (lettering beats no cover).
+      let png = await generateIllustrationPng(provider, prompt, "1536x1024");
+      for (let attempt = 1; attempt < 3 && await coverHasLettering(runtime, png); attempt += 1) {
+        console.info(`[TripQuest illustration] cover art had lettering, redrawing (${attempt})`);
+        png = await generateIllustrationPng(provider, prompt, "1536x1024");
+      }
       await storage.put(key, png, {
         httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
         customMetadata: { destination: input.destination, title: `Cover art (${style})`, model: provider.model },
@@ -358,6 +377,24 @@ export async function addCoverIllustration(
   }
 
   return available ? `/api/illustration?key=${encodeURIComponent(key)}` : undefined;
+}
+
+// True when Kimi sees any writing in the picture. Without Kimi, or when
+// the check fails, the picture is accepted.
+async function coverHasLettering(runtime: IllustrationRuntime, bytes: Uint8Array) {
+  const apiKey = runtime.MOONSHOT_API_KEY?.trim();
+  if (!apiKey) return false;
+  try {
+    const verdict = await askAboutImage(
+      { bytes, contentType: sniffImageContentType(bytes) },
+      'Is any writing visible anywhere in this picture: letters, words, numbers, a title, a signature or a sign? Answer as JSON: {"hasText": true or false, "text": "the writing you see, or empty"}',
+      { apiKey, model: runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6" },
+    );
+    return verdict.hasText === true;
+  } catch (error) {
+    console.error("[TripQuest illustration] cover lettering check", error instanceof Error ? error.message : error);
+    return false;
+  }
 }
 
 export function illustrationStorageKey(path: string) {

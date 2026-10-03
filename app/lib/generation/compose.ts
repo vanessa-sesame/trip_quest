@@ -415,17 +415,20 @@ ${research.notes}`,
   // request. The fact-check and that repair run side by side.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      // Composition is the one call where depth pays off, so it runs at
-      // medium effort; the small checks and repairs run at low.
+      // Low effort keeps a day under about half a minute; the fact check,
+      // QA rules and targeted repairs catch what a quick draft misses.
       const composed = await claudeJson<unknown>({
         ...claude,
         label: "the booklet",
-        effort: "medium",
+        effort: "low",
         maxTokens: Math.max(16_000, days * 8_000),
         timeoutMs: Math.min(240_000, 90_000 + days * 15_000),
         system: messages[0].content,
         user: correction ? `${messages[1].content}\n\n${correction}` : messages[1].content,
         schema: bookletSchema(days, age),
+        // Too large for the API to enforce as a grammar; the draft is
+        // validated below and recomposed if it does not pass.
+        schemaMode: "prompt",
       });
 
       const draft = validateBookletDraft(composed, days, age);

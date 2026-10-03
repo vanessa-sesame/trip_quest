@@ -67,7 +67,18 @@ export async function claudeJson<T>(request: ClaudeOptions & {
   user: string | Anthropic.Beta.Messages.BetaContentBlockParam[];
   schema: Record<string, unknown>;
   maxTokens: number;
+  // "grammar" (the default) makes the API enforce the schema. A schema too
+  // large for that (the whole-day booklet) goes in the prompt instead, and
+  // the caller validates the answer.
+  schemaMode?: "grammar" | "prompt";
 }): Promise<T> {
+  const inPrompt = request.schemaMode === "prompt";
+  const schemaNote = `\n\nRespond with only one JSON object, no other text, matching this JSON Schema:\n${JSON.stringify(request.schema)}`;
+  const user = inPrompt
+    ? (typeof request.user === "string"
+      ? request.user + schemaNote
+      : [...request.user, { type: "text" as const, text: schemaNote.trim() }])
+    : request.user;
   const client = claudeClient(request.apiKey, request.timeoutMs);
   let message: Anthropic.Beta.Messages.BetaMessage;
   try {
@@ -79,10 +90,10 @@ export async function claudeJson<T>(request: ClaudeOptions & {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       system: request.system,
-      messages: [{ role: "user", content: request.user }],
+      messages: [{ role: "user", content: user }],
       output_config: {
         effort: request.effort ?? "low",
-        format: { type: "json_schema", schema: claudeSchema(request.schema) as Record<string, unknown> },
+        ...(inPrompt ? {} : { format: { type: "json_schema" as const, schema: claudeSchema(request.schema) as Record<string, unknown> } }),
       },
     });
   } catch (error) {
@@ -97,7 +108,29 @@ export async function claudeJson<T>(request: ClaudeOptions & {
   }
   const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
   if (!text.trim()) throw new ModelRequestError(`Claude returned no answer for ${request.label}.`, 502);
-  return JSON.parse(text) as T;
+  return JSON.parse(inPrompt ? jsonObjectIn(text) : text) as T;
+}
+
+// The first complete JSON object in a prompted answer, ignoring any code
+// fence or text around it (braces inside strings do not count).
+export function jsonObjectIn(text: string) {
+  const start = text.indexOf("{");
+  if (start < 0) throw new ModelRequestError("Claude's answer contained no JSON object.", 502);
+  let depth = 0;
+  let inString = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (char === "\\") index += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  throw new ModelRequestError("Claude's JSON answer was cut off.", 502);
 }
 
 // Claude looks at a picture and answers one question about it as JSON.

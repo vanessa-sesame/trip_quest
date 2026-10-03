@@ -395,7 +395,10 @@ export default function Home() {
   );
   const previewBooklet = useMemo((): GeneratedBookletData => {
     if (generatedBooklet) return applySiblingPlan(generatedBooklet, generatedBooklet.family || children);
-    return {
+    // Days still streaming in have not had their sibling missions fitted to
+    // the family yet; without this a one-child preview fails the PDF's
+    // quality check until the whole booklet arrives.
+    return applySiblingPlan({
       destination: destinationName,
       age: trip.age,
       days: generatedDays.length,
@@ -405,7 +408,7 @@ export default function Home() {
       sources: [],
       generatedAt: "2026-01-01T00:00:00.000Z",
       family: previewChildren,
-    };
+    }, previewChildren);
   }, [generatedBooklet, generatedDays, destinationName, destinationProfile, trip.age, children, previewChildren]);
   const previewFamilyPack = useMemo(
     () => familyPackFor(previewChildren, generatedBooklet?.events || structuredEvents, previewBooklet.days),

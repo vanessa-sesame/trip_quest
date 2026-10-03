@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { claudeKind, claudeResponse } from "./helpers/claude.ts";
 import test from "node:test";
 import { buildBooklet } from "../app/lib/booklet/booklet.ts";
 import { bookletSchema, composeBookletBatch, secondaryGamePlan, withPlaceThemes } from "../app/lib/generation/compose.ts";
@@ -61,20 +62,19 @@ test("a draft with a filler-label game is fixed by rewriting only that game", as
   const requests: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
-    const body = JSON.parse(String(init?.body));
-    const name = body.response_format?.json_schema?.name;
+    const name = claudeKind(init);
     requests.push(name);
     const content = name === "grounding_check"
       ? JSON.stringify({ findings: [] })
       : name === "tripquest_repair"
         ? JSON.stringify({ games: [{ day: 1, slot: "inThePlace", activity: repairedGame }] })
         : JSON.stringify(draft);
-    return Response.json({ choices: [{ message: { content } }] });
+    return claudeResponse(content);
   };
   try {
     const result = await composeBookletBatch(
       "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
-      "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
+      "test-key", "claude-sonnet-5-5", "Lead explorer age 7.", false, "Day 1: spot", [], [],
     );
     assert.deepEqual(requests.filter((name) => name === "tripquest_booklet").length, 1, "the day is composed once");
     assert.ok(requests.includes("tripquest_repair"), "the bad game is repaired on its own");
@@ -89,14 +89,14 @@ test("a failed repair keeps the composed draft instead of failing the day", asyn
   const draft = usableDraftWithFillerLabels();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
-    const name = JSON.parse(String(init?.body)).response_format?.json_schema?.name;
+    const name = claudeKind(init);
     const content = name === "grounding_check" ? JSON.stringify({ findings: [] }) : name === "tripquest_repair" ? "{}" : JSON.stringify(draft);
-    return Response.json({ choices: [{ message: { content } }] });
+    return claudeResponse(content);
   };
   try {
     const result = await composeBookletBatch(
       "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
-      "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
+      "test-key", "claude-sonnet-5-5", "Lead explorer age 7.", false, "Day 1: spot", [], [],
     );
     assert.equal(result.dayPlans[0].slots.inThePlace.items?.[0].label, "First red lantern");
   } finally {
@@ -132,19 +132,19 @@ test("flagged reveal claims are rewritten from the research instead of blanked",
   const requests: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
-    const name = JSON.parse(String(init?.body)).response_format?.json_schema?.name;
+    const name = claudeKind(init);
     requests.push(name);
     const content = name === "grounding_check"
       ? JSON.stringify({ findings: [{ day: 1, field: "questReveal.targetLabel", issue: "Belongs to another stop." }] })
       : name === "tripquest_reveal_fix"
         ? JSON.stringify({ days: [{ day: 1, targetLabel: "STONE LION", targetKind: "object", bonusQuest: "Find the lion with an open mouth!", revealText: "Here it is! The stone lions guard the shrine gate.", chatPrompts: ["Why do you think lions guard gates?", "Which lion looked friendliest?"], factCard: [] }] })
         : JSON.stringify(draft);
-    return Response.json({ choices: [{ message: { content } }] });
+    return claudeResponse(content);
   };
   try {
     const result = await composeBookletBatch(
       "Tokyo", 7, 1, 0, [""], { notes: "Tokyo research notes.", sources: [] },
-      "test-key", "kimi-k2.6", "Lead explorer age 7.", false, "Day 1: spot", [], [],
+      "test-key", "claude-sonnet-5-5", "Lead explorer age 7.", false, "Day 1: spot", [], [],
     );
     assert.ok(requests.includes("tripquest_reveal_fix"));
     assert.equal(result.dayPlans[0].slots.questReveal?.targetLabel, "STONE LION");

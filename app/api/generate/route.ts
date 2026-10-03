@@ -1,4 +1,5 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
+import { claudeModelFrom } from "../../lib/generation/claude";
 import {
   type GeneratedBookletData,
   applySiblingPlan,
@@ -48,7 +49,7 @@ import { composeBooklet } from "../../lib/generation/compose";
 import {
   GenerationBusyError,
   GenerationStageError,
-  KimiRequestError,
+  ModelRequestError,
   UserCorrectionError,
 } from "../../lib/generation/errors";
 import { logGenerationTiming, logStorageFailure } from "../../lib/generation/log";
@@ -58,9 +59,8 @@ import { assertResearchMatchesRequest, researchDestination } from "../../lib/gen
 export const dynamic = "force-dynamic";
 
 type RuntimeEnvironment = {
-  MOONSHOT_API_KEY?: string;
-  KIMI_RESEARCH_MODEL?: string;
-  KIMI_COMPOSER_MODEL?: string;
+  ANTHROPIC_API_KEY?: string;
+  CLAUDE_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
   OPENAI_COVER_STYLE?: string;
@@ -297,10 +297,10 @@ function generationErrorMessage(error: unknown) {
     return error.message;
   }
 
-  if (error instanceof KimiRequestError) {
+  if (error instanceof ModelRequestError) {
     return error.status === 429
       ? "The travel studio is busy right now. Please try again shortly."
-      : "Kimi could not finish this booklet. Please try again.";
+      : "The booklet writer could not finish this booklet. Please try again.";
   }
 
   if (error instanceof GenerationStageError) {
@@ -338,8 +338,9 @@ export async function POST(request: Request) {
     // balancedGameTypePlanForTrip's own comment for why.
     const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan, destination);
     const runtime = await getRuntimeEnvironment();
-    const researchModel = runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3";
-    const composerModel = runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6";
+    // One Claude model does the research and the writing.
+    const researchModel = claudeModelFrom(runtime);
+    const composerModel = researchModel;
     const identity: BookletCacheIdentity = {
       destination,
       age,
@@ -378,7 +379,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const apiKey = runtime.MOONSHOT_API_KEY?.trim();
+    const apiKey = runtime.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) {
       return Response.json(
         { error: "The travel studio is not connected yet." },

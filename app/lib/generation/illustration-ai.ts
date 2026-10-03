@@ -1,7 +1,7 @@
 import type { DayPlan } from "../booklet/booklet.ts";
 import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
-import { askAboutImage } from "./vision.ts";
+import { DEFAULT_CLAUDE_MODEL, askAboutImage } from "./claude.ts";
 
 const ILLUSTRATION_VERSION = "v2";
 const encoder = new TextEncoder();
@@ -27,9 +27,9 @@ export type IllustrationRuntime = {
   // when configured, since it's free, else OpenAI). Set to "openai" or
   // "cloudflare"; any other value is ignored.
   IMAGE_PROVIDER?: string;
-  // Kimi, which looks at each new cover and rejects ones with lettering.
-  MOONSHOT_API_KEY?: string;
-  KIMI_COMPOSER_MODEL?: string;
+  // Claude, which looks at each new cover and rejects ones with lettering.
+  ANTHROPIC_API_KEY?: string;
+  CLAUDE_MODEL?: string;
 };
 
 export type CoverArtStyle = "line-art" | "photo";
@@ -359,7 +359,7 @@ export async function addCoverIllustration(
     try {
       const prompt = printableCoverArtPrompt(input.destination, style);
       // Image models often write the place's name into the picture despite
-      // the prompt, so Kimi looks at each attempt; up to three tries, then
+      // the prompt, so Claude looks at each attempt; up to three tries, then
       // the last attempt is used anyway (lettering beats no cover).
       let png = await generateIllustrationPng(provider, prompt, "1536x1024");
       for (let attempt = 1; attempt < 3 && await coverHasLettering(runtime, png); attempt += 1) {
@@ -379,16 +379,22 @@ export async function addCoverIllustration(
   return available ? `/api/illustration?key=${encodeURIComponent(key)}` : undefined;
 }
 
-// True when Kimi sees any writing in the picture. Without Kimi, or when
+// True when Claude sees any writing in the picture. Without Claude, or when
 // the check fails, the picture is accepted.
 async function coverHasLettering(runtime: IllustrationRuntime, bytes: Uint8Array) {
-  const apiKey = runtime.MOONSHOT_API_KEY?.trim();
+  const apiKey = runtime.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return false;
   try {
     const verdict = await askAboutImage(
       { bytes, contentType: sniffImageContentType(bytes) },
-      'Is any writing visible anywhere in this picture: letters, words, numbers, a title, a signature or a sign? Answer as JSON: {"hasText": true or false, "text": "the writing you see, or empty"}',
-      { apiKey, model: runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6" },
+      "Is any writing visible anywhere in this picture: letters, words, numbers, a title, a signature or a sign?",
+      {
+        type: "object",
+        additionalProperties: false,
+        properties: { hasText: { type: "boolean" }, text: { type: "string" } },
+        required: ["hasText", "text"],
+      },
+      { apiKey, model: runtime.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL, timeoutMs: 30_000 },
     );
     return verdict.hasText === true;
   } catch (error) {

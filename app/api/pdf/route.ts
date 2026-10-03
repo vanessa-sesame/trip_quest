@@ -3,6 +3,7 @@ import {
   readVerifiedPaidPurchase,
   type PurchaseRecord,
 } from "../../lib/payment";
+import { claudeModelFrom } from "../../lib/generation/claude";
 import { normalizePdfRequest, type NormalizedPdfRequest } from "../../lib/pdf/request";
 import {
   canPreparePdf,
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     assertSameOriginRequest(request);
     const runtime = await getRuntimeEnvironment();
     const body = await readJsonObject(request, 32_768);
-    const input = normalizePdfRequest(body, runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3", runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6");
+    const input = normalizePdfRequest(body, claudeModelFrom(runtime), claudeModelFrom(runtime));
     let purchase: PurchaseRecord | null = null;
     if (!canPreparePdf(request, runtime)) {
       const sessionId = typeof body.checkoutSessionId === "string" ? body.checkoutSessionId.trim() : "";
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
     const purchase = await readVerifiedPaidPurchase(runtime, runtime.DB, sessionId, familyId);
     if (!purchase) return Response.json({ error: "Payment has not completed or this purchase is not valid." }, { status: 402 });
     const requestValue = JSON.parse(purchase.requestJson) as Record<string, unknown>;
-    const input = normalizePdfRequest(requestValue, runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3", runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6");
+    const input = normalizePdfRequest(requestValue, claudeModelFrom(runtime), claudeModelFrom(runtime));
     return preparePdf(request, runtime, input, purchase, "", pdfKindFrom(url.searchParams.get("kind")));
   } catch (error) {
     return errorResponse(error);

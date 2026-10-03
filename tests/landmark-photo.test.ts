@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { claudeKind, claudeResponse } from "./helpers/claude.ts";
 import test from "node:test";
 import {
   addRevealPhotos,
@@ -67,10 +68,9 @@ function mockFetch(shortlist: Record<string, unknown>, results: PhotoCandidate[]
     if (url.startsWith("https://commons.wikimedia.org/")) {
       return Response.json({ query: { pages: Object.fromEntries(results.map((item, index) => [String(item.id), commonsPage(item, index)])) } });
     }
-    if (url.startsWith("https://api.moonshot.ai/")) {
-      const isShortlist = String(init?.body ?? "").includes("tripquest_photo_shortlist");
-      const answer = isShortlist ? shortlist : { shows: looksRight[looks++] ?? false, seen: "a photo" };
-      return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] });
+    if (url.startsWith("https://api.anthropic.com/")) {
+      const isShortlist = claudeKind(init) === "tripquest_photo_shortlist";
+      return claudeResponse(isShortlist ? shortlist : { shows: looksRight[looks++] ?? false, seen: "a photo" });
     }
     return new Response(jpeg, { status: 200 });
   }) as typeof fetch;
@@ -118,7 +118,7 @@ test("searches start specific and use the place's everyday name", () => {
 
 test("a photo that names the target and the place is used as the target photo", async () => {
   const { fetchImpl } = mockFetch({ targetPick: 11, targetEvidence: "Turtle", placePicks: [13] });
-  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "kimi-k2.6", fetchImpl }));
+  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "claude-sonnet-5-5", fetchImpl }));
   assert.equal(found?.match, "target");
   assert.equal(found?.candidate.id, 11);
   assert.equal(photoCredit(found!.candidate), "Photo: Stanislav Kozlovskiy / CC BY-SA 3.0 / Wikimedia Commons");
@@ -126,7 +126,7 @@ test("a photo that names the target and the place is used as the target photo", 
 
 test("a target pick without its words in the caption falls back to the place photo", async () => {
   const { fetchImpl } = mockFetch({ targetPick: 13, targetEvidence: "tortoise", placePicks: [13] });
-  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "kimi-k2.6", fetchImpl }));
+  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "claude-sonnet-5-5", fetchImpl }));
   assert.equal(found?.match, "place");
   assert.equal(found?.candidate.id, 13);
 });
@@ -135,7 +135,7 @@ test("a photo that does not look right is skipped for the next one on the shortl
   // The caption says turtle, but the picture shows something else: the
   // place photo that does look right is used instead.
   const { fetchImpl, looked } = mockFetch({ targetPick: 11, targetEvidence: "Turtle", placePicks: [13] }, [turtle, facade], [false, true]);
-  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "kimi-k2.6", fetchImpl }));
+  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "claude-sonnet-5-5", fetchImpl }));
   assert.equal(found?.match, "place");
   assert.equal(found?.candidate.id, 13);
   assert.equal(looked(), 2);
@@ -143,7 +143,7 @@ test("a photo that does not look right is skipped for the next one on the shortl
 
 test("no photo is used when none looks right", async () => {
   const { fetchImpl } = mockFetch({ targetPick: 11, targetEvidence: "Turtle", placePicks: [13] }, [turtle, facade], [false, false]);
-  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "kimi-k2.6", fetchImpl }));
+  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "claude-sonnet-5-5", fetchImpl }));
   assert.equal(found, null);
 });
 
@@ -157,7 +157,7 @@ test("the visual check looks at a small rendition", () => {
 
 test("photos whose caption never names the place are never picked", async () => {
   const { fetchImpl } = mockFetch({ targetPick: 12, targetEvidence: "graffiti", placePicks: [12] }, [graffiti]);
-  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "kimi-k2.6", fetchImpl }));
+  const found = await withGlobalFetch(fetchImpl, () => findLandmarkPhoto(subject, { apiKey: "key", model: "claude-sonnet-5-5", fetchImpl }));
   assert.equal(found, null);
 });
 
@@ -177,7 +177,7 @@ test("reveal photos are stored with their credit and reused from the cache", asy
     landmark: { display: "Sagrada Familia", short: "the Sagrada Familia", place: "Basílica de la Sagrada Família" },
     slots: { questReveal: { targetLabel: "STONE TURTLE", revealText: "Here it is!", chatPrompts: ["Why?", "How?"] } },
   } as unknown as DayPlan;
-  const runtime = { BOOKLET_FILES: storage as never, MOONSHOT_API_KEY: "key", KIMI_COMPOSER_MODEL: "kimi-k2.6" };
+  const runtime = { BOOKLET_FILES: storage as never, ANTHROPIC_API_KEY: "key", CLAUDE_MODEL: "claude-sonnet-5-5" };
 
   const first = mockFetch({ targetPick: 11, targetEvidence: "Turtle", placePicks: [] });
   const [withPhoto] = await withGlobalFetch(first.fetchImpl, () => addRevealPhotos(runtime, { destination: "Barcelona", dayPlans: [day] }, undefined, first.fetchImpl));

@@ -4,6 +4,7 @@ import {
   setFulfilmentStatus,
   type PurchaseRecord,
 } from "../../lib/payment";
+import { claudeModelFrom } from "../../lib/generation/claude";
 import { createPackingSlipPdf } from "../../lib/pdf/packing-slip";
 import { normalizePdfRequest } from "../../lib/pdf/request";
 import {
@@ -31,8 +32,7 @@ function ownerOnly() {
 function orderInput(purchase: PurchaseRecord, runtime: RuntimeEnvironment) {
   return normalizePdfRequest(
     JSON.parse(purchase.requestJson) as Record<string, unknown>,
-    runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3",
-    runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6",
+    claudeModelFrom(runtime), claudeModelFrom(runtime),
   );
 }
 

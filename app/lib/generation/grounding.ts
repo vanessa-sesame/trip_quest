@@ -1,4 +1,4 @@
-// A second, independent Kimi call that checks the composer's own output
+// A second, independent model call that checks the composer's own output
 // against the research it was supposed to be grounded in. The composer
 // prompt already asks for research-backed claims, but it can still invent a
 // specific physical/sensory detail (a shape, a color, a texture) to satisfy
@@ -10,7 +10,7 @@
 //
 // A live test run (Penang, age 7) confirmed the checker works — it caught
 // two real unsupported claims — but also showed a real risk: if the checker
-// is wired as a hard retry-or-fail gate, Kimi can genuinely exhaust the
+// is wired as a hard retry-or-fail gate, the model can genuinely exhaust the
 // retry budget without ever fully satisfying it, failing the whole booklet
 // generation. That is a worse outcome than one imperfect claim, so the
 // caller (composeBookletBatch in app/api/generate/route.ts) retries with a
@@ -26,46 +26,11 @@
 // are taken from booklet-ai.ts/booklet.ts, which are erased at strip time.
 
 import type { BookletDraft } from "./booklet-ai.ts";
-
-const KIMI_API_BASE = "https://api.moonshot.ai/v1";
+import { claudeJson, type ClaudeOptions } from "./claude.ts";
 
 export type GroundingResearch = { notes: string };
 
 export type GroundingFinding = { day: number; field: string; issue: string };
-
-async function requestGroundingCheck(
-  apiKey: string,
-  body: Record<string, unknown>,
-  timeoutMs = 60_000,
-) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`${KIMI_API_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      console.error(`[TripQuest grounding check] Kimi returned ${response.status}`);
-      return null;
-    }
-    const payload = (await response.json()) as Record<string, unknown>;
-    if (payload.usage) {
-      console.info(`[TripQuest usage] model=${body.model} path=/chat/completions-grounding`, JSON.stringify(payload.usage));
-    }
-    return payload;
-  } catch (error) {
-    console.error("[TripQuest grounding check]", error);
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
 
 // Returns the claims that are not supported by the research, or an empty
 // array when everything checks out or the checker itself could not run
@@ -73,9 +38,7 @@ async function requestGroundingCheck(
 export async function checkGroundedClaims(
   draft: BookletDraft,
   research: GroundingResearch,
-  apiKey: string,
-  model: string,
-  modelOptions: Record<string, unknown>,
+  claude: ClaudeOptions,
   // Days compose one request at a time, each numbered from 1; the offset
   // restores the trip's real day numbers so the checker does not match a
   // day-3 claim against the research for day 1. Findings come back
@@ -118,40 +81,22 @@ export async function checkGroundedClaims(
     required: ["findings"],
   };
 
-  const payload = await requestGroundingCheck(apiKey, {
-    model,
-    ...modelOptions,
-    max_completion_tokens: 2_000,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a careful fact-checker for a children's travel booklet. Only flag a claim that asserts a specific, checkable fact or physical/sensory detail (an appearance, a name, a count, a species, a material, a location) that the research text does not support or directly contradicts. Never flag generic description, a drawing or imagination prompt, an open-ended question, or a claim the research is simply silent about in a way that doesn't contradict it.",
-      },
-      {
-        role: "user",
-        content: `RESEARCH:\n${research.notes}\n\nCLAIMS TO CHECK (JSON array of {day, place, field, text}; each claim is about its own place):\n${JSON.stringify(claims)}\n\nReturn only the claims that are NOT grounded in the research above, each with a short reason. Return an empty findings array if every claim is fine.`,
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: "grounding_check", strict: true, schema },
-    },
-  });
-  if (!payload) return [];
-
-  const choices = Array.isArray(payload.choices) ? payload.choices : [];
-  const message = (choices[0] as Record<string, unknown> | undefined)?.message as
-    | Record<string, unknown>
-    | undefined;
-  if (typeof message?.content !== "string") return [];
-
   try {
-    const parsed = JSON.parse(message.content) as { findings?: GroundingFinding[] };
+    const parsed = await claudeJson<{ findings?: GroundingFinding[] }>({
+      ...claude,
+      label: "the fact check",
+      maxTokens: 6_000,
+      timeoutMs: 60_000,
+      system:
+        "You are a careful fact-checker for a children's travel booklet. Only flag a claim that asserts a specific, checkable fact or physical/sensory detail (an appearance, a name, a count, a species, a material, a location) that the research text does not support or directly contradicts. Never flag generic description, a drawing or imagination prompt, an open-ended question, or a claim the research is simply silent about in a way that doesn't contradict it.",
+      user: `RESEARCH:\n${research.notes}\n\nCLAIMS TO CHECK (JSON array of {day, place, field, text}; each claim is about its own place):\n${JSON.stringify(claims)}\n\nReturn only the claims that are NOT grounded in the research above, each with a short reason. Return an empty findings array if every claim is fine.`,
+      schema,
+    });
     return Array.isArray(parsed.findings)
       ? parsed.findings.map((finding) => ({ ...finding, day: finding.day - dayOffset }))
       : [];
-  } catch {
+  } catch (error) {
+    console.error("[TripQuest grounding check]", error instanceof Error ? error.message : error);
     return [];
   }
 }
@@ -162,7 +107,7 @@ export function groundingCorrectionMessage(findings: GroundingFinding[]) {
     .join("; ")}. Rewrite them using only details stated in the research, or with a generic description that makes no unsupported specific claim.`;
 }
 
-// A last-resort, purely local fix (no further Kimi calls) for whichever
+// A last-resort, purely local fix (no further model calls) for whichever
 // claims are still ungrounded after the correction attempts are exhausted:
 // generalize each flagged field just enough that it no longer asserts
 // anything unsupported, without dropping the reveal page's structure (the

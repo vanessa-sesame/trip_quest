@@ -161,9 +161,18 @@ Stripe credentials before charging customers:
 
 ## AI Generation
 
-- API provider: Moonshot/Kimi at `https://api.moonshot.ai/v1`.
-- Destination research model: `kimi-k3` by default.
-- Booklet composer model: `kimi-k2.6` by default.
+- API provider: Anthropic's Claude API, through `@anthropic-ai/sdk`
+  (`app/lib/generation/claude.ts` is the one client every call uses).
+- Model: `claude-sonnet-5-5` for research, composition, repairs, fact checks,
+  photo picks and picture checks (`CLAUDE_MODEL` overrides it). Thinking is
+  always on; composition runs at effort `medium`, everything else at `low`.
+  Answers use structured outputs; a safety decline is re-run on another model
+  (`fallbacks: "default"`).
+- Research uses Claude's `web_search_20260209` server tool (needs web search
+  enabled for the organization in the Claude Console).
+- Until September 2026 the app used Moonshot's Kimi (`kimi-k3` research,
+  `kimi-k2.6` composition); comments that mention Kimi describe behaviour
+  observed then.
 - Research uses web search and asks for source-backed landmarks, culture,
   transport, food, nature, etiquette, and itinerary verification.
 - Composition returns structured JSON and is validated before storage.
@@ -224,9 +233,8 @@ Stripe credentials before charging customers:
 
 Relevant environment variable names are documented in `.env.example`:
 
-- `MOONSHOT_API_KEY`
-- `KIMI_RESEARCH_MODEL`
-- `KIMI_COMPOSER_MODEL`
+- `ANTHROPIC_API_KEY`
+- `CLAUDE_MODEL` (optional; defaults to `claude-sonnet-5-5`)
 - `OPENAI_API_KEY`
 - `OPENAI_IMAGE_MODEL`
 - `TRIPQUEST_OWNER_EMAIL`

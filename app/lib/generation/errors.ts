@@ -1,7 +1,8 @@
 // Generation error types. Plain fields instead of TypeScript parameter
 // properties so Node's --experimental-strip-types test runner can load them.
 
-export class KimiRequestError extends Error {
+// A language-model request that failed (rate limit, timeout, refusal).
+export class ModelRequestError extends Error {
   readonly status: number;
 
   constructor(message: string, status: number) {

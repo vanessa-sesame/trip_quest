@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { claudeResponse, claudeUserText } from "./helpers/claude.ts";
 import test from "node:test";
 import {
   checkGroundedClaims,
@@ -27,11 +28,7 @@ const research: GroundingResearch = {
 test("an ungrounded claim is returned as a finding", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    Response.json({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
+    claudeResponse({
               findings: [
                 {
                   day: 1,
@@ -39,18 +36,12 @@ test("an ungrounded claim is returned as a finding", async () => {
                   issue: "the research describes the orchid as delicate, not spiky",
                 },
               ],
-            }),
-          },
-        },
-      ],
-    });
+            });
   try {
     const findings = await checkGroundedClaims(
       draftWithClaim("The purple spiky flower is Singapore's national orchid!"),
       research,
-      "test-key",
-      "kimi-k2.6",
-      { thinking: { type: "disabled" } },
+      { apiKey: "test-key", model: "claude-sonnet-5-5" },
     );
     assert.equal(findings.length, 1);
     assert.equal(findings[0].field, "questReveal.revealText");
@@ -63,14 +54,12 @@ test("an ungrounded claim is returned as a finding", async () => {
 test("a grounded claim returns no findings", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [] }) } }] });
+    claudeResponse({ findings: [] });
   try {
     const findings = await checkGroundedClaims(
       draftWithClaim("The purple orchid is Singapore's national flower, Vanda Miss Joaquim!"),
       research,
-      "test-key",
-      "kimi-k2.6",
-      { thinking: { type: "disabled" } },
+      { apiKey: "test-key", model: "claude-sonnet-5-5" },
     );
     assert.deepEqual(findings, []);
   } finally {
@@ -85,9 +74,7 @@ test("a failed grounding check fails open with no findings", async () => {
     const findings = await checkGroundedClaims(
       draftWithClaim("Any claim at all."),
       research,
-      "test-key",
-      "kimi-k2.6",
-      { thinking: { type: "disabled" } },
+      { apiKey: "test-key", model: "claude-sonnet-5-5" },
     );
     assert.deepEqual(findings, []);
   } finally {
@@ -105,10 +92,10 @@ test("no fetch call is made when there are no checkable claims", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {
     calls += 1;
-    return Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [] }) } }] });
+    return claudeResponse({ findings: [] });
   };
   try {
-    const findings = await checkGroundedClaims(draft, research, "test-key", "kimi-k2.6", { thinking: { type: "disabled" } });
+    const findings = await checkGroundedClaims(draft, research, { apiKey: "test-key", model: "claude-sonnet-5-5" },);
     assert.deepEqual(findings, []);
     assert.equal(calls, 0);
   } finally {
@@ -166,13 +153,12 @@ test("claims are checked under the trip's real day number and place", async () =
   let sentClaims: Array<{ day: number; place: string }> = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_input, init) => {
-    const body = JSON.parse(String(init?.body));
-    const content = String(body.messages[1].content);
+    const content = claudeUserText(init);
     sentClaims = JSON.parse(content.slice(content.indexOf("[", content.indexOf("CLAIMS TO CHECK")), content.lastIndexOf("]") + 1));
-    return Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [{ day: 3, field: "questReveal.targetLabel", issue: "unsupported" }] }) } }] });
+    return claudeResponse({ findings: [{ day: 3, field: "questReveal.targetLabel", issue: "unsupported" }] });
   };
   try {
-    const findings = await checkGroundedClaims(draft, { notes: "notes" }, "key", "kimi-k2.6", {}, 2);
+    const findings = await checkGroundedClaims(draft, { notes: "notes" }, { apiKey: "key", model: "claude-sonnet-5-5" }, 2);
     assert.ok(sentClaims.length > 0 && sentClaims.every((claim) => claim.day === 3 && claim.place === day.landmark.place));
     assert.deepEqual(findings.map((finding) => finding.day), [1]);
   } finally {

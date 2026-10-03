@@ -4,6 +4,7 @@ import {
   type BookletDatabase,
   type BookletObjectStorage,
 } from "../../lib/storage/booklet-storage";
+import { claudeModelFrom } from "../../lib/generation/claude";
 import { normalizePdfRequest } from "../../lib/pdf/request";
 import {
   createCheckoutSession,
@@ -27,8 +28,7 @@ export const dynamic = "force-dynamic";
 type RuntimeEnvironment = PaymentRuntime & {
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
-  KIMI_COMPOSER_MODEL?: string;
-  KIMI_RESEARCH_MODEL?: string;
+  CLAUDE_MODEL?: string;
 };
 
 async function getRuntimeEnvironment(): Promise<RuntimeEnvironment> {
@@ -63,8 +63,7 @@ export async function POST(request: Request) {
     const body = await readJsonObject(request, 32_768);
     const input = normalizePdfRequest(
       body,
-      runtime.KIMI_RESEARCH_MODEL?.trim() || "kimi-k3",
-      runtime.KIMI_COMPOSER_MODEL?.trim() || "kimi-k2.6",
+      claudeModelFrom(runtime), claudeModelFrom(runtime),
     );
     const cacheKey = await createBookletCacheKey(input.identity);
     const edition = await readStoredBookletReference(

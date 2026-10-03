@@ -36,8 +36,7 @@ export type RuntimeEnvironment = PaymentRuntime & {
   ASSETS?: { fetch(request: Request): Promise<Response> };
   BOOKLET_FILES?: BookletObjectStorage;
   DB?: BookletDatabase;
-  KIMI_COMPOSER_MODEL?: string;
-  KIMI_RESEARCH_MODEL?: string;
+  CLAUDE_MODEL?: string;
   TRIPQUEST_OWNER_EMAIL?: string;
   TRIPQUEST_PDF_TEST_MODE?: string;
 };
@@ -133,11 +132,11 @@ export async function preparePdf(
   if (!runtime.DB || !runtime.BOOKLET_FILES) {
     return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
   }
-  const computedCacheKey = await createBookletCacheKey(input.identity);
-  if (purchase?.edition && purchase.cacheKey !== computedCacheKey) {
-    return Response.json({ error: "This purchase does not match the requested booklet." }, { status: 403 });
-  }
-  const cacheKey = purchase?.cacheKey || computedCacheKey;
+  // A purchase keeps its own cache key and edition snapshot. The key
+  // computed now can differ (a newer cache version or model), so it is
+  // not compared: callers either matched the purchase to this request
+  // (POST) or built the request from the purchase itself (GET, orders).
+  const cacheKey = purchase?.cacheKey || await createBookletCacheKey(input.identity);
 
   if (purchase?.pdfKey && kind === "booklet") {
     const storedPurchasePdf = await readPurchasePdf(

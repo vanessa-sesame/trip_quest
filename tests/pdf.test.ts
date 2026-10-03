@@ -479,3 +479,20 @@ test("a spot-the-difference game embeds both of its pictures", async () => {
   assert.ok(requested.includes(path("a")) && requested.includes(path("b")), "both pictures are requested");
   assert.ok(withPictures.length > withoutPictures.length + picture.length, "both pictures are embedded");
 });
+
+test("the web preview can release a pdf.js document through its loading task", async () => {
+  // app/components/pdf-preview.tsx frees each superseded preview this way.
+  // pdf.js 6 dropped PDFDocumentProxy.destroy(); calling it crashed the
+  // preview (and the whole page) as soon as a generated booklet replaced
+  // the sample.
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const booklet = sampleGeneratedBooklet();
+  const task = getDocument({ data: await createBookletPdf(booklet) });
+  const document = await task.promise;
+
+  assert.equal(document.numPages, bookletPdfPageCount(booklet));
+  assert.equal("destroy" in document, false);
+  assert.equal(document.loadingTask, task);
+  await document.loadingTask.destroy();
+  assert.equal(task.destroyed, true);
+});

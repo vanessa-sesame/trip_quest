@@ -40,6 +40,24 @@ const scenarios: Scenario[] = [
   { name: "lisbon-age8-3d", destination: "Lisbon", age: 8, days: 3 },
   { name: "seoul-age11-5d", destination: "Seoul", age: 11, days: 5 },
   { name: "marrakech-age6-2d", destination: "Marrakech", age: 6, days: 2 },
+  // Days 1 and 4 are only flights and hotel time: they must come out as
+  // travel days, not as visits to the city's best-known landmark.
+  {
+    name: "ipoh-age5-4d-travel",
+    destination: "Ipoh",
+    age: 5,
+    days: 4,
+    itinerary: [
+      "Flight: Scoot TR484 Singapore to Ipoh 12:35–13:50; Hotel: Check in at TUI BLUE The Haven Ipoh, Two-Bedroom Suite",
+      "Attraction: Kek Lok Tong + gardens in the morning; Meal: Old Town for lunch; Attraction: short Old Town wander / street art",
+      "Attraction: Lost World of Tambun from around 11:00am; Focus on animals, train/dry activities and suitable kids' rides",
+      "Meal: Breakfast; Hotel: pack and enjoy the hotel a little; Travel: leave around 11:30am; Flight: Scoot TR485 Ipoh to Singapore 14:40–15:55",
+    ],
+    family: [
+      { name: "Edwin", age: 5, interests: ["dinosaurs", "drawing", "trains"] },
+      { name: "Chris", age: 7, interests: ["space", "science", "pokemon"] },
+    ],
+  },
 ];
 
 const baseUrl = process.env.TRIPQUEST_URL || "http://localhost:3000";
@@ -112,6 +130,8 @@ for (const scenario of scenarios.filter((entry) => !filter || entry.name.include
       console.log(`  ${(at / 1000).toFixed(0).padStart(4)}s  ${message}`);
     }) as GeneratedBookletData & { editionFingerprint?: string };
     const generatedMs = Date.now() - started;
+    // Saved before the PDF step so a PDF failure still leaves the booklet.
+    await writeFile(`${runDir}/json/${scenario.name}.json`, JSON.stringify(booklet, null, 2));
     const pdfStarted = Date.now();
     const pdfResponse = await fetch(`${baseUrl}/api/pdf`, {
       method: "POST",
@@ -130,7 +150,6 @@ for (const scenario of scenarios.filter((entry) => !filter || entry.name.include
     const bytes = new Uint8Array(await pdfResponse.arrayBuffer());
     const pdfMs = Date.now() - pdfStarted;
     await writeFile(`${runDir}/pdfs/${scenario.name}.pdf`, bytes);
-    await writeFile(`${runDir}/json/${scenario.name}.json`, JSON.stringify(booklet, null, 2));
     const pageCount = (await PDFDocument.load(bytes)).getPageCount();
     const result = { scenario: scenario.name, ok: true, generatedMs, pdfMs, pageCount, progress, ...checks(booklet, pageCount) };
     await appendFile(`${runDir}/results.jsonl`, `${JSON.stringify(result)}\n`);

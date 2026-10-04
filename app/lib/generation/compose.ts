@@ -2,7 +2,9 @@ import { getAgeBand, pairEligibleGameTypes, queueEligibleGameTypes, type Activit
 import {
   type BookletDraft,
   type GameTypePlanItem,
+  adaptGameTypePlanForTravelDays,
   allowedGameTypesForAge,
+  travelDayGameTypes,
   applyInterestPlan,
   applySiblingPlan,
   validateBookletDraft,
@@ -14,6 +16,7 @@ import {
   writeStoredBookletBatch,
 } from "../storage/booklet-storage.ts";
 import type { InterestPlanItem } from "../family.ts";
+import { cleanDailyPlan, isTravelOnlyPlan } from "../itinerary.ts";
 import { checkGroundedClaims, sanitizeUngroundedClaims, type GroundingFinding } from "./grounding.ts";
 import { composedContentProblems, wordCount, type ContentProblem } from "../booklet/qa.ts";
 import { claudeJson, type ClaudeOptions } from "./claude.ts";
@@ -90,10 +93,18 @@ export type SecondaryGamePlanItem = { day: number; second: GameType; queue: Game
 // planned together because days compose separately and cannot see each
 // other's choices. Rotates through the age's allowed types, never repeats a
 // type already used that day, and never gives consecutive days the same one.
-export function secondaryGamePlan(age: number, gameTypePlan: GameTypePlanItem[], seed: string): SecondaryGamePlanItem[] {
+// On a travel day (`travelDays`) both come from the seated travel games.
+export function secondaryGamePlan(
+  age: number,
+  gameTypePlan: GameTypePlanItem[],
+  seed: string,
+  travelDays: boolean[] = [],
+): SecondaryGamePlanItem[] {
   const allowed = allowedGameTypesForAge(age);
-  const seconds = pairEligibleGameTypes.filter((gameType) => allowed.includes(gameType));
-  const queues = queueFriendlyGameTypes.filter((gameType) => allowed.includes(gameType) && queueEligibleGameTypes.includes(gameType));
+  const allSeconds = pairEligibleGameTypes.filter((gameType) => allowed.includes(gameType));
+  const allQueues = queueFriendlyGameTypes.filter((gameType) => allowed.includes(gameType) && queueEligibleGameTypes.includes(gameType));
+  const travelSeconds = allSeconds.filter((gameType) => travelDayGameTypes.includes(gameType));
+  const travelQueues = allQueues.filter((gameType) => travelDayGameTypes.includes(gameType));
   let hash = 17;
   for (const character of seed.toLocaleLowerCase()) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   // Tries each option from `start`, first avoiding `avoid` and yesterday's
@@ -106,6 +117,9 @@ export function secondaryGamePlan(age: number, gameTypePlan: GameTypePlanItem[],
   const plan: SecondaryGamePlanItem[] = [];
   gameTypePlan.forEach((day, index) => {
     const previous = plan[index - 1];
+    const travel = Boolean(travelDays[index]);
+    const seconds = travel && travelSeconds.length ? travelSeconds : allSeconds;
+    const queues = travel ? travelQueues : allQueues;
     const taken = new Set<GameType>(day.gameTypes);
     const second = pick(seconds, hash + index, taken, previous?.second) ?? seconds[0];
     // The queue game is optional, so with no type left it stays unassigned.
@@ -268,23 +282,48 @@ export function bookletSchema(days: number, age: number) {
   };
 }
 
+// What a separately composed day needs to know about the rest of the trip.
+export type TripContext = {
+  // Every day's cleaned plan (open days filled in by planOpenDays).
+  itinerary: string[];
+  // Days whose plan is only travel and hotel logistics.
+  travelDays: boolean[];
+};
+
+function travelDayLabel(tripDay: number, totalDays: number) {
+  if (tripDay === 1) return "arrival";
+  return tripDay === totalDays ? "departure" : "transfer";
+}
+
 export async function composeBookletBatch(
   destination: string,
   age: number,
   totalDays: number,
   dayOffset: number,
-  itinerary: string[],
+  batchItinerary: string[],
   research: ResearchResult,
   apiKey: string,
   model: string,
   familyContext: string,
   hasSiblings: boolean,
   balancePlan: string,
-  gameTypePlan: GameTypePlanItem[],
+  baseGameTypePlan: GameTypePlanItem[],
   interestPlan: InterestPlanItem[],
   extraGuidance?: string,
+  trip?: TripContext,
 ) {
+  const itinerary = batchItinerary.map((plan) => cleanDailyPlan(plan));
   const days = itinerary.length;
+  const tripTravelDays = trip?.travelDays ?? Array.from(
+    { length: Math.max(totalDays, baseGameTypePlan.length) },
+    (_, index) => index >= dayOffset && index < dayOffset + days && isTravelOnlyPlan(itinerary[index - dayOffset]),
+  );
+  const travelDayNumbers = itinerary
+    .map((_, index) => dayOffset + index + 1)
+    .filter((tripDay) => tripTravelDays[tripDay - 1]);
+  // Travel days get seated games (adapting an already adapted plan is a
+  // no-op, so every batch of a trip sees the same schedule).
+  const gameTypePlan = adaptGameTypePlanForTravelDays(baseGameTypePlan, tripTravelDays, age, interestPlan);
   const ageBand = getAgeBand(age);
   const claude: ClaudeOptions = { apiKey, model };
   const ageGameDirection = age <= 5
@@ -295,8 +334,35 @@ export async function composeBookletBatch(
         ? "Use crosswords, word searches, challenging mazes, codebreakers, one route-planning puzzle, quizzes, scavenger hunts, and observational drawing. In booklets with at least two days, include one word puzzle and one maze on different days."
         : "Use sophisticated crosswords, codebreakers, one route-planning challenge, quizzes, field-journal stories, and design drawing. Avoid babyish coloring tasks.";
   const itineraryText = itinerary
-    .map((plan, index) => `Day ${dayOffset + index + 1}: ${plan || "Open day - select a strong subject from the research"}`)
+    .map((plan, index) => {
+      const tripDay = dayOffset + index + 1;
+      if (tripTravelDays[tripDay - 1]) {
+        return `Day ${tripDay}: TRAVEL DAY (${travelDayLabel(tripDay, totalDays)}; journey and hotel only, no sightseeing planned) - ${plan}`;
+      }
+      return `Day ${tripDay}: ${plan || "Open day - select a strong subject from the research"}`;
+    })
     .join("\n");
+  const otherDays = (trip?.itinerary ?? [])
+    .map((plan, index) => ({ plan: plan.trim(), tripDay: index + 1 }))
+    .filter(({ plan, tripDay }) => plan && (tripDay <= dayOffset || tripDay > dayOffset + days))
+    .map(({ plan, tripDay }) => `Day ${tripDay}: ${tripTravelDays[tripDay - 1] ? `travel day (${plan})` : plan}`);
+  const batchDays = days === 1 ? `day ${dayOffset + 1}` : `days ${dayOffset + 1}-${dayOffset + days}`;
+  const otherDaysSection = otherDays.length
+    ? `\n\nOTHER DAYS OF THIS TRIP
+These days are designed separately:
+${otherDays.join("\n")}
+Every day of the trip has a different main subject. Do not make a place named on another day the theme or landmark of ${batchDays} unless that day's own plan names it too.`
+    : "";
+  const travelSection = travelDayNumbers.length
+    ? `\n\nTRAVEL DAYS
+${travelDayNumbers.map((tripDay) => `Day ${tripDay}`).join(", ")} ${travelDayNumbers.length === 1 ? "is a travel day" : "are travel days"}: the family's plan holds only travel and hotel logistics (flights, airports, transfers, check-in or check-out, packing, breakfast or rest at the hotel) and names no attraction. For a travel day:
+- Do not invent a visit to a landmark, museum, temple, station, market or any other sight, and do not send the family anywhere the plan does not mention. A travel day is never about one of ${destination}'s famous landmarks.
+- Build the theme, mission and games from what the family will really do: the plane and the airport (or the train, bus or car journey), the journey itself, the hotel and its immediate surroundings, packing a travel kit, and first impressions of ${destination} on arrival or last impressions when leaving (the landscape from the window, the weather, local words, a food they may try at the hotel).
+- landmark.place is the airport, hotel or journey the plan names (for example the hotel's name, or "${destination} airport"), never a separate sight; theme and landmark.display name that journey or hotel.
+- inThePlace and inThePlaceSecond are played on the plane, at the gate, in the car, or in the hotel room or lobby: keep requiresPresence=true, with answers that depend on what the child can see or hear there (seat-back signs, the window, luggage tags, the room key, lift buttons), never on a view of a landmark. whileYouWait is the check-in, security, boarding or hotel queue. sitDown is played seated at a tray table or in the hotel room.
+- Facts and the quest reveal may describe the journey, the hotel's area, or ${destination} in general from the research, never a sight the family will not visit that day.
+- Use exactly the scheduled game types, including the whileYouWait game. Never use scavenger_hunt, bingo or map_puzzle on a travel day.`
+    : "";
   const assignedGameTypes = gameTypePlan.slice(dayOffset, dayOffset + days);
   const assignedInterests = interestPlan.filter((item) =>
     item.day > dayOffset && item.day <= dayOffset + days,
@@ -306,7 +372,7 @@ export async function composeBookletBatch(
         `Day ${item.day}: use Child ${item.childNumber}'s interest phrase "${item.interest}" as a playful lens.`,
       ).join("\n")
     : "No interests were recorded for these days; keep the activities destination-led.";
-  const secondaryPlan = secondaryGamePlan(age, gameTypePlan, destination).slice(dayOffset, dayOffset + days);
+  const secondaryPlan = secondaryGamePlan(age, gameTypePlan, destination, tripTravelDays).slice(dayOffset, dayOffset + days);
   const exactGameSchedule = assignedGameTypes
     .map((plan, index) => {
       const secondary = secondaryPlan[index];
@@ -352,7 +418,7 @@ BRAND AND COPYRIGHT SAFETY
 An interest may contain a brand, character, franchise, logo, or protected title. Treat it as a private preference, not as permission to copy. Do not reproduce character names beyond the user's input, logos, slogans, catchphrases, plot lines, official artwork, or recognizable character likenesses. Turn branded interests into an original generic theme such as “monster-collecting adventure”, “animated castle story”, or “space-hero mission”, and keep every game, illustration, and clue original. Never imply sponsorship or an official connection. Never claim the branded subject is present at the destination unless the research supports a real public attraction.
 
 CREATIVE DIRECTION
-- Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research.
+- Make every day about a different named landmark, neighborhood, food tradition, natural feature, craft, story, or transport detail from the research. A travel day (see TRAVEL DAYS) is about its own journey and hotel instead.
 - Every day must return exactly seven named slots in this order: beforeYouGo, whileYouWait, inThePlace, inThePlaceSecond, sitDown, factCard, questReveal. These are the day architecture, not free-floating games.
 - landmark.display is for headers only (for example “Eiffel Tower: Count the Iron Giant”). landmark.short is a natural phrase for sentences (for example “the tower”). landmark.place is the proper place name for maps, cards, and certificates. Never interpolate landmark.display inside any sentence.
 - beforeYouGo is one grey adult-facing instruction. For ages 3-4 use at most 12 words; ages 5-6 at most 20; ages 7-9 at most 40.
@@ -388,7 +454,7 @@ CREATIVE DIRECTION
 - Ages 10-14: the child reads alone. Use sketches, sentences, and genuine puzzles.
 
 DAILY ITINERARY
-${itineraryText}
+${itineraryText}${otherDaysSection}${travelSection}
 
 DESTINATION RESEARCH
 ${research.notes}`,
@@ -407,6 +473,11 @@ ${research.notes}`,
   );
 
   const plannedTypes = assignedGameTypes.map((plan, index) => ({ day: index + 1, gameTypes: plan.gameTypes }));
+  const localTravelDays = itinerary.map((_, index) => Boolean(tripTravelDays[dayOffset + index]));
+  const contentProblems = (draft: BookletDraft) => [
+    ...composedContentProblems(draft, plannedTypes),
+    ...travelDayGameProblems(draft, localTravelDays),
+  ];
 
   // Only a draft that fails hard validation (malformed JSON, a broken
   // required field) is recomposed in full. Softer problems are fixed without
@@ -433,18 +504,18 @@ ${research.notes}`,
 
       const draft = validateBookletDraft(composed, days, age);
       lastValidDraft = draft;
-      const problems = composedContentProblems(draft, plannedTypes);
+      const problems = contentProblems(draft);
       const [groundingFindings, repaired] = await Promise.all([
         checkGroundedClaims(draft, research, claude, dayOffset),
         problems.length
-          ? repairGames(draft, problems, { destination, age, days, research, claude, plannedTypes })
+          ? repairGames(draft, problems, { destination, age, days, research, claude, plannedTypes, travelDays: localTravelDays })
             .catch((error) => {
               console.error("[TripQuest repair] failed; keeping the original games:", error instanceof Error ? error.message : error);
               return draft;
             })
           : Promise.resolve(draft),
       ]);
-      const remaining = composedContentProblems(repaired, plannedTypes);
+      const remaining = contentProblems(repaired);
       if (remaining.length) {
         console.error("[TripQuest content] accepted with issues:", JSON.stringify(remaining.map((problem) => problem.message)));
       }
@@ -487,7 +558,34 @@ type RepairContext = {
   research: ResearchResult;
   claude: ClaudeOptions;
   plannedTypes: Array<{ day: number; gameTypes: string[] }>;
+  // Per draft day (index 0 = draft day 1): a travel day.
+  travelDays?: boolean[];
 };
+
+// A travel day's games are played seated on the plane or in the hotel, so a
+// scavenger hunt, spot-it bingo or route puzzle that needs a site to look at
+// is sent for repair (the optional queue game is simply dropped).
+export function travelDayGameProblems(draft: BookletDraft, travelDays: boolean[]): ContentProblem[] {
+  return draft.dayPlans.flatMap((day, index) => {
+    if (!travelDays[index]) return [];
+    const problems: ContentProblem[] = [];
+    for (const slot of ["inThePlace", "inThePlaceSecond", "sitDown"] as const) {
+      const game = day.slots[slot];
+      if (game?.gameType && !travelDayGameTypes.includes(game.gameType)) {
+        problems.push({
+          day: day.day,
+          slot,
+          message: `Day ${day.day} is a travel day, so "${game.title}" cannot be a ${game.gameType}: use a game that works seated on the plane, in the car or in the hotel, without a view of any particular sight.`,
+        });
+      }
+    }
+    const queueType = day.slots.whileYouWait.gameType;
+    if (queueType && !travelDayGameTypes.includes(queueType)) {
+      problems.push({ day: day.day, slot: "whileYouWait", message: `Day ${day.day} is a travel day; its queue game cannot be a ${queueType}.` });
+    }
+    return problems;
+  });
+}
 
 type ActivitySlot = "inThePlace" | "inThePlaceSecond" | "sitDown";
 
@@ -523,13 +621,16 @@ export async function repairGames(draft: BookletDraft, problems: ContentProblem[
       .filter((slot) => slot !== target.slot)
       .map((slot) => day.slots[slot]?.gameType)
       .filter(Boolean);
+    const travel = Boolean(context.travelDays?.[target.day - 1]);
+    const fits = (gameType: GameType) => !travel || travelDayGameTypes.includes(gameType);
     const required = target.slot === "inThePlace" ? planned[0] : target.slot === "sitDown" ? planned[1] : undefined;
-    const choices = required && !others.includes(required as GameType)
+    const choices = required && !others.includes(required as GameType) && fits(required as GameType)
       ? [required]
       : allowed.filter((gameType) =>
           !others.includes(gameType)
           && (target.slot !== "inThePlaceSecond" || pairEligibleGameTypes.includes(gameType))
-          && gameType !== "map_puzzle");
+          && gameType !== "map_puzzle"
+          && fits(gameType));
     return { target, day, choices, original: day.slots[target.slot] as Activity };
   });
 
@@ -685,7 +786,13 @@ export async function planOpenDays(
   if (itinerary.length < 2 || !openDays.length) return itinerary;
   const claude: ClaudeOptions = { apiKey, model };
   try {
-    const fixedDays = itinerary.map((plan, index) => plan.trim() ? `Day ${index + 1}: ${plan.trim()}` : "").filter(Boolean).join("; ") || "none";
+    const fixedDays = itinerary
+      .map((plan, index) => {
+        if (!plan.trim()) return "";
+        return `Day ${index + 1}: ${isTravelOnlyPlan(plan) ? `travel day, journey and hotel only (${plan.trim()})` : plan.trim()}`;
+      })
+      .filter(Boolean)
+      .join("; ") || "none";
     const planPayload = await claudeJson<Record<string, unknown>>({
       ...claude,
       label: "day planning",
@@ -712,6 +819,68 @@ ${research.notes}`,
     console.error("[TripQuest day plan] falling back to open days:", error instanceof Error ? error.message : error);
     return itinerary;
   }
+}
+
+const PLACE_STOP_WORDS = new Set(["the", "of", "and", "a", "an", "at", "in", "de", "la", "le"]);
+
+function placeKey(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((word) => word && !PLACE_STOP_WORDS.has(word))
+    .join(" ");
+}
+
+function samePlace(left: string, right: string) {
+  if (!left || !right) return false;
+  return left === right || (Math.min(left.length, right.length) >= 6 && (left.includes(right) || right.includes(left)));
+}
+
+function planNamesPlace(plan: string, key: string) {
+  const text = placeKey(plan);
+  if (!text || !key) return false;
+  const words = key.split(" ");
+  return text.includes(key) || (words.length >= 2 && text.includes(words.slice(0, 2).join(" ")));
+}
+
+export type RepeatedLandmark = { day: number; otherDay: number; place: string };
+
+const TRAVEL_PLACE = /\b(?:airports?|hotels?|resort|hostel|inn|lodge|suites?|terminal|flights?|plane|journey|check-?in)\b/i;
+
+// Days whose main place (landmark.place) is the same as an earlier day's
+// when the family did not list it on both days. Of the two, the day whose
+// own plan does not name the place is the one to change. Two travel days
+// may share the airport or the hotel (one named in a travel day's plan),
+// never a sight neither of them planned.
+export function repeatedLandmarkDays(
+  dayPlaces: Array<{ day: number; place: string }>,
+  itinerary: string[],
+  travelDays: boolean[] = [],
+): RepeatedLandmark[] {
+  const repeats: RepeatedLandmark[] = [];
+  const flagged = new Set<number>();
+  dayPlaces.forEach((later, laterIndex) => {
+    for (const earlier of dayPlaces.slice(0, laterIndex)) {
+      if (flagged.has(earlier.day)) continue;
+      const earlierKey = placeKey(earlier.place);
+      const laterKey = placeKey(later.place);
+      if (!samePlace(earlierKey, laterKey)) continue;
+      const earlierListed = planNamesPlace(itinerary[earlier.day - 1] ?? "", earlierKey);
+      const laterListed = planNamesPlace(itinerary[later.day - 1] ?? "", laterKey);
+      if (travelDays[earlier.day - 1] && travelDays[later.day - 1]
+        && (TRAVEL_PLACE.test(earlier.place) || TRAVEL_PLACE.test(later.place) || earlierListed || laterListed)) continue;
+      if (earlierListed && laterListed) continue;
+      const [offender, keeper] = laterListed ? [earlier, later] : [later, earlier];
+      if (flagged.has(offender.day)) continue;
+      flagged.add(offender.day);
+      repeats.push({ day: offender.day, otherDay: keeper.day, place: offender.place });
+      break;
+    }
+  });
+  return repeats;
 }
 
 export function makeActivityTitlesUnique(draft: BookletDraft) {
@@ -754,11 +923,17 @@ export async function composeBooklet(
   extraGuidance?: string,
 ) {
   const batchSize = composeBatchSize(days);
+  // Plans pasted from a table or a chat assistant are cleaned first, and
+  // days that are only travel and hotel time are marked so the composer
+  // themes them on the journey instead of inventing a landmark visit.
+  const cleanedItinerary = itinerary.map((plan) => cleanDailyPlan(plan));
+  const travelDays = cleanedItinerary.map((plan) => isTravelOnlyPlan(plan));
   // Days compose in parallel, one request each, so open days get distinct
   // subjects up front instead of each request picking the same landmark.
   const plannedItinerary = batchSize < days
-    ? await planOpenDays(destination, itinerary, research, apiKey, model)
-    : itinerary;
+    ? await planOpenDays(destination, cleanedItinerary, research, apiKey, model)
+    : cleanedItinerary;
+  const trip: TripContext = { itinerary: plannedItinerary, travelDays };
   const batches = Array.from(
     { length: Math.ceil(days / batchSize) },
     (_, index) => ({
@@ -781,7 +956,41 @@ export async function composeBooklet(
       { profile: finished.get(0)!.profile, dayPlans: ready },
     );
   };
-  const drafts = await Promise.all(batches.map(async (batch, index) => {
+  const composeAndStore = async (batch: (typeof batches)[number], index: number, guidance?: string) => {
+    const draft = await composeBookletBatch(
+      destination,
+      age,
+      days,
+      batch.offset,
+      batch.itinerary,
+      research,
+      apiKey,
+      model,
+      familyContext,
+      hasSiblings,
+      balancePlan,
+      gameTypePlan,
+      interestPlan,
+      guidance,
+      trip,
+    );
+    if (cacheKey) {
+      try {
+        await writeStoredBookletBatch(
+          artifacts,
+          cacheKey,
+          batch.offset,
+          batch.itinerary.length,
+          draft,
+        );
+      } catch (error) {
+        logStorageFailure("write booklet batch", error);
+      }
+    }
+    publishFinished(index, draft);
+    return draft;
+  };
+  const firstDrafts = await Promise.all(batches.map(async (batch, index) => {
     const assignedInterests = interestPlan.filter((item) =>
       item.day > batch.offset && item.day <= batch.offset + batch.itinerary.length,
     );
@@ -812,38 +1021,36 @@ export async function composeBooklet(
     }
 
     if (index === 0) publish?.(days === 1 ? "Designing your day…" : `Designing all ${days} days at once…`);
-    const draft = await composeBookletBatch(
-      destination,
-      age,
-      days,
-      batch.offset,
-      batch.itinerary,
-      research,
-      apiKey,
-      model,
-      familyContext,
-      hasSiblings,
-      balancePlan,
-      gameTypePlan,
-      interestPlan,
-      extraGuidance,
-    );
-    if (cacheKey) {
-      try {
-        await writeStoredBookletBatch(
-          artifacts,
-          cacheKey,
-          batch.offset,
-          batch.itinerary.length,
-          draft,
-        );
-      } catch (error) {
-        logStorageFailure("write booklet batch", error);
-      }
-    }
-    publishFinished(index, draft);
-    return draft;
+    return composeAndStore(batch, index, extraGuidance);
   }));
+  // Separately composed days cannot see each other's choices, so a day that
+  // took another day's landmark as its main subject (one the family did not
+  // list on both days) is composed once more, told which place to leave out.
+  const repeats = repeatedLandmarkDays(
+    firstDrafts.flatMap((draft, batchIndex) => draft.dayPlans.map((day, dayIndex) => ({
+      day: batches[batchIndex].offset + dayIndex + 1,
+      place: day.landmark?.place || day.theme,
+    }))),
+    plannedItinerary,
+    travelDays,
+  );
+  const drafts = repeats.length
+    ? await Promise.all(firstDrafts.map(async (draft, index) => {
+        const batch = batches[index];
+        const found = repeats.filter((repeat) => repeat.day > batch.offset && repeat.day <= batch.offset + batch.itinerary.length);
+        if (!found.length) return draft;
+        console.info("[TripQuest composition] recomposing a day that repeats another day's landmark:", JSON.stringify(found));
+        const guidance = found.map((repeat) => `Day ${repeat.day} must not be about ${repeat.place}: day ${repeat.otherDay} already uses it as its main subject. ${travelDays[repeat.day - 1]
+          ? `Day ${repeat.day} is a travel day: build it around the journey and the hotel instead.`
+          : "Choose a different subject from the day's own plan or the research."}`).join(" ");
+        try {
+          return await composeAndStore(batch, index, [extraGuidance, guidance].filter(Boolean).join("\n\n"));
+        } catch (error) {
+          console.error("[TripQuest composition] could not recompose a repeated day; keeping it:", error instanceof Error ? error.message : error);
+          return draft;
+        }
+      }))
+    : firstDrafts;
   const combined = makeActivityTitlesUnique({
     profile: drafts[0].profile,
     dayPlans: drafts.flatMap((draft, batchIndex) => draft.dayPlans.map((day, dayIndex) => ({

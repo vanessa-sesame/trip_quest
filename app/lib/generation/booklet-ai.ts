@@ -270,6 +270,64 @@ export function balancedGameTypePlanForTrip(
   }));
 }
 
+// Games that work seated on a plane, in a car or in a hotel room without a
+// view of any particular sight. A travel day (only flights, transfers and
+// hotel time) gets these instead of "find it here" scavenger hunts, spot-it
+// bingo, or a route puzzle between local stops.
+export const travelDayGameTypes: GameType[] = [
+  "coloring",
+  "drawing",
+  "maze",
+  "matching",
+  "spot_the_difference",
+  "story",
+  "quiz",
+  "codebreaker",
+  "word_search",
+  "crossword",
+];
+
+// Swaps any game on a travel day that needs a site to look at for a seated
+// one, preferring a type the neighbouring days do not use and the trip uses
+// least, so travel days keep the trip's variety. Drawing is only brought in
+// when a child is interested in it (same rule as the balanced plan). Non-
+// travel days are left exactly as planned.
+export function adaptGameTypePlanForTravelDays(
+  plan: GameTypePlanItem[],
+  travelDays: boolean[],
+  age: number,
+  interestPlan?: InterestPlanItem[],
+): GameTypePlanItem[] {
+  if (!plan.some((_, index) => travelDays[index])) return plan;
+  const allowed = allowedGameTypesForAge(age).filter((gameType) => travelDayGameTypes.includes(gameType));
+  const drawingWanted = !interestPlan || drawingInterestPresent(interestPlan);
+  const selected = plan.map((item) => [...item.gameTypes] as [GameType, GameType]);
+  const usage = new Map<GameType, number>();
+  for (const gameType of selected.flat()) usage.set(gameType, (usage.get(gameType) ?? 0) + 1);
+  // A drawing page stays the interest day's feature, so it counts as used.
+  const weight = (gameType: GameType) => (usage.get(gameType) ?? 0) + (gameType === "drawing" ? 1 : 0);
+  selected.forEach((gameTypes, index) => {
+    if (!travelDays[index]) return;
+    for (let slot = 0; slot < gameTypes.length; slot += 1) {
+      if (allowed.includes(gameTypes[slot])) continue;
+      const other = gameTypes[1 - slot];
+      const neighbours = new Set([...(selected[index - 1] ?? []), ...(selected[index + 1] ?? [])]);
+      const choice = allowed
+        .filter((candidate) => candidate !== other && (candidate !== "drawing" || drawingWanted))
+        .map((candidate, order) => ({ candidate, order }))
+        .sort((left, right) =>
+          Number(neighbours.has(left.candidate)) - Number(neighbours.has(right.candidate))
+          || weight(left.candidate) - weight(right.candidate)
+          || left.order - right.order)[0]?.candidate;
+      if (!choice) continue;
+      usage.set(gameTypes[slot], (usage.get(gameTypes[slot]) ?? 1) - 1);
+      usage.set(choice, (usage.get(choice) ?? 0) + 1);
+      gameTypes[slot] = choice;
+    }
+  });
+  return selected.map((gameTypes, index) => ({ day: plan[index].day, gameTypes }));
+}
+
 // Generic clue items for a preview activity that doesn't have real,
 // researched ones yet — only ever used by enrichOfflinePreviewGameplay
 // below, the same role app/components/activity-game.tsx's own fallbackItems plays for

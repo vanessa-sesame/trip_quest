@@ -10,6 +10,7 @@ import { claudeClient, logUsage } from "./claude.ts";
 import { GenerationBusyError, ModelRequestError, UserCorrectionError } from "./errors.ts";
 import { logStorageFailure } from "./log.ts";
 import { type CachedValue, getCached, setCached } from "./memory-cache.ts";
+import { cleanDailyPlan, isTravelOnlyPlan } from "../itinerary.ts";
 
 export type ResearchResult = {
   notes: string;
@@ -58,7 +59,43 @@ export function sourceTrustScore(source: BookletSource) {
   return 0;
 }
 
+const LOGISTICS_CORRECTION = /\b(?:flights?|fly|airlines?|airports?|flight number|hotels?|check[- ]?in|check[- ]?out|transfers?|packing|pack|breakfast|travel day|scoot|departure|arrival)\b/i;
+
+// PLAN_CHECK is for planned stops that do not exist at the destination. A
+// travel-only day (a flight, a hotel check-in) has no stop to verify, so a
+// correction that only concerns travel days, or only their flights and
+// hotels, is turned back into OK instead of stopping the whole booklet.
+export function withTravelDayPlanCheck(research: ResearchResult, itinerary: string[]): ResearchResult {
+  const correction = correctionLine(research.notes, "PLAN_CHECK");
+  if (!correction) return research;
+  const travelDays = itinerary.map((plan) => isTravelOnlyPlan(plan));
+  if (!travelDays.some(Boolean)) return research;
+  const namedDays = [...correction.matchAll(/\bdays?\s*(\d{1,2})/gi)].map((match) => Number(match[1]));
+  const onlyTravelDays = namedDays.length
+    ? namedDays.every((day) => travelDays[day - 1])
+    : LOGISTICS_CORRECTION.test(correction);
+  if (!onlyTravelDays) return research;
+  return {
+    ...research,
+    notes: research.notes.replace(/((?:^|\n)\s*(?:[-*]\s*)?\**PLAN_CHECK\**:\s*)[^\n]+/i, "$1OK"),
+  };
+}
+
 export async function researchDestination(
+  destination: string,
+  rawItinerary: string[],
+  apiKey: string,
+  model: string,
+  database?: BookletDatabase,
+) {
+  // Pasted plans are cleaned (no table pipes, markdown or emoji) before they
+  // reach the researcher or the cache key.
+  const itinerary = rawItinerary.map((plan) => cleanDailyPlan(plan));
+  const result = await researchCleanedItinerary(destination, itinerary, apiKey, model, database);
+  return withTravelDayPlanCheck(result, itinerary);
+}
+
+async function researchCleanedItinerary(
   destination: string,
   itinerary: string[],
   apiKey: string,
@@ -88,11 +125,15 @@ export async function researchDestination(
   }
 
   const plannedStops = itinerary.filter(Boolean);
+  const travelDays = itinerary.map((plan) => isTravelOnlyPlan(plan));
+  const travelNote = travelDays.some(Boolean)
+    ? `\n\nDays marked "travel day" hold only flights, transfers, hotel check-in or check-out, packing and hotel time. Their airlines, flight numbers, airports, hotels, transfers and meals are not planned stops to verify. For each travel day, note what a child can notice on that journey (the arrival or departure airport, what the landscape looks like on the way in) and, if a hotel is named, its immediate neighbourhood.`
+    : "";
 
   const researchInput = `Research this destination for a children's travel activity booklet: ${JSON.stringify(destination)}.
 
 The family's optional daily plans are:
-${plannedStops.length ? itinerary.map((plan, index) => `Day ${index + 1}: ${plan || "Open day"}`).join("\n") : "No fixed itinerary. Choose the strongest child-friendly local subjects."}
+${plannedStops.length ? itinerary.map((plan, index) => `Day ${index + 1}: ${travelDays[index] ? `travel day (${plan})` : plan || "Open day"}`).join("\n") : "No fixed itinerary. Choose the strongest child-friendly local subjects."}${travelNote}
 
 Return concise factual notes covering:
 - 8 to 12 specific, real landmarks, neighborhoods, museums, landscapes, or cultural touchpoints and why each matters
@@ -110,7 +151,7 @@ Return concise factual notes covering:
 Begin the brief with exactly two single-line checks:
 DESTINATION_CHECK: OK
 PLAN_CHECK: OK
-If the destination is probably misspelled or ambiguous, replace OK on the first line with a short suggested correction. If a planned stop cannot reasonably be found in or near the destination, replace OK on the second line with the day number and a short explanation. Never force an unrelated planned stop into the destination.
+If the destination is probably misspelled or ambiguous, replace OK on the first line with a short suggested correction. If a planned stop (a named attraction, museum, park, neighbourhood or other place to visit) cannot reasonably be found in or near the destination, replace OK on the second line with the day number and a short explanation. Never flag travel logistics (flights, airlines, airports, hotels, transfers, packing, meals, free time) on the second line. Never force an unrelated planned stop into the destination.
 
 Distinguish the destination from similarly named places. Do not invent legends, claim stereotypes as facts, or suggest photographing/interviewing people without permission.`;
   let result: ResearchResult | undefined;

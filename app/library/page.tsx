@@ -104,7 +104,7 @@ export default function LibraryPage() {
         </div>
       </header>
 
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}{/owner/i.test(error) ? <> <a href="/owner">Sign in as owner</a></> : null}</p> : null}
       {loading && !page ? (
         <p className="orders-empty"><LoaderCircle className="spin" size={18} /> Loading editions…</p>
       ) : null}

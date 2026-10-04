@@ -2,6 +2,7 @@
 // created edition (app/api/pdf), past purchasers' downloads, and the
 // owner's order and library downloads (app/api/orders, app/api/library).
 import { applySiblingPlan, type GeneratedBookletData } from "../generation/booklet-ai.ts";
+import { hasOwnerSession } from "../owner-session.ts";
 import {
   familyPackPdfFilename,
   createBookletPdf,
@@ -40,6 +41,7 @@ export type RuntimeEnvironment = PaymentRuntime & {
   DB?: BookletDatabase;
   CLAUDE_MODEL?: string;
   TRIPQUEST_OWNER_EMAIL?: string;
+  TRIPQUEST_OWNER_PASSCODE?: string;
 };
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
@@ -104,8 +106,11 @@ export function isLocalDevelopmentRequest(request: Request) {
 // The site owner: the signed-in email the hosting puts on each request
 // matches TRIPQUEST_OWNER_EMAIL. On the local dev server (no hosting
 // sign-in) whoever runs it is the owner.
+// The owner is local development, the hosting's signed-in owner email
+// (OpenAI Sites), or a browser signed in at /owner with the passcode.
 export function isOwnerRequest(request: Request, runtime: RuntimeEnvironment) {
   if (isLocalDevelopmentRequest(request)) return true;
+  if (hasOwnerSession(request, runtime)) return true;
   const owner = runtime.TRIPQUEST_OWNER_EMAIL?.trim().toLocaleLowerCase();
   const visitor = request.headers.get("oai-authenticated-user-email")?.trim().toLocaleLowerCase();
   return Boolean(owner && visitor && owner === visitor);

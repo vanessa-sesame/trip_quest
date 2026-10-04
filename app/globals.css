@@ -2106,3 +2106,14 @@ p {
     width: 100%;
   }
 }
+
+.owner-passcode {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}

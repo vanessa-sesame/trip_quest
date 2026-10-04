@@ -734,6 +734,16 @@ export default function Home() {
       : undefined,
     [generatedBooklet, children, structuredEvents],
   );
+  const defaultSingaporeSamplePdf =
+    !generatedBooklet &&
+    !partialPreview &&
+    destinationName.toLocaleLowerCase() === "singapore" &&
+    trip.age === 5 &&
+    trip.days === 5 &&
+    !itineraryText.trim() &&
+    structuredEvents.length === 0
+      ? "/samples/tripquest-singapore-age-5-preview.pdf"
+      : undefined;
 
   // The printable PDF and its sticker sheets are free for a created
   // booklet; the server renders the stored edition matching the preview.
@@ -1188,6 +1198,7 @@ export default function Home() {
                 page={currentPage}
                 zoom={previewZoom}
                 serverPdfRequest={exactPdfPreviewRequest}
+                staticPdfUrl={defaultSingaporeSamplePdf}
               />
             </div>
 

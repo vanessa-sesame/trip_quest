@@ -49,6 +49,16 @@ async function fetchServerPdf(request: ServerPdfRequest) {
   return pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
 }
 
+async function fetchStaticPdf(url: string) {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const response = await fetch(url, { headers: { Accept: "application/pdf" } });
+  if (!response.ok || !(response.headers.get("content-type") || "").includes("application/pdf")) {
+    throw new Error("The sample PDF could not be opened.");
+  }
+  return pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
+}
+
 export type ServerPdfRequest = {
   url: string;
   body: Record<string, unknown>;
@@ -61,6 +71,7 @@ export function PdfPreview({
   page,
   zoom,
   serverPdfRequest,
+  staticPdfUrl,
   onPageCount,
 }: {
   booklet: GeneratedBookletData;
@@ -73,6 +84,10 @@ export function PdfPreview({
   // download. Draft/sample previews still use the client renderer so the UI
   // can stay responsive before a stored edition exists.
   serverPdfRequest?: ServerPdfRequest;
+  // A real committed sample PDF, used only for the default Singapore
+  // first-screen preview. It avoids spending generation/rendering work before
+  // the parent asks for a custom edition.
+  staticPdfUrl?: string;
   onPageCount?: (count: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -82,9 +97,9 @@ export function PdfPreview({
   const [attempt, setAttempt] = useState(0);
   const [width, setWidth] = useState(0);
   const pdf = built?.pdf ?? null;
-  const latest = useRef({ booklet, familyPack, onPageCount, serverPdfRequest });
+  const latest = useRef({ booklet, familyPack, onPageCount, serverPdfRequest, staticPdfUrl });
   useEffect(() => {
-    latest.current = { booklet, familyPack, onPageCount, serverPdfRequest };
+    latest.current = { booklet, familyPack, onPageCount, serverPdfRequest, staticPdfUrl };
   });
 
   // Rebuild the PDF when the booklet changes (debounced: streaming days
@@ -95,6 +110,8 @@ export function PdfPreview({
     const timer = setTimeout(() => {
       const pdfPromise = latest.current.serverPdfRequest
         ? fetchServerPdf(latest.current.serverPdfRequest)
+        : latest.current.staticPdfUrl
+          ? fetchStaticPdf(latest.current.staticPdfUrl)
         : buildPdf(latest.current.booklet, latest.current.familyPack);
       pdfPromise
         .then((document) => {

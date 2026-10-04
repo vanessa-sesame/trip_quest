@@ -1,0 +1,23 @@
+{
+  "name": "tripquest",
+  "account_id": "2469216cd283395b3a65569a11aa20c8",
+  "d1": { "database_name": "tripquest-db", "database_id": "362adfd1-666c-420d-b598-76a289dc673f" },
+  "r2": { "bucket_name": "tripquest-files" },
+  "domains": ["tripquestkids.com", "www.tripquestkids.com"],
+  "vars": {
+    "TRIPQUEST_PUBLIC_URL": "https://tripquestkids.com",
+    "CLAUDE_MODEL": "claude-sonnet-5-5",
+    "CLOUDFLARE_AI_IMAGE_MODEL": "@cf/black-forest-labs/flux-1-schnell",
+    "TRIPQUEST_COST_MODE": "full",
+    "TRIPQUEST_IMAGE_BUDGET": "full",
+    "TRIPQUEST_MAX_AI_PAGE_IMAGES": "3"
+  },
+  "secrets": [
+    "ANTHROPIC_API_KEY",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_API_TOKEN",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "TRIPQUEST_OWNER_PASSCODE"
+  ]
+}

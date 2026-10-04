@@ -42,3 +42,6 @@ next-env.d.ts
 # generated PDFs, QA renders and archived builds
 /artifacts/
 *.tsbuildinfo
+
+# Local deploy bundles and scratch output
+/tmp/

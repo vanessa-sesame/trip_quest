@@ -176,7 +176,7 @@ async function shortlistPhotos(
     user: `The booklet page reveals "${subject.targetLabel}" at ${subject.place}, ${subject.destination}.
 targetPick: the id of a photo whose title, description or categories name this exact thing (in any language) at this place. A different feature of the same place (for example a dragon statue when the thing is a flower) does not count. 0 if none names it.
 targetEvidence: the one to four words, copied exactly from that photo's title, description or categories, that name the thing itself, such as "Turtle" or "tortuga" ("" when targetPick is 0).
-placePicks: up to three ids of photos that show ${subject.place} itself (the building, monument or site; not a view from it, not a different place, not graffiti, shops or people), best first. [] if none.
+placePicks: up to four ids of photos that show ${subject.place} itself (the building, monument or site; not a view from it, not a different place, not graffiti, shops or people), best first. [] if none.
 
 PHOTOS
 ${list}`,
@@ -193,7 +193,7 @@ ${list}`,
   });
 
   const byId = (id: number | undefined) => candidates.find((candidate) => candidate.id === id);
-  const places = (picked.placePicks ?? []).map(byId).filter((candidate): candidate is PhotoCandidate => Boolean(candidate)).slice(0, 3);
+  const places = (picked.placePicks ?? []).map(byId).filter((candidate): candidate is PhotoCandidate => Boolean(candidate)).slice(0, 4);
   const target = byId(picked.targetPick);
   // The quoted words must really be in that photo's caption and must not
   // just be the place's own name.
@@ -304,13 +304,15 @@ export async function findLandmarkPhoto(
   }
   if (!shortlist) return null;
   // Look at the shortlisted photos in order; the first that really shows
-  // the target (or else the place) wins. At most three looks per day.
+  // the target (or else the place) wins. At most five looks per day: the
+  // photo check is strict (no tiny, hidden or cluttered subjects), so
+  // fewer looks left most reveal pages without a photo.
   const checks: LandmarkPhoto[] = [
     ...(shortlist.target ? [{ candidate: shortlist.target, match: "target" as const }] : []),
     ...shortlist.places.map((candidate) => ({ candidate, match: "place" as const })),
   ];
   const placeLabel = placeName(subject.place);
-  for (const check of checks.slice(0, 3)) {
+  for (const check of checks.slice(0, 5)) {
     const description = check.match === "target"
       ? `${subject.targetLabel.toLocaleLowerCase()} at ${placeLabel}, ${subject.destination}`
       : `${placeLabel} in ${subject.destination} itself`;

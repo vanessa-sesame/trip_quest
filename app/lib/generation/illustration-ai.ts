@@ -1,4 +1,5 @@
 import type { DayPlan } from "../booklet/booklet.ts";
+import { isStoredArtworkKey } from "./artwork-path.ts";
 import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
 import { canGenerateImages, canReadCachedImages, maxAiPageImages, type CostRuntime } from "./cost-controls.ts";
@@ -366,7 +367,9 @@ export async function addCoverIllustration(
       // the prompt, so Claude looks at each attempt. If every attempt has
       // lettering or print flaws, use the designed no-photo cover instead.
       let png: Uint8Array | undefined;
-      for (let attempt = 1; attempt <= 3; attempt += 1) {
+      // Four tries: the check also rejects print flaws, so three often
+      // all failed and the booklet fell back to the drawn postcard.
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
         const candidate = await generateIllustrationPng(provider, prompt, "1536x1024");
         if (!await coverHasLettering(runtime, candidate)) {
           png = candidate;
@@ -417,7 +420,7 @@ export function illustrationStorageKey(path: string) {
     const url = new URL(path, "https://tripquest.invalid");
     if (url.pathname !== "/api/illustration") return null;
     const key = url.searchParams.get("key") || "";
-    return /^illustrations\/v(?:1|2|3)\/[a-f0-9]{64}\/artwork\.png$/i.test(key) ? key : null;
+    return isStoredArtworkKey(key) ? key : null;
   } catch {
     return null;
   }

@@ -5,6 +5,7 @@ import {
   normalizeItinerary,
   validateBookletDraft,
 } from "../generation/booklet-ai.ts";
+import { isStoredArtworkPath } from "../generation/artwork-path.ts";
 import {
   normalizeFamilyChildren,
   normalizeItineraryEvents,
@@ -345,8 +346,7 @@ export function parseStoredBooklet(value: string): GeneratedBookletData | null {
     // (see booklet-ai.ts) — without this, a re-read from durable storage
     // silently drops the AI-generated cover art, changing the booklet's
     // fingerprint and making every later /api/pdf call 409.
-    const coverIllustrationPath = typeof parsed.coverIllustrationPath === "string"
-      && /^\/api\/illustration\?key=illustrations%2Fv(?:1|2)%2F[a-f0-9]{64}%2Fartwork\.png$/i.test(parsed.coverIllustrationPath)
+    const coverIllustrationPath = isStoredArtworkPath(parsed.coverIllustrationPath)
       ? parsed.coverIllustrationPath
       : undefined;
 

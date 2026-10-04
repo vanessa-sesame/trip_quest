@@ -170,7 +170,9 @@ test("a reveal photo path survives re-validation and is actually embedded", asyn
     dayPlans[0].slots.inThePlaceSecond = { ...dayPlans[0].slots.inThePlaceSecond, gameType: "matching", items: fourItems };
   }
   dayPlans[0].activities = [dayPlans[0].slots.inThePlace, dayPlans[0].slots.sitDown];
-  const photoPath = `/api/illustration?key=${encodeURIComponent(`illustrations/v2/${"a".repeat(64)}/artwork.png`)}`;
+  // v3: the current reveal-photo storage version. An earlier bump to v3
+  // was served but not accepted on re-validation, so photos vanished.
+  const photoPath = `/api/illustration?key=${encodeURIComponent(`illustrations/v3/${"a".repeat(64)}/artwork.png`)}`;
   dayPlans[0].slots.questReveal = {
     ...dayPlans[0].slots.questReveal!,
     photoPath,

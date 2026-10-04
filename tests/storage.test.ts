@@ -623,3 +623,16 @@ test("a day number maps back to the exact batch that composed it", () => {
   assert.deepEqual(batchRangeForDay(14, 14), { offset: 13, dayCount: 1 });
 });
 
+
+test("every stored artwork version is both served and kept on re-validation", async () => {
+  const { isStoredArtworkKey, isStoredArtworkPath } = await import("../app/lib/generation/artwork-path.ts");
+  const { illustrationStorageKey } = await import("../app/lib/generation/illustration-ai.ts");
+  for (const version of ["v1", "v2", "v3"]) {
+    const key = `illustrations/${version}/${"b".repeat(64)}/artwork.png`;
+    const path = `/api/illustration?key=${encodeURIComponent(key)}`;
+    assert.equal(isStoredArtworkKey(key), true, version);
+    assert.equal(isStoredArtworkPath(path), true, version);
+    assert.equal(illustrationStorageKey(path), key, version);
+  }
+  assert.equal(isStoredArtworkPath("/api/illustration?key=illustrations%2Fv9%2Fx%2Fartwork.png"), false);
+});

@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { copyFile, readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { POST as generateBooklet } from "../app/api/generate/route.ts";
 import { readGenerationResponse } from "../app/lib/generation/stream.ts";
 import type { GeneratedBookletData } from "../app/lib/generation/booklet-ai.ts";
 import { createBookletPdf } from "../app/lib/pdf/booklet-pdf.ts";
@@ -14,6 +13,12 @@ const publicDirectory = new URL("../public/samples/", import.meta.url);
 const approvedCoverPath = "/illustrations/singapore-cover-line-art-v1.jpg";
 const approvedCoverSource = new URL(`../public${approvedCoverPath}`, import.meta.url);
 const renderExisting = process.argv.includes("--render-existing");
+// --via-server generates through a running dev server (npm run dev), which
+// has picture storage, so the reveal photos, page art and spot-the-
+// difference pictures are made and read back from it. Without it the
+// route runs in-process with no storage and those pictures are missing.
+const viaServer = process.argv.includes("--via-server");
+const serverUrl = process.env.TRIPQUEST_URL || "http://localhost:3000";
 
 mkdirSync(jsonDirectory, { recursive: true });
 mkdirSync(pdfDirectory, { recursive: true });
@@ -44,7 +49,22 @@ const legacyPublicPath = new URL("tripquest-singapore-age-5-preview.pdf", public
 let booklet: GeneratedBookletData;
 if (renderExisting) {
   booklet = JSON.parse(readFileSync(jsonPath, "utf8")) as GeneratedBookletData;
+} else if (viaServer) {
+  const response = await fetch(`${serverUrl}/api/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: serverUrl },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(payload.error || `Generation returned HTTP ${response.status}.`);
+  }
+  booklet = await readGenerationResponse(response, (message) => {
+    if (message) console.log(`[TripQuest homepage sample] ${message}`);
+  }) as GeneratedBookletData;
 } else {
+  // Loaded only here: the route's own imports need the app's bundler.
+  const { POST: generateBooklet } = await import("../app/api/generate/route.ts");
   const response = await generateBooklet(new Request("http://tripquest.local/api/generate", {
     method: "POST",
     headers: {
@@ -73,7 +93,7 @@ booklet.coverIllustrationPath = approvedCoverPath;
 const resolveAsset = async (path: string) => {
   if (!path.startsWith("/") || path.startsWith("//")) return null;
   if (path.startsWith("/api/illustration")) {
-    const response = await fetch(new URL(path, "https://tripquestkids.com"));
+    const response = await fetch(new URL(path, viaServer ? serverUrl : "https://tripquestkids.com"));
     if (!response.ok) throw new Error(`Could not load stored artwork (${response.status}).`);
     return new Uint8Array(await response.arrayBuffer());
   }

@@ -54,11 +54,13 @@ const pdf = await createBookletPdf(booklet);
 
 const jsonPath = new URL(`${caseName}.json`, jsonDirectory);
 const pdfPath = new URL(`${caseName}.pdf`, pdfDirectory);
-const publicPath = new URL("tripquest-singapore-age-5-preview.pdf", publicDirectory);
+const publicPath = new URL("tripquest-singapore-age-5-preview-20261004-m51.pdf", publicDirectory);
+const legacyPublicPath = new URL("tripquest-singapore-age-5-preview.pdf", publicDirectory);
 
 writeFileSync(jsonPath, `${JSON.stringify(booklet, null, 2)}\n`);
 writeFileSync(pdfPath, pdf);
 await copyFile(pdfPath, publicPath);
+await copyFile(pdfPath, legacyPublicPath);
 
 console.log(JSON.stringify({
   caseName,
@@ -67,4 +69,5 @@ console.log(JSON.stringify({
   json: jsonPath.pathname,
   pdf: pdfPath.pathname,
   publicPreview: publicPath.pathname,
+  legacyPublicPreview: legacyPublicPath.pathname,
 }, null, 2));

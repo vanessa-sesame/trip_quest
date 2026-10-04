@@ -742,7 +742,7 @@ export default function Home() {
     trip.days === 5 &&
     !itineraryText.trim() &&
     structuredEvents.length === 0
-      ? "/samples/tripquest-singapore-age-5-preview.pdf"
+      ? "/samples/tripquest-singapore-age-5-preview-20261004-m51.pdf"
       : undefined;
 
   // The printable PDF and its sticker sheets are free for a created

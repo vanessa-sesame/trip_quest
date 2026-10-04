@@ -21,7 +21,7 @@ import {
   assertSameOriginRequest,
   readJsonObject,
 } from "../../lib/request-security";
-import { purchaseProductFrom } from "../../lib/products";
+import { checkoutProductFrom } from "../../lib/products";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +61,15 @@ export async function POST(request: Request) {
     }
 
     const body = await readJsonObject(request, 32_768);
+    // The printable PDF is free (POST /api/pdf); only the mailed kit is sold.
+    const product = checkoutProductFrom(body.product);
+    if (!product) {
+      return response(
+        { error: "The printable PDF is free now: download it from the preview. Checkout is only for the mailed explorer kit." },
+        undefined,
+        400,
+      );
+    }
     const input = normalizePdfRequest(
       body,
       claudeModelFrom(runtime), claudeModelFrom(runtime),
@@ -93,7 +102,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const product = purchaseProductFrom(body.product);
     const familyId = readFamilyId(request) || crypto.randomUUID();
     const purchaseId = crypto.randomUUID();
     const session = await createCheckoutSession(runtime, request, {

@@ -41,6 +41,9 @@ test("server-renders the TripQuest generator", async () => {
   // offline generator (see app/page.tsx's generatedDays) rather than a
   // hardcoded static sample, so this checks real, current day-1 content.
   assert.match(html, /Hello, Destination!/i);
-  assert.match(html, /S\$0\.99/i);
+  // The PDF is free; the mailed kit is the one paid product.
+  assert.match(html, /Download free PDF/i);
+  assert.match(html, /Mail me the explorer kit · (?:<!-- -->)?S\$19\.90/i);
+  assert.doesNotMatch(html, /S\$0\.99|Unlock download/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });

@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { bookletArtifactKey } from "../app/lib/storage/booklet-storage.ts";
-import { readFileSync, readdirSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { PDFDocument } from "pdf-lib";
-import type { BookletDatabase } from "../app/lib/storage/booklet-storage.ts";
 import {
   createCheckoutSession,
   listKitOrders,
@@ -18,10 +15,11 @@ import {
   verifyStripeSignature,
   writePendingPurchase,
 } from "../app/lib/payment.ts";
-import { PRODUCTS } from "../app/lib/products.ts";
+import { PRODUCTS, checkoutProductFrom, purchaseProductFrom } from "../app/lib/products.ts";
 import { normalizeFamilyChildren } from "../app/lib/family.ts";
 import { createPackingSlipPdf, kitPackingList } from "../app/lib/pdf/packing-slip.ts";
-import { isOwnerRequest } from "../app/lib/pdf/serve.ts";
+import { isLocalDevelopmentRequest, isOwnerRequest } from "../app/lib/pdf/serve.ts";
+import { createMigratedDatabase } from "./helpers/storage.ts";
 
 test("Stripe webhook signatures accept a fresh HMAC and reject stale or altered payloads", async () => {
   const payload = JSON.stringify({ type: "checkout.session.completed" });
@@ -74,39 +72,7 @@ test("purchase requests preserve a validated edition artifact and fingerprint", 
   );
 });
 
-function createOrdersDatabase(): BookletDatabase {
-  const sqlite = new DatabaseSync(":memory:");
-  const migrationsDirectory = new URL("../drizzle/", import.meta.url);
-  for (const filename of readdirSync(migrationsDirectory).filter((name) => name.endsWith(".sql")).sort()) {
-    for (const statement of readFileSync(new URL(filename, migrationsDirectory), "utf8").split("--> statement-breakpoint")) {
-      if (statement.trim()) sqlite.exec(statement);
-    }
-  }
-  return {
-    prepare(query) {
-      const statement = sqlite.prepare(query);
-      let values: Array<string | number | null> = [];
-      const prepared = {
-        bind(...nextValues: Array<string | number | null>) {
-          values = nextValues;
-          return prepared;
-        },
-        async first<T>() {
-          return (statement.get(...values) ?? null) as T | null;
-        },
-        async run() {
-          return { meta: { changes: Number(statement.run(...values).changes) } };
-        },
-        async all<T>() {
-          return { results: statement.all(...values) as T[] };
-        },
-      };
-      return prepared;
-    },
-  };
-}
-
-async function checkoutForm(product: "kit" | "pdf") {
+async function checkoutForm(product?: "kit") {
   const originalFetch = globalThis.fetch;
   let body = "";
   globalThis.fetch = (async (_url: string, init?: RequestInit) => {
@@ -125,7 +91,7 @@ async function checkoutForm(product: "kit" | "pdf") {
   return new URLSearchParams(body);
 }
 
-test("a kit checkout collects a Singapore address and phone; a PDF checkout does not", async () => {
+test("checkout sells only the kit, collecting a Singapore address and phone", async () => {
   const kit = await checkoutForm("kit");
   assert.equal(kit.get("shipping_address_collection[allowed_countries][0]"), "SG");
   assert.equal(kit.get("phone_number_collection[enabled]"), "true");
@@ -135,22 +101,30 @@ test("a kit checkout collects a Singapore address and phone; a PDF checkout does
   assert.equal(kit.get("metadata[product]"), "kit");
   assert.match(kit.get("success_url") ?? "", /product=kit/);
 
-  const pdf = await checkoutForm("pdf");
-  assert.equal(pdf.get("shipping_address_collection[allowed_countries][0]"), null);
-  assert.equal(pdf.get("phone_number_collection[enabled]"), null);
-  assert.equal(pdf.get("line_items[0][price_data][unit_amount]"), "99");
+  const unnamed = await checkoutForm();
+  assert.equal(unnamed.get("metadata[product]"), "kit", "a session without a product is still the kit");
+  assert.equal(unnamed.get("shipping_address_collection[allowed_countries][0]"), "SG");
+});
+
+test("the PDF is no longer a product: a checkout for it is refused, old rows still read", () => {
+  assert.deepEqual(Object.keys(PRODUCTS), ["kit"]);
+  assert.equal(checkoutProductFrom("kit"), "kit");
+  assert.equal(checkoutProductFrom("pdf"), null);
+  assert.equal(checkoutProductFrom(undefined), null);
+  assert.equal(purchaseProductFrom("pdf"), "pdf", "purchases made before the PDF was free keep their product");
+  assert.equal(purchaseProductFrom(null), "pdf");
 });
 
 test("prices and currency come from one place, with env overrides", () => {
   assert.equal(paymentAmount({}, "kit"), 1990);
-  assert.equal(paymentAmount({}, "pdf"), 99);
+  assert.equal(paymentAmount({}), 1990);
   assert.equal(paymentAmount({ STRIPE_KIT_PRICE_CENTS: "2490" }, "kit"), 2490);
   assert.equal(paymentAmount({ STRIPE_KIT_PRICE_CENTS: "oops" }, "kit"), 1990);
   assert.equal(paymentCurrency({}), "sgd");
 });
 
 test("a paid kit keeps its shipping details and moves through the print queue", async () => {
-  const database = createOrdersDatabase();
+  const database = createMigratedDatabase();
   const purchaseId = "11111111-2222-3333-4444-555555555555";
   await writePendingPurchase(database, {
     purchaseId,
@@ -166,6 +140,7 @@ test("a paid kit keeps its shipping details and moves through the print queue", 
     familyId: "f".repeat(20),
     cacheKey: "cache-2",
     requestJson: "{}",
+    product: "pdf",
   }, 99, "sgd");
 
   const marked = await markPurchasePaidFromStripeSession(database, {
@@ -201,13 +176,33 @@ test("older Stripe sessions put shipping in shipping_details", () => {
   assert.equal(shippingFromStripeSession({ id: "cs_2" }), null);
 });
 
-test("only the owner's signed-in email may use the orders queue", () => {
+test("only the owner's signed-in email may use the orders queue and library", () => {
   const runtime = { TRIPQUEST_OWNER_EMAIL: "Owner@Example.com" };
-  const request = (email?: string) => new Request("https://tripquest.test/api/orders", { headers: email ? { "oai-authenticated-user-email": email } : {} });
+  const request = (email?: string, url = "https://tripquest.test/api/orders") => new Request(url, { headers: email ? { "oai-authenticated-user-email": email } : {} });
   assert.equal(isOwnerRequest(request("owner@example.com"), runtime), true);
   assert.equal(isOwnerRequest(request("someone@example.com"), runtime), false);
   assert.equal(isOwnerRequest(request(), runtime), false);
   assert.equal(isOwnerRequest(request("owner@example.com"), {}), false);
+  assert.equal(isOwnerRequest(request(undefined, "https://tripquestkids.com/api/library"), runtime), false);
+});
+
+test("the local dev server is the owner; a deployed host never is without the email", () => {
+  for (const url of ["http://localhost:3000/api/library", "http://127.0.0.1:3000/api/orders", "http://[::1]:3000/api/orders"]) {
+    assert.equal(isLocalDevelopmentRequest(new Request(url)), true, url);
+    assert.equal(isOwnerRequest(new Request(url), {}), true, url);
+  }
+  for (const url of [
+    "https://tripquestkids.com/api/library",
+    "https://localhost.tripquestkids.com/api/library",
+    "https://tripquestkids.com/api/library?host=localhost",
+    "https://127.0.0.1.nip.io/api/orders",
+  ]) {
+    assert.equal(isLocalDevelopmentRequest(new Request(url)), false, url);
+    assert.equal(isOwnerRequest(new Request(url), { TRIPQUEST_OWNER_EMAIL: "owner@example.com" }), false, url);
+  }
+  // A spoofed Host header does not change request.url.
+  const spoofed = new Request("https://tripquestkids.com/api/library", { headers: { Host: "localhost", "X-Forwarded-Host": "localhost" } });
+  assert.equal(isOwnerRequest(spoofed, {}), false);
 });
 
 test("a packing slip is one A5 page with the address label", async () => {

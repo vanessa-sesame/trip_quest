@@ -1,6 +1,7 @@
-// Serving the printable PDFs: the purchase-checked booklet and sticker
-// downloads (app/api/pdf) and the owner's order downloads (app/api/orders).
-import { applySiblingPlan } from "../generation/booklet-ai.ts";
+// Serving the printable PDFs: the free booklet and sticker downloads for a
+// created edition (app/api/pdf), past purchasers' downloads, and the
+// owner's order and library downloads (app/api/orders, app/api/library).
+import { applySiblingPlan, type GeneratedBookletData } from "../generation/booklet-ai.ts";
 import {
   familyPackPdfFilename,
   createBookletPdf,
@@ -38,7 +39,6 @@ export type RuntimeEnvironment = PaymentRuntime & {
   DB?: BookletDatabase;
   CLAUDE_MODEL?: string;
   TRIPQUEST_OWNER_EMAIL?: string;
-  TRIPQUEST_PDF_TEST_MODE?: string;
 };
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
@@ -82,14 +82,31 @@ export async function getRuntimeEnvironment(): Promise<RuntimeEnvironment> {
     return process.env as RuntimeEnvironment;
   }
 }
+const LOCAL_DEVELOPMENT_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+// True for the local dev server (vinext dev on localhost). A deployed
+// Worker only receives requests whose URL carries the public hostname:
+// Cloudflare routes by that hostname, so a request naming "localhost"
+// never reaches this Worker in production. The same-origin check on every
+// POST (assertSameOriginRequest) already depends on request.url holding
+// the browser's real origin, so production checkout and generation would
+// fail if it did not.
+export function isLocalDevelopmentRequest(request: Request) {
+  try {
+    return LOCAL_DEVELOPMENT_HOSTS.has(new URL(request.url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+// The site owner: the signed-in email the hosting puts on each request
+// matches TRIPQUEST_OWNER_EMAIL. On the local dev server (no hosting
+// sign-in) whoever runs it is the owner.
 export function isOwnerRequest(request: Request, runtime: RuntimeEnvironment) {
+  if (isLocalDevelopmentRequest(request)) return true;
   const owner = runtime.TRIPQUEST_OWNER_EMAIL?.trim().toLocaleLowerCase();
   const visitor = request.headers.get("oai-authenticated-user-email")?.trim().toLocaleLowerCase();
   return Boolean(owner && visitor && owner === visitor);
-}
-
-export function canPreparePdf(request: Request, runtime: RuntimeEnvironment) {
-  return isOwnerRequest(request, runtime) || runtime.TRIPQUEST_PDF_TEST_MODE === "true";
 }
 
 export function pdfResponse(
@@ -114,11 +131,10 @@ export function pdfResponse(
   });
 }
 
+// The default names ("Your child", "Explorer 2", "Sibling 2") all print as
+// "Explorer N", so only a real name makes a PDF personal (and uncacheable).
 function hasPersonalFamilyNames(input: NormalizedPdfRequest) {
-  return input.family.some((child, index) => {
-    const fallback = index === 0 ? "Your child" : `Explorer ${index + 1}`;
-    return familyChildDisplayName(child, index) !== fallback;
-  });
+  return input.family.some((child, index) => familyChildDisplayName(child, index) !== `Explorer ${index + 1}`);
 }
 
 export async function preparePdf(
@@ -183,6 +199,58 @@ export async function preparePdf(
       { status: 409 },
     );
   }
+  return renderEditionPdf(request, runtime, {
+    booklet: storedBooklet,
+    editionFingerprint,
+    cacheKey,
+    input,
+    purchase,
+    kind,
+  });
+}
+
+// The free download (POST /api/pdf). No purchase is needed, but the request
+// must name the exact edition shown in the preview, and that edition must
+// already be stored for this trip: this renders a booklet that exists and
+// never generates one.
+export async function prepareFreePdf(
+  request: Request,
+  runtime: RuntimeEnvironment,
+  input: NormalizedPdfRequest,
+  body: Record<string, unknown>,
+) {
+  const requestedFingerprint = typeof body.editionFingerprint === "string"
+    ? body.editionFingerprint.trim().toLocaleLowerCase()
+    : "";
+  if (!/^[a-f0-9]{64}$/.test(requestedFingerprint)) {
+    return Response.json(
+      { error: "Create this custom booklet again so the PDF can be matched to the exact preview edition." },
+      { status: 409 },
+    );
+  }
+  return preparePdf(request, runtime, input, null, requestedFingerprint, pdfKindFrom(body.kind));
+}
+
+export type EditionPdfInput = {
+  booklet: GeneratedBookletData;
+  editionFingerprint: string;
+  cacheKey: string;
+  input: NormalizedPdfRequest;
+  purchase: PurchaseRecord | null;
+  kind: PdfKind;
+};
+
+// Renders an already-verified edition: sticker sheets, or the booklet from
+// the durable PDF cache when it carries no family names (otherwise it is
+// rendered per request, and kept per purchase for a paid one).
+export async function renderEditionPdf(
+  request: Request,
+  runtime: RuntimeEnvironment,
+  { booklet: storedBooklet, editionFingerprint, cacheKey, input, purchase, kind }: EditionPdfInput,
+) {
+  if (!runtime.DB || !runtime.BOOKLET_FILES) {
+    return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
+  }
   const personalizedBooklet = applySiblingPlan(storedBooklet, input.family);
   const resolveStaticAsset = staticAssetResolver(request, runtime);
   if (kind === "stickers") {
@@ -201,7 +269,7 @@ export async function preparePdf(
     if (stored) return pdfResponse(stored.bytes, filename, "durable", editionFingerprint);
   }
 
-  const jobKey = `${purchase?.purchaseId || "test"}:${cacheKey}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
+  const jobKey = `${purchase?.purchaseId || "free"}:${cacheKey}:${editionFingerprint}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
   let job = pdfJobs.get(jobKey);
   if (!job) {
     const familyPack: FamilyPackContext = familyPackFor(input.family, input.events, input.days);

@@ -3,7 +3,10 @@ import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { bookletDayPageEntries, type DayPageEntry } from "./pages.ts";
 
 export const FREE_PREVIEW_PAGE_COUNT = 3;
-export const FULL_PREVIEW_FOR_TESTERS = true;
+// The printable PDF is free, so the preview shows every page of the
+// edition. The page-locking below stays available (and tested) in case a
+// paid tier ever needs a teaser again.
+export const FULL_PREVIEW = true;
 
 const lockedItems = [
   { label: "Locked", clue: "Included in the printable booklet." },
@@ -39,14 +42,14 @@ function lockedQuestReveal(
 
 export function isBookletPageLocked(
   pageIndex: number,
-  fullPreview = FULL_PREVIEW_FOR_TESTERS,
+  fullPreview = FULL_PREVIEW,
 ) {
   return !fullPreview && pageIndex >= FREE_PREVIEW_PAGE_COUNT;
 }
 
 export function createBookletPreview(
   booklet: GeneratedBookletData,
-  fullPreview = FULL_PREVIEW_FOR_TESTERS,
+  fullPreview = FULL_PREVIEW,
 ): GeneratedBookletData {
   if (fullPreview) return booklet;
 

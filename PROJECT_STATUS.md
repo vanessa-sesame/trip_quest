@@ -132,16 +132,21 @@ Current public release: https://tripquestkids.com, source branch `main`.
 The paid flow is connected in Stripe sandbox mode and must be moved to live
 Stripe credentials before charging customers:
 
-- `FULL_PREVIEW_FOR_TESTERS` is temporarily `true` in `app/lib/booklet/preview.ts`;
-  testers can inspect the complete generated edition before purchase. Restore
-  the three-page paywall before a public paid launch.
-- Hosted `TRIPQUEST_PDF_TEST_MODE` is `false`; the customer PDF button no longer
-  falls back to a free download when checkout is unavailable.
-- Stripe Checkout, signed webhooks, D1 purchase entitlements, and paid PDF
-  delivery are connected with test credentials. Test transactions do not move
-  real money.
-- Going live still requires a live Stripe product/price, live restricted secret
-  key, and live webhook signing secret in production.
+- The printable PDF and its sticker sheets are free: `POST /api/pdf` renders
+  any stored edition whose fingerprint matches the preview, with no purchase.
+  The preview shows every page (`FULL_PREVIEW` in `app/lib/booklet/preview.ts`).
+  `TRIPQUEST_PDF_TEST_MODE` is no longer read.
+- The mailed explorer kit (S$19.90, Singapore delivery) is the only paid
+  product. Stripe Checkout (address + phone), signed webhooks, D1 purchase
+  entitlements and the owner's `/orders` queue are connected with test
+  credentials. Test transactions do not move real money. Past PDF purchasers
+  still download through `GET /api/pdf?session_id=…`.
+- `/library` (owner only) lists every generated edition with its booklet PDF,
+  sticker sheets and a sample packing slip. Owner = `TRIPQUEST_OWNER_EMAIL`
+  matching the hosting's signed-in email, or any request to the local dev
+  server (localhost / 127.0.0.1).
+- Going live still requires a live Stripe kit price (or `STRIPE_KIT_PRICE_CENTS`),
+  live restricted secret key, and live webhook signing secret in production.
 - There is no native iOS application yet. The current product is a responsive
   web application that can later support an iOS client.
 

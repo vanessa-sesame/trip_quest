@@ -1,65 +1,36 @@
 import {
   readFamilyId,
   readVerifiedPaidPurchase,
-  type PurchaseRecord,
 } from "../../lib/payment";
 import { claudeModelFrom } from "../../lib/generation/claude";
-import { normalizePdfRequest, type NormalizedPdfRequest } from "../../lib/pdf/request";
+import { normalizePdfRequest } from "../../lib/pdf/request";
 import {
-  canPreparePdf,
   errorResponse,
   getRuntimeEnvironment,
   pdfKindFrom,
+  prepareFreePdf,
   preparePdf,
-  type RuntimeEnvironment,
 } from "../../lib/pdf/serve";
 import { assertSameOriginRequest, readJsonObject } from "../../lib/request-security";
-import { createBookletCacheKey } from "../../lib/storage/booklet-storage";
 
 export const dynamic = "force-dynamic";
 
-async function paidPurchaseForRequest(
-  request: Request,
-  runtime: RuntimeEnvironment,
-  sessionId: string,
-  input: NormalizedPdfRequest,
-) {
-  if (!runtime.DB || !runtime.STRIPE_SECRET_KEY) return null;
-  const familyId = readFamilyId(request);
-  if (!familyId) return null;
-  const purchase = await readVerifiedPaidPurchase(runtime, runtime.DB, sessionId, familyId);
-  if (!purchase) return null;
-  const cacheKey = await createBookletCacheKey(input.identity);
-  return purchase.cacheKey === cacheKey ? purchase : null;
-}
-
+// The printable PDF is free: anyone who created a booklet may download its
+// booklet PDF and sticker sheets (see prepareFreePdf for the edition check).
 export async function POST(request: Request) {
   try {
     assertSameOriginRequest(request);
     const runtime = await getRuntimeEnvironment();
     const body = await readJsonObject(request, 32_768);
     const input = normalizePdfRequest(body, claudeModelFrom(runtime), claudeModelFrom(runtime));
-    let purchase: PurchaseRecord | null = null;
-    if (!canPreparePdf(request, runtime)) {
-      const sessionId = typeof body.checkoutSessionId === "string" ? body.checkoutSessionId.trim() : "";
-      purchase = await paidPurchaseForRequest(request, runtime, sessionId, input);
-      if (!purchase) return Response.json({ error: "A completed purchase is required before downloading this PDF." }, { status: 402 });
-    }
-    const requestedFingerprint = typeof body.editionFingerprint === "string"
-      ? body.editionFingerprint.trim().toLocaleLowerCase()
-      : "";
-    if (!/^[a-f0-9]{64}$/.test(requestedFingerprint)) {
-      return Response.json(
-        { error: "Create this custom booklet again so the PDF can be matched to the exact preview edition." },
-        { status: 409 },
-      );
-    }
-    return preparePdf(request, runtime, input, purchase, requestedFingerprint, pdfKindFrom(body.kind));
+    return prepareFreePdf(request, runtime, input, body);
   } catch (error) {
     return errorResponse(error);
   }
 }
 
+// Past purchasers (and kit buyers returning from Stripe) download the exact
+// edition their checkout preserved.
 export async function GET(request: Request) {
   try {
     const runtime = await getRuntimeEnvironment();

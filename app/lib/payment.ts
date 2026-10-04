@@ -7,6 +7,7 @@ import {
   PRODUCTS,
   fulfilmentStatusFrom,
   purchaseProductFrom,
+  type CheckoutProduct,
   type FulfilmentStatus,
   type PurchaseProduct,
 } from "./products.ts";
@@ -14,8 +15,6 @@ import {
 export type PaymentRuntime = {
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
-  STRIPE_PRICE_ID?: string;
-  STRIPE_PRICE_CENTS?: string;
   STRIPE_KIT_PRICE_ID?: string;
   STRIPE_KIT_PRICE_CENTS?: string;
   STRIPE_CURRENCY?: string;
@@ -106,9 +105,9 @@ export function paymentIsConfigured(runtime: PaymentRuntime) {
   return Boolean(secret(runtime));
 }
 
-export function paymentAmount(runtime: PaymentRuntime, product: PurchaseProduct = "pdf") {
-  const configured = product === "kit" ? runtime.STRIPE_KIT_PRICE_CENTS : runtime.STRIPE_PRICE_CENTS;
-  const amount = Number(configured || PRODUCTS[product].defaultCents);
+// The kit is the only thing checkout sells (the PDF is free).
+export function paymentAmount(runtime: PaymentRuntime, product: CheckoutProduct = "kit") {
+  const amount = Number(runtime.STRIPE_KIT_PRICE_CENTS || PRODUCTS[product].defaultCents);
   return Number.isInteger(amount) && amount > 0 ? amount : PRODUCTS[product].defaultCents;
 }
 
@@ -141,16 +140,16 @@ async function stripeRequest<T>(runtime: PaymentRuntime, path: string, init: Req
 export async function createCheckoutSession(
   runtime: PaymentRuntime,
   request: Request,
-  input: { purchaseId: string; cacheKey: string; familyId: string; edition: PurchaseEdition; product?: PurchaseProduct },
+  input: { purchaseId: string; cacheKey: string; familyId: string; edition: PurchaseEdition; product?: CheckoutProduct },
 ) {
   if (!paymentIsConfigured(runtime)) {
     throw new Error("Secure payment is not connected yet. Add the Stripe keys before accepting purchases.");
   }
-  const product = input.product ?? "pdf";
+  const product = input.product ?? "kit";
   const form = new URLSearchParams();
   form.set("mode", "payment");
   form.set("line_items[0][quantity]", "1");
-  const priceId = (product === "kit" ? runtime.STRIPE_KIT_PRICE_ID : runtime.STRIPE_PRICE_ID)?.trim();
+  const priceId = runtime.STRIPE_KIT_PRICE_ID?.trim();
   if (priceId) {
     form.set("line_items[0][price]", priceId);
   } else {
@@ -158,12 +157,10 @@ export async function createCheckoutSession(
     form.set("line_items[0][price_data][unit_amount]", String(paymentAmount(runtime, product)));
     form.set("line_items[0][price_data][product_data][name]", PRODUCTS[product].name);
   }
-  if (product === "kit") {
-    // Kits are posted within Singapore; Stripe collects the address and a
-    // phone number for the courier.
-    form.set("shipping_address_collection[allowed_countries][0]", "SG");
-    form.set("phone_number_collection[enabled]", "true");
-  }
+  // Kits are posted within Singapore; Stripe collects the address and a
+  // phone number for the courier.
+  form.set("shipping_address_collection[allowed_countries][0]", "SG");
+  form.set("phone_number_collection[enabled]", "true");
   form.set("success_url", `${publicUrl(runtime, request)}/?checkout=success&product=${product}&session_id={CHECKOUT_SESSION_ID}`);
   form.set("cancel_url", `${publicUrl(runtime, request)}/?checkout=cancelled`);
   form.set("client_reference_id", input.purchaseId);
@@ -311,7 +308,7 @@ function stripeMetadataMatchesPurchase(session: StripeSession, purchase: Purchas
 
 export async function writePendingPurchase(
   database: BookletDatabase,
-  input: Omit<PurchaseRecord, "status" | "pdfKey" | "edition" | "product" | "shipping" | "fulfilmentStatus"> & { product?: PurchaseProduct },
+  input: Omit<PurchaseRecord, "status" | "pdfKey" | "edition" | "product" | "shipping" | "fulfilmentStatus"> & { product: PurchaseProduct },
   amountCents: number,
   currencyCode: string,
 ) {
@@ -319,7 +316,7 @@ export async function writePendingPurchase(
   await database.prepare(`INSERT INTO purchase_entitlements
     (purchase_id, checkout_session_id, family_id, cache_key, request_json, status, amount_cents, currency, pdf_key, product, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NULL, ?, ?, ?)`)
-    .bind(input.purchaseId, input.checkoutSessionId, input.familyId, input.cacheKey, input.requestJson, amountCents, currencyCode, input.product ?? "pdf", now, now)
+    .bind(input.purchaseId, input.checkoutSessionId, input.familyId, input.cacheKey, input.requestJson, amountCents, currencyCode, input.product, now, now)
     .run();
 }
 

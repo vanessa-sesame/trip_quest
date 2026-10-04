@@ -14,7 +14,7 @@
     "pdf:sample": "node --experimental-strip-types scripts/create-pdf-sample.ts",
     "illustrations:generate-library": "node --experimental-strip-types --env-file=.env.local scripts/generate-coloring-library.ts",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --experimental-strip-types --test tests/booklet.test.ts tests/booklet-qa.test.ts tests/booklet-preview.test.ts tests/storage.test.ts tests/request-security.test.ts tests/generation-stream.test.ts tests/illustration-performance.test.ts tests/illustration-provider.test.ts tests/grounding.test.ts tests/landmark-photo.test.ts tests/compose.test.ts tests/spot-difference.test.ts tests/pdf.test.ts tests/pdf-layout.test.ts tests/stickers.test.ts tests/family.test.ts tests/payment.test.ts tests/coloring.test.ts tests/rendered-html.test.mjs",
+    "test": "npm run build && node --experimental-strip-types --test tests/booklet.test.ts tests/booklet-qa.test.ts tests/booklet-preview.test.ts tests/storage.test.ts tests/request-security.test.ts tests/generation-stream.test.ts tests/illustration-performance.test.ts tests/illustration-provider.test.ts tests/grounding.test.ts tests/landmark-photo.test.ts tests/compose.test.ts tests/spot-difference.test.ts tests/pdf.test.ts tests/pdf-layout.test.ts tests/stickers.test.ts tests/family.test.ts tests/payment.test.ts tests/library.test.ts tests/coloring.test.ts tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   MapPin,
+  Package,
   Maximize2,
   Minus,
   Plus,
@@ -43,16 +44,14 @@ import {
   readGenerationResponse,
 } from "./lib/generation/stream";
 import {
-  FULL_PREVIEW_FOR_TESTERS,
-  isBookletPageLocked,
-} from "./lib/booklet/preview";
-import {
+  capAtWordBoundary,
   defaultFamilyWorkspace,
   eventsToDailyPlans,
   eventTypeLabel,
   familyPackFor,
   familyChildDisplayName,
   mechanicLabel,
+  mergeDailyPlans,
   normalizeFamilyChildren,
   parseFamilyTags,
   parseItineraryText,
@@ -62,6 +61,8 @@ import {
   type ItineraryEvent,
 } from "./lib/family";
 import { KIT_CONTENTS, KIT_SHIPS_WITHIN_DAYS, PRODUCTS, purchaseProductFrom, type PurchaseProduct } from "./lib/products";
+
+type FreePdfKind = "booklet" | "stickers";
 
 type Trip = {
   age: number;
@@ -129,7 +130,9 @@ function checkoutContext() {
     state: "preparing" as PaidDownloadState,
     sessionId,
     pdfUrl: `/api/pdf?session_id=${encodeURIComponent(sessionId)}`,
-    note: product === "kit" ? `Payment received. ${kitShippingNote()} Preparing your PDF…` : "Payment received. Preparing your PDF…",
+    note: product === "kit"
+      ? `Payment received. ${kitShippingNote()} Preparing your free PDF and sticker sheets…`
+      : "Payment received. Preparing your PDF…",
     product,
   };
 }
@@ -207,7 +210,15 @@ function isConnectionIssue(error: unknown) {
 }
 
 export default function Home() {
-  const initialCheckout = checkoutContext();
+  // A return from Stripe is read after hydration (the server never sees the
+  // query), so the first client render matches the server's HTML.
+  const [checkoutReturn, setCheckoutReturn] = useState<ReturnType<typeof checkoutContext>>(() => ({
+    state: "idle",
+    sessionId: "",
+    pdfUrl: "",
+    note: "",
+    product: "pdf",
+  }));
   const [age, setAge] = useState(5);
   const [destination, setDestination] = useState("Singapore");
   const [days, setDays] = useState(5);
@@ -221,14 +232,22 @@ export default function Home() {
   const [page, setPage] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [checkoutNote, setCheckoutNote] = useState(initialCheckout.note);
+  const [checkoutNote, setCheckoutNote] = useState("");
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
-  const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>(initialCheckout.state);
-  const [paidPdfUrl] = useState(initialCheckout.pdfUrl);
-  const [paidProduct] = useState(initialCheckout.product);
-  const [checkoutProduct, setCheckoutProduct] = useState<PurchaseProduct>("kit");
+  const [freePdfState, setFreePdfState] = useState<"idle" | FreePdfKind>("idle");
+  const [freePdfNote, setFreePdfNote] = useState("");
+  const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>("idle");
+  const { pdfUrl: paidPdfUrl, product: paidProduct, sessionId: checkoutSessionId } = checkoutReturn;
   const [paidPdfObjectUrl, setPaidPdfObjectUrl] = useState("");
-  const [checkoutSessionId] = useState(initialCheckout.sessionId);
+  useEffect(() => {
+    const context = checkoutContext();
+    if (context.state === "idle" && !context.note) return;
+    // Reading the Stripe return once on mount is this effect's whole job.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCheckoutReturn(context);
+    setCheckoutNote(context.note);
+    setPaidDownloadState(context.state);
+  }, []);
   const autoDownloadAttempted = useRef(false);
   const generationInFlight = useRef(false);
   const resumeAttempted = useRef(false);
@@ -312,10 +331,12 @@ export default function Home() {
             setPaidDownloadState("ready");
             setCheckoutNote(
               paidProduct === "kit"
-                ? `Payment received. ${kitShippingNote()} Your PDF is ready too, and the sticker sheets are below.`
+                ? `Payment received. ${kitShippingNote()} The printable PDF and sticker sheets are free to download below while you wait.`
                 : "Payment received. Your PDF is ready. If it does not download automatically, use the button below.",
             );
-            if (!autoDownloadAttempted.current) {
+            // A kit buyer paid for the post, not the file: offer the free
+            // PDF without pushing a download at them.
+            if (paidProduct !== "kit" && !autoDownloadAttempted.current) {
               autoDownloadAttempted.current = true;
               window.setTimeout(() => {
                 if (!active) return;
@@ -424,15 +445,9 @@ export default function Home() {
       return ["Cover"];
     }
   }, [previewBooklet]);
-  const outlineItems = generatedDays.map((day) => day.theme).map((title, index) => ({
-    title:
-      !FULL_PREVIEW_FOR_TESTERS && index > 0
-        ? "Included in full booklet"
-        : title,
-    locked: !FULL_PREVIEW_FOR_TESTERS && index > 0,
-  }));
+  // The PDF is free, so every page and day of the edition is shown.
+  const outlineItems = generatedDays.map((day) => ({ title: day.theme }));
   const currentPage = clampPage(page, reportPageTitles.length);
-  const currentPageLocked = isBookletPageLocked(currentPage);
   const leadChild = children[0] || defaultFamilyWorkspace().children[0];
   const familyInterests = [...new Set(editionChildren.flatMap((child) => child.interests))];
 
@@ -647,10 +662,9 @@ export default function Home() {
       age: sanitizeAge(age),
       destination: destination.trim(),
       days: sanitizeDays(days),
-      itinerary: itinerary.slice(0, sanitizeDays(days)).map((plan, index) => {
-        const imported = eventsToDailyPlans(structuredEvents, sanitizeDays(days))[index];
-        return [plan.trim(), imported].filter(Boolean).join("; ").slice(0, 140);
-      }),
+      // An import already wrote its plans into the day fields (which the
+      // family may have edited since), so they are not appended again.
+      itinerary: itinerary.slice(0, sanitizeDays(days)).map((plan) => capAtWordBoundary(plan, 140)),
       family: children,
       events: structuredEvents,
     };
@@ -701,10 +715,65 @@ export default function Home() {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [generatedBooklet, runGeneration]);
 
-  async function handlePdfDownload() {
+  // The exact edition in the preview, as /api/pdf and /api/checkout read it.
+  function editionRequest(booklet: GeneratedBookletData) {
+    return {
+      age: booklet.age,
+      days: booklet.days,
+      destination: booklet.destination,
+      itinerary: booklet.itinerary,
+      family: booklet.family || children,
+      events: booklet.events || structuredEvents,
+      editionFingerprint: booklet.editionFingerprint,
+    };
+  }
+
+  // The printable PDF and its sticker sheets are free for a created
+  // booklet; the server renders the stored edition matching the preview.
+  async function downloadFreePdf(kind: FreePdfKind) {
+    if (!generatedBooklet?.editionFingerprint) {
+      setFreePdfNote("Create a custom booklet above first. Its PDF and sticker sheets are then free to download.");
+      return;
+    }
+    setFreePdfState(kind);
+    setFreePdfNote(kind === "booklet" ? "Preparing your free booklet PDF…" : "Preparing your free sticker sheets…");
+    try {
+      const response = await fetch("/api/pdf", {
+        method: "POST",
+        headers: { Accept: "application/pdf", "Content-Type": "application/json" },
+        body: JSON.stringify({ ...editionRequest(generatedBooklet), kind }),
+      });
+      if (!response.ok || !(response.headers.get("content-type") || "").includes("application/pdf")) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "The PDF could not be prepared. Please try again.");
+      }
+      const filename = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") || "")?.[1]
+        || (kind === "stickers" ? "TripQuest-stickers.pdf" : "TripQuest-booklet.pdf");
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      setFreePdfNote(
+        kind === "booklet"
+          ? "Your booklet PDF is downloading. Print it at home, as many copies as you like."
+          : "Your sticker sheets are downloading. Print them on A5 sticker paper at 100% scale.",
+      );
+    } catch (error) {
+      setFreePdfNote(error instanceof Error ? error.message : "The PDF could not be prepared. Please try again.");
+    } finally {
+      setFreePdfState("idle");
+    }
+  }
+
+  async function handleKitCheckout() {
     if (!generatedBooklet) {
       setCheckoutNote(
-        "Create a custom AI booklet above before preparing its PDF. No charge was made.",
+        "Create a custom booklet above first, so we print and post exactly that edition. No charge was made.",
       );
       return;
     }
@@ -712,16 +781,7 @@ export default function Home() {
     setPdfState("generating");
     setCheckoutNote("Opening secure checkout…");
     try {
-      const requestPayload = JSON.stringify({
-        age: generatedBooklet.age,
-        days: generatedBooklet.days,
-        destination: generatedBooklet.destination,
-        itinerary: generatedBooklet.itinerary,
-        family: generatedBooklet.family || children,
-        events: generatedBooklet.events || structuredEvents,
-        editionFingerprint: generatedBooklet.editionFingerprint,
-        product: checkoutProduct,
-      });
+      const requestPayload = JSON.stringify({ ...editionRequest(generatedBooklet), product: "kit" });
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Accept": "application/json", "Content-Type": "application/json" },
@@ -773,31 +833,37 @@ export default function Home() {
       {paidDownloadState !== "idle" ? (
         <section className={`payment-result payment-result-${paidDownloadState}`} role="status" aria-live="polite">
           <div className="payment-result-copy">
-            <p className="eyebrow">Printable keepsake</p>
+            <p className="eyebrow">{paidProduct === "kit" ? "Explorer kit ordered" : "Printable keepsake"}</p>
             <h2>
-              {paidDownloadState === "preparing"
-                ? "Your payment went through."
-                : paidDownloadState === "ready"
-                  ? "Your booklet is ready."
-                  : "Your payment is safe."
+              {paidDownloadState === "error"
+                ? "Your payment is safe."
+                : paidProduct === "kit"
+                  ? "Your explorer kit is on its way."
+                  : paidDownloadState === "ready"
+                    ? "Your booklet is ready."
+                    : "Your payment went through."
               }
             </h2>
             <p>{checkoutNote}</p>
           </div>
-          {checkoutSessionId && paidPdfUrl && paidDownloadState !== "preparing" ? (
-            <a className="unlock-button paid-download-link" href={paidPdfObjectUrl || paidPdfUrl} download="TripQuest-booklet.pdf">
-              <Download size={18} />
-              {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
-            </a>
-          ) : (
-            <LoaderCircle className="payment-result-loader spin" size={24} aria-label="Preparing PDF" />
-          )}
-          {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
-            <a className="paid-extra-link" href={`${paidPdfUrl}&kind=stickers`} download="TripQuest-stickers.pdf">
-              <Download size={15} />
-              {paidProduct === "kit" ? "Spare sticker sheets (PDF)" : "Sticker sheets: print on A5 sticker paper"}
-            </a>
-          ) : null}
+          <div className="payment-result-actions">
+            {checkoutSessionId && paidPdfUrl && paidDownloadState !== "preparing" ? (
+              <a className="unlock-button paid-download-link" href={paidPdfObjectUrl || paidPdfUrl} download="TripQuest-booklet.pdf">
+                <Download size={18} />
+                {paidDownloadState !== "ready"
+                  ? "Try download again"
+                  : paidProduct === "kit" ? "Download free PDF" : "Download your PDF"}
+              </a>
+            ) : (
+              <LoaderCircle className="payment-result-loader spin" size={24} aria-label="Preparing PDF" />
+            )}
+            {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
+              <a className="paid-extra-link" href={`${paidPdfUrl}&kind=stickers`} download="TripQuest-stickers.pdf">
+                <Download size={15} />
+                Sticker sheets PDF: print on A5 sticker paper
+              </a>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -970,7 +1036,7 @@ export default function Home() {
                         setStructuredEvents(events);
                         const importedPlans = eventsToDailyPlans(events, days);
                         setItinerary((current) => Array.from({ length: 14 }, (_, index) =>
-                          [current[index] || "", importedPlans[index] || ""].filter(Boolean).join("; ").slice(0, 140),
+                          mergeDailyPlans(current[index] || "", importedPlans[index] || ""),
                         ));
                       }}
                     >
@@ -1102,24 +1168,13 @@ export default function Home() {
             </button>
 
             <div className={`paper-frame${previewZoom > 1 ? " zoomed" : ""}`}>
-              {currentPageLocked ? (
-                <LockedPreviewPage
-                  key={`locked-${currentPage}`}
-                  pageNumber={currentPage + 1}
-                  onUnlock={() => {
-                    setCheckoutNote("");
-                    setCheckoutOpen(true);
-                  }}
-                />
-              ) : (
-                <PdfPreview
-                  booklet={previewBooklet}
-                  familyPack={previewFamilyPack}
-                  documentKey={previewKey}
-                  page={currentPage}
-                  zoom={previewZoom}
-                />
-              )}
+              <PdfPreview
+                booklet={previewBooklet}
+                familyPack={previewFamilyPack}
+                documentKey={previewKey}
+                page={currentPage}
+                zoom={previewZoom}
+              />
             </div>
 
             <button
@@ -1134,9 +1189,7 @@ export default function Home() {
           </div>
 
           <div className="page-status">
-            <strong>
-              {currentPageLocked ? "Locked printable page" : reportPageTitles[currentPage]}
-            </strong>
+            <strong>{reportPageTitles[currentPage]}</strong>
             <span>
               {currentPage + 1} / {reportPageTitles.length}
             </span>
@@ -1167,52 +1220,61 @@ export default function Home() {
           </div>
 
           <div className="thumbnail-strip" aria-label="Booklet pages">
-            {reportPageTitles.map((pageTitle, index) => {
-              const locked = isBookletPageLocked(index);
-              return (
-                <button
-                  className={`thumbnail${index === currentPage ? " active" : ""}${locked ? " locked" : ""}`}
-                  key={`${pageTitle}-${index}`}
-                  type="button"
-                  aria-label={locked ? `Open locked page ${index + 1}` : `Open ${pageTitle}`}
-                  aria-current={index === currentPage ? "page" : undefined}
-                  onClick={() => setPage(index)}
-                >
-                  <span>{index + 1}</span>
-                  {locked ? <LockKeyhole size={12} aria-hidden="true" /> : null}
-                </button>
-              );
-            })}
+            {reportPageTitles.map((pageTitle, index) => (
+              <button
+                className={`thumbnail${index === currentPage ? " active" : ""}`}
+                key={`${pageTitle}-${index}`}
+                type="button"
+                aria-label={`Open ${pageTitle}`}
+                aria-current={index === currentPage ? "page" : undefined}
+                onClick={() => setPage(index)}
+              >
+                <span>{index + 1}</span>
+              </button>
+            ))}
           </div>
 
           <div className="purchase-bar">
-            <div>
-              <span>Mailed kit or PDF</span>
-              <strong>from {PRODUCTS.pdf.priceLabel}</strong>
+            <div className="purchase-bar-copy">
+              <span>Printable PDF · free</span>
+              <strong>Print it at home, or we post the kit</strong>
             </div>
-            {paidDownloadState === "preparing" ? (
-              <span className="payment-inline-status" role="status">
-                <LoaderCircle className="spin" size={17} />
-                Preparing PDF…
-              </span>
-            ) : paidDownloadState !== "idle" && paidPdfUrl ? (
-              <a className="unlock-button paid-download-link" href={paidPdfObjectUrl || paidPdfUrl} download="TripQuest-booklet.pdf">
-                <Download size={18} />
-                {paidDownloadState === "ready" ? "Download your PDF" : "Try download again"}
-              </a>
-            ) : (
+            <div className="purchase-actions">
               <button
                 className="unlock-button"
+                type="button"
+                disabled={freePdfState !== "idle"}
+                aria-busy={freePdfState === "booklet"}
+                onClick={() => void downloadFreePdf("booklet")}
+              >
+                {freePdfState === "booklet" ? <LoaderCircle className="spin" size={18} /> : <Download size={18} />}
+                Download free PDF
+              </button>
+              <button
+                className="secondary-button kit-button"
                 type="button"
                 onClick={() => {
                   setCheckoutNote("");
                   setCheckoutOpen(true);
                 }}
               >
-                <Download size={18} />
-                Unlock download
+                <Package size={17} />
+                Mail me the explorer kit · {PRODUCTS.kit.priceLabel}
               </button>
-            )}
+            </div>
+            <div className="purchase-bar-extra">
+              <button
+                className="paid-extra-link link-button"
+                type="button"
+                disabled={freePdfState !== "idle"}
+                aria-busy={freePdfState === "stickers"}
+                onClick={() => void downloadFreePdf("stickers")}
+              >
+                {freePdfState === "stickers" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />}
+                Sticker sheets PDF, free: print on A5 sticker paper
+              </button>
+              {freePdfNote ? <p className="free-pdf-note" role="status">{freePdfNote}</p> : null}
+            </div>
           </div>
         </section>
       </section>
@@ -1229,12 +1291,9 @@ export default function Home() {
         </div>
         <ol>
           {outlineItems.map((item, index) => (
-            <li className={item.locked ? "outline-item-locked" : undefined} key={`${index}-${item.title}`}>
+            <li key={`${index}-${item.title}`}>
               <span>{index + 1}</span>
-              <strong>
-                {item.locked ? <LockKeyhole size={13} aria-hidden="true" /> : null}
-                {item.title}
-              </strong>
+              <strong>{item.title}</strong>
             </li>
           ))}
         </ol>
@@ -1273,20 +1332,14 @@ export default function Home() {
               <X size={19} />
             </button>
             <p className="eyebrow">Explorer kit</p>
-            <h2 id="checkout-title">Unlock {destinationName} Explorer</h2>
+            <h2 id="checkout-title">Mail me the {destinationName} kit</h2>
             <p className="modal-subtitle">
-              The complete age-{trip.age} booklet: {reportPageTitles.length} A5 pages of itinerary-matched games, a sticker for every game, a treat trail and a certificate.
+              We print this age-{trip.age} booklet ({reportPageTitles.length} A5 pages of itinerary-matched games, a treat trail and a certificate) and post it with everything below.
             </p>
-            <div className="product-options" role="radiogroup" aria-label="Choose how you want it">
-              <button
-                className="product-option"
-                type="button"
-                role="radio"
-                aria-checked={checkoutProduct === "kit"}
-                onClick={() => setCheckoutProduct("kit")}
-              >
+            <div className="product-options">
+              <div className="product-option kit-summary">
                 <span className="product-option-head">
-                  <strong>Mail me the explorer kit</strong>
+                  <strong>Explorer kit, posted to you</strong>
                   <span className="product-option-price">{PRODUCTS.kit.priceLabel}</span>
                 </span>
                 <span className="product-option-note">{PRODUCTS.kit.note} · posted within {KIT_SHIPS_WITHIN_DAYS} working days</span>
@@ -1295,27 +1348,17 @@ export default function Home() {
                     <li key={item}><Check size={14} /> {item}</li>
                   ))}
                 </ul>
-              </button>
-              <button
-                className="product-option"
-                type="button"
-                role="radio"
-                aria-checked={checkoutProduct === "pdf"}
-                onClick={() => setCheckoutProduct("pdf")}
-              >
-                <span className="product-option-head">
-                  <strong>PDF only</strong>
-                  <span className="product-option-price">{PRODUCTS.pdf.priceLabel}</span>
-                </span>
-                <span className="product-option-note">Print the booklet at home, plus sticker sheets for A5 sticker paper</span>
-              </button>
+              </div>
             </div>
+            <p className="kit-free-pdf-note">
+              Only want to print at home? The PDF and sticker sheets are free: close this and use Download free PDF.
+            </p>
             <button
               className="primary-button checkout-button"
               type="button"
               disabled={pdfState === "generating"}
               aria-busy={pdfState === "generating"}
-              onClick={handlePdfDownload}
+              onClick={handleKitCheckout}
             >
               {pdfState === "generating" ? (
                 <LoaderCircle className="spin" size={18} />
@@ -1324,9 +1367,7 @@ export default function Home() {
               )}
               {pdfState === "generating"
                 ? "Opening secure checkout…"
-                : checkoutProduct === "kit"
-                  ? `Pay ${PRODUCTS.kit.priceLabel} and add delivery address`
-                  : `Pay ${PRODUCTS.pdf.priceLabel} securely`}
+                : `Pay ${PRODUCTS.kit.priceLabel} and add delivery address`}
             </button>
             {checkoutNote ? <p className="checkout-note">{checkoutNote}</p> : null}
           </section>
@@ -1508,26 +1549,5 @@ export default function Home() {
         </div>
       ) : null}
     </main>
-  );
-}
-
-function LockedPreviewPage({
-  pageNumber,
-  onUnlock,
-}: {
-  pageNumber: number;
-  onUnlock: () => void;
-}) {
-  return (
-    <article className="generated-sheet locked-preview-page">
-      <LockKeyhole size={30} aria-hidden="true" />
-      <span>Full booklet</span>
-      <h3>Page {pageNumber}</h3>
-      <p>Included in the printable PDF</p>
-      <button type="button" onClick={onUnlock}>
-        <Download size={14} aria-hidden="true" />
-        Unlock PDF
-      </button>
-    </article>
   );
 }

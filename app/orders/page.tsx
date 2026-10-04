@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Download, LoaderCircle, PackageCheck, Printer, RefreshCw, Truck } from "lucide-react";
 import { KIT_SHIPS_WITHIN_DAYS } from "../lib/products";
@@ -104,6 +105,10 @@ export default function OrdersPage() {
             {orders
               ? `${counts.new} to print · ${counts.printed} to post · kits ship within ${KIT_SHIPS_WITHIN_DAYS} working days`
               : "Paid explorer kits, newest first."}
+          </p>
+          <p className="orders-header-links">
+            <Link href="/library">All generated booklets and their files</Link>
+            <Link href="/">Back to the studio</Link>
           </p>
         </div>
         <div className="orders-actions">

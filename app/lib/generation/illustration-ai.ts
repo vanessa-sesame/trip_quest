@@ -347,7 +347,7 @@ export async function addCoverIllustration(
     destination: input.destination.toLocaleLowerCase(),
     // Covers made before the lettering and flaw check could have the city's
     // name or hole-punch dots in the picture; this draws every one afresh.
-    check: "clean-3-no-text-required",
+    check: "clean-4-lettering-first",
   });
   const hash = await digest(identity);
   const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
@@ -366,17 +366,22 @@ export async function addCoverIllustration(
       // Image models often write the place's name into the picture despite
       // the prompt, so Claude looks at each attempt. If every attempt has
       // lettering or print flaws, use the designed no-photo cover instead.
+      // Up to four tries: the first clean picture wins; failing that, the
+      // first without lettering (a minor print flaw beats the drawn
+      // fallback cover); only if all four have lettering is there no art.
       let png: Uint8Array | undefined;
-      // Four tries: the check also rejects print flaws, so three often
-      // all failed and the booklet fell back to the drawn postcard.
+      let fallback: Uint8Array | undefined;
       for (let attempt = 1; attempt <= 4; attempt += 1) {
         const candidate = await generateIllustrationPng(provider, prompt, "1536x1024");
-        if (!await coverHasLettering(runtime, candidate)) {
+        const verdict = await checkCover(runtime, candidate);
+        if (!verdict.lettering && !verdict.flaws) {
           png = candidate;
           break;
         }
-        console.info(`[TripQuest illustration] cover art had lettering, redrawing (${attempt})`);
+        if (!verdict.lettering) fallback ??= candidate;
+        console.info(`[TripQuest illustration] cover art had ${verdict.lettering ? "lettering" : "a print flaw"}, redrawing (${attempt})`);
       }
+      png ??= fallback;
       if (!png) return undefined;
       await storage.put(key, png, {
         httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
@@ -391,27 +396,32 @@ export async function addCoverIllustration(
   return available ? `/api/illustration?key=${encodeURIComponent(key)}` : undefined;
 }
 
-// True when Claude sees any writing in the picture. Without Claude, or when
-// the check fails, the picture is accepted.
-async function coverHasLettering(runtime: IllustrationRuntime, bytes: Uint8Array) {
+// What Claude sees wrong with a cover: lettering (any writing at all,
+// which always rejects it) and print flaws (hole-punch holes, a printed
+// frame, a torn edge), which reject it only while a cleaner attempt may
+// still come. Drawn birds, stars or dots of colour are part of the art.
+// Without Claude, or when the check fails, the picture is accepted.
+type CoverVerdict = { lettering: boolean; flaws: boolean };
+
+async function checkCover(runtime: IllustrationRuntime, bytes: Uint8Array): Promise<CoverVerdict> {
   const apiKey = runtime.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) return false;
+  if (!apiKey) return { lettering: false, flaws: false };
   try {
     const verdict = await askAboutImage(
       { bytes, contentType: sniffImageContentType(bytes) },
-      "Does this picture have any writing (letters, words, numbers, a title, a signature or a sign) or any printing flaw: hole-punch dots, stray black dots or blobs, a border or frame, or a torn or cropped paper edge? Answer hasText true if either is present.",
+      "Check this cover illustration. lettering: is any writing visible (letters, words, numbers, a title, a signature or a sign)? flaws: does it have a printing flaw, meaning hole-punch holes or binder rings, a printed border or frame around the picture, or a torn or cut paper edge? Drawn birds, stars, sparkles or dots of colour that belong to the art are not flaws.",
       {
         type: "object",
         additionalProperties: false,
-        properties: { hasText: { type: "boolean" }, text: { type: "string" } },
-        required: ["hasText", "text"],
+        properties: { lettering: { type: "boolean" }, flaws: { type: "boolean" }, seen: { type: "string" } },
+        required: ["lettering", "flaws", "seen"],
       },
       { apiKey, model: runtime.CLAUDE_MODEL?.trim() || DEFAULT_CLAUDE_MODEL, timeoutMs: 30_000 },
     );
-    return verdict.hasText === true;
+    return { lettering: verdict.lettering === true, flaws: verdict.flaws === true };
   } catch (error) {
-    console.error("[TripQuest illustration] cover lettering check", error instanceof Error ? error.message : error);
-    return false;
+    console.error("[TripQuest illustration] cover check", error instanceof Error ? error.message : error);
+    return { lettering: false, flaws: false };
   }
 }
 

@@ -1,4 +1,5 @@
 import type { Activity } from "../booklet/booklet.ts";
+import { treatTrailPages } from "../booklet/stickers.ts";
 import { hasDifferencePictures } from "../booklet/game-copy.ts";
 import { bookletDayPageEntries, dayGameActivities, type DayPageEntry } from "../booklet/pages.ts";
 import { type GeneratedBookletData, validateBookletDraft } from "../generation/booklet-ai.ts";
@@ -18,7 +19,7 @@ export const RELAY_DAYS_PER_PAGE = 6;
 export type BookletPage =
   | { kind: "cover" }
   | { kind: "guide" }
-  | { kind: "treats" }
+  | { kind: "treats"; firstDay: number; lastDay: number; part: number; parts: number }
   | { kind: "day"; entry: DayPageEntry }
   | { kind: "notes" }
   | { kind: "answers"; entries: AnswerEntry[]; part: number; parts: number }
@@ -59,7 +60,7 @@ export function planBookletPages(booklet: GeneratedBookletData, includeFamilyPac
   const front: BookletPage[] = [
     { kind: "cover" },
     { kind: "guide" },
-    { kind: "treats" },
+    ...treatTrailPages(booklet.dayPlans.length).map((range, index, all) => ({ kind: "treats" as const, ...range, part: index + 1, parts: all.length })),
     ...bookletDayPageEntries(booklet.dayPlans).map((entry) => ({ kind: "day" as const, entry })),
   ];
   const back: BookletPage[] = [
@@ -86,7 +87,7 @@ function pageTitle(page: BookletPage) {
   switch (page.kind) {
     case "cover": return "Cover";
     case "guide": return "For grown-ups";
-    case "treats": return "Treat trail";
+    case "treats": return page.parts > 1 ? `Treat trail ${page.part}` : "Treat trail";
     case "day": return page.entry.kind === "reveal" ? `Day ${page.entry.day.day}: Found it!` : `Day ${page.entry.day.day}: ${page.entry.title}`;
     case "notes": return "My notes";
     case "answers": return page.parts > 1 ? `Answer notes ${page.part}` : "Answer notes";

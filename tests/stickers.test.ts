@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { MAX_TREAT_STOPS, STICKERS_PER_SHEET, stickerPlan, stickersForBooklet, treatMilestones, type Sticker } from "../app/lib/booklet/stickers.ts";
+import { STICKERS_PER_SHEET, stickerPlan, stickersForBooklet, treatMilestones, treatTrailPages, type Sticker } from "../app/lib/booklet/stickers.ts";
 import { normalizeFamilyChildren } from "../app/lib/family.ts";
 import { createBookletPdf } from "../app/lib/pdf/booklet-pdf.ts";
 import { normalizedBooklet } from "../app/lib/pdf/plan.ts";
@@ -67,26 +67,22 @@ test("sticker ids are unique and the envelope sheet holds exactly one sheet", ()
   }
 });
 
-test("treat stops: one every day for trips up to four days, then four spread evenly with an early second-day stop", () => {
-  assert.deepEqual(treatMilestones(1).map((stop) => stop.afterDay), [1]);
-  assert.deepEqual(treatMilestones(2).map((stop) => stop.afterDay), [1, 2]);
-  assert.deepEqual(treatMilestones(3).map((stop) => stop.afterDay), [1, 2, 3]);
-  assert.deepEqual(treatMilestones(4).map((stop) => stop.afterDay), [1, 2, 3, 4]);
+test("treat stops: every day has one, the middle of a long trip is halfway, the last is trip done", () => {
   assert.deepEqual(treatMilestones(4).map((stop) => stop.label), ["Day 1 done!", "Day 2 done!", "Day 3 done!", "Trip done!"]);
-  assert.deepEqual(treatMilestones(5).map((stop) => stop.afterDay), [1, 2, 3, 5]);
-  assert.deepEqual(treatMilestones(8).map((stop) => stop.afterDay), [2, 4, 6, 8]);
-  assert.deepEqual(treatMilestones(14).map((stop) => stop.afterDay), [3, 7, 10, 14]);
-  assert.equal(treatMilestones(14)[2].label, "Halfway there!");
+  assert.deepEqual(treatMilestones(5).map((stop) => stop.label), ["Day 1 done!", "Day 2 done!", "Halfway there!", "Day 4 done!", "Trip done!"]);
   for (let days = 1; days <= 14; days += 1) {
     const stops = treatMilestones(days);
-    assert.equal(stops.length, Math.min(days, MAX_TREAT_STOPS), `${days} days`);
-    assert.equal(stops[stops.length - 1].afterDay, days, `${days} days ends on the last day`);
-    assert.equal(stops[stops.length - 1].label, "Trip done!");
-    stops.forEach((stop, index) => {
-      assert.ok(stop.afterDay >= 1 && stop.afterDay <= days);
-      if (index > 0) assert.ok(stop.afterDay > stops[index - 1].afterDay, `${days} days: stops are on different days`);
-    });
+    assert.deepEqual(stops.map((stop) => stop.afterDay), Array.from({ length: days }, (_, index) => index + 1), `${days} days`);
+    assert.equal(stops.at(-1)?.label, "Trip done!");
   }
+});
+
+test("the treat trail takes one page up to six days, then a page per six days", () => {
+  assert.deepEqual(treatTrailPages(4), [{ firstDay: 1, lastDay: 4 }]);
+  assert.deepEqual(treatTrailPages(5), [{ firstDay: 1, lastDay: 5 }]);
+  assert.deepEqual(treatTrailPages(6), [{ firstDay: 1, lastDay: 6 }]);
+  assert.deepEqual(treatTrailPages(7), [{ firstDay: 1, lastDay: 6 }, { firstDay: 7, lastDay: 7 }]);
+  assert.deepEqual(treatTrailPages(14).map((page) => page.lastDay), [6, 12, 14]);
 });
 
 test("every trip length draws one spot per treat stop and prints one milestone sticker per stop", async () => {
@@ -94,7 +90,7 @@ test("every trip length draws one spot per treat stop and prints one milestone s
     const booklet = bookletOfDays(days);
     const planned = stickersForBooklet(normalizedBooklet(booklet));
     const milestones = planned.filter((sticker) => sticker.kind === "milestone");
-    assert.equal(milestones.length, Math.min(days, MAX_TREAT_STOPS), `${days} days`);
+    assert.equal(milestones.length, days, `${days} days`);
     const drawn = await spotsDrawn(booklet);
     assert.deepEqual(
       drawn.map((sticker) => sticker.id).sort(),

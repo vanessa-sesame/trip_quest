@@ -230,7 +230,7 @@ export async function createBookletPdf(
     switch (page.kind) {
       case "cover": drawCover(ctx); break;
       case "guide": drawGuide(ctx); break;
-      case "treats": drawTreatTrail(ctx); break;
+      case "treats": drawTreatTrail(ctx, page); break;
       case "day": drawDayEntry(ctx, page.entry); break;
       case "notes": drawNotesPage(ctx); break;
       case "answers": drawAnswerKeyPage(ctx, page.entries, page.part, page.parts); break;

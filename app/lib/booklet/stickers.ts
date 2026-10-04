@@ -60,20 +60,28 @@ export function gameCheer(gameType: GameType | undefined) {
 // The treat trail never has more stops than this: four 30mm sticker spots
 // are what an A5 page can hold beside the day-by-day trail. Five-day trips
 // still get an early Day 2 stop, then mid-trip and final stops.
-export const MAX_TREAT_STOPS = 4;
-
-// The treat-trail stops for a trip. Trips of up to four days get a stop at
-// the end of every day; longer trips get four stops spread evenly, the last
-// always on the final day.
+// The treat-trail stops for a trip: one at the end of every day, so no day
+// looks like it is missing its stop. The middle day of a trip of five or
+// more days is "Halfway there!" and the last is "Trip done!".
 export function treatMilestones(days: number) {
   const total = Math.max(1, Math.floor(days));
-  const count = Math.min(total, MAX_TREAT_STOPS);
-  return Array.from({ length: count }, (_, index) => {
-    const afterDay = count === total ? index + 1 : Math.max(index + 1, Math.floor((total * (index + 1)) / count));
-    const halfway = total > MAX_TREAT_STOPS && index === Math.floor(count / 2);
-    const label = index === count - 1 ? "Trip done!" : halfway ? "Halfway there!" : `Day ${afterDay} done!`;
+  const halfwayDay = total >= 5 ? Math.ceil(total / 2) : 0;
+  return Array.from({ length: total }, (_, index) => {
+    const afterDay = index + 1;
+    const label = afterDay === total ? "Trip done!" : afterDay === halfwayDay ? "Halfway there!" : `Day ${afterDay} done!`;
     return { label, afterDay };
   });
+}
+
+// Day cards per treat-trail page: a 2 x 2 trail for up to four days, then
+// pages of up to six (three columns, two rows).
+export function treatTrailPages(days: number) {
+  const total = Math.max(1, Math.floor(days));
+  const perPage = total <= 4 ? 4 : 6;
+  return Array.from({ length: Math.ceil(total / perPage) }, (_, index) => ({
+    firstDay: index * perPage + 1,
+    lastDay: Math.min(total, (index + 1) * perPage),
+  }));
 }
 
 export function stickerPlan(

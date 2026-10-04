@@ -1,22 +1,17 @@
 import type { PDFPage } from "pdf-lib";
 import type { DayPlan } from "../../booklet/booklet.ts";
-import { MAX_TREAT_STOPS, treatMilestones } from "../../booklet/stickers.ts";
+import { treatMilestones } from "../../booklet/stickers.ts";
 import { drawStickerIcon } from "../art/icons.ts";
 import { STICKER_DIAMETER, STICKER_TONES, addPage, drawPageHeader, drawStickerSpot, type PdfContext } from "../context.ts";
 import { drawBulletList, drawCard, drawDottedLine, drawNumberBadge, drawPill, drawText, Flow, type Box } from "../layout.ts";
 import { CONTENT_WIDTH, CONTENT_BOTTOM, MARGIN, colors } from "../theme.ts";
-import { drawWriteArea } from "../writing.ts";
 
-// The treat trail: day-by-day progress dots plus treat stops
-// (app/lib/booklet/stickers.ts treatMilestones). Each
-// stop is a card with its numbered badge, a 30mm sticker spot and a
-// writing row where a grown-up writes the treat; the end of the trail
-// opens the mystery envelope.
-//
-// Trips of up to four days have a stop every day, so each day is one card
-// (its dots on top, its stop below) in a 2 x 2 trail. Longer trips list
-// every day as a compact row (in up to three columns) with the stop's
-// numbered badge on the days where stops fall, then the four stop cards.
+// The treat trail: one card per day (app/lib/booklet/stickers.ts
+// treatMilestones gives every day a stop). Each card has the day's game
+// dots on a soft band, the stop's numbered badge, a 30mm sticker spot and a
+// writing row where a grown-up writes the treat. Up to four days make a
+// 2 x 2 trail; longer trips use pages of six cards (three columns, two
+// rows, treatTrailPages). The last page ends at the mystery envelope.
 
 type Stop = ReturnType<typeof treatMilestones>[number];
 
@@ -67,87 +62,65 @@ function drawStop(ctx: PdfContext, page: PDFPage, stop: Stop, index: number, box
   const cy = box.y + box.height - 6 - SPOT / 2;
   drawStickerSpot(ctx, page, { page: "treats", milestone: index }, cx, cy, stop.label);
   drawNumberBadge(page, fonts, String(index + 1), { x: box.x + 17, y: box.y + box.height - 15 }, 9, colors.coral);
-  drawWriteArea(page, fonts, { intro: "", choices: [], fields: [{ label: "Our treat:", slots: [""] }] }, {
-    x: box.x + 10, y: box.y + 6, width: box.width - 20, height: type.writeLine,
-  }, { pitch: type.writeLine, size: type.small, minLines: 1, maxLines: 1 });
+  // "Our treat:" and its writing line on one row, so the line stays inside
+  // the card however narrow it is (three cards across on longer trips).
+  const label = "Our treat:";
+  const labelSize = Math.min(type.small, 10);
+  const labelWidth = fonts.bold.widthOfTextAtSize(label, labelSize);
+  const baseline = box.y + 6 + type.writeLine * 0.35;
+  page.drawText(label, { x: box.x + 10, y: baseline, size: labelSize, font: fonts.bold, color: colors.ink });
+  drawDottedLine(page, box.x + 14 + labelWidth, box.x + box.width - 10, baseline - 1, colors.line, 3, 3);
 }
 
-export function drawTreatTrail(ctx: PdfContext) {
+export function drawTreatTrail(ctx: PdfContext, range: { firstDay: number; lastDay: number; part: number; parts: number }) {
   const { fonts, type, booklet } = ctx;
   const page = addPage(ctx, "Treat trail", colors.teal);
   const top = drawPageHeader(ctx, page, {
-    kicker: "Treat trail",
-    title: "Every game brings a treat closer",
+    kicker: range.parts > 1 ? `Treat trail / ${range.part} of ${range.parts}` : "Treat trail",
+    title: range.part === 1 ? "Every game brings a treat closer" : "The trail keeps going",
     accent: colors.teal,
     soft: colors.tealSoft,
     titleLines: 1,
   });
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  flow.text("Colour the dots as your family plays. At each treat stop, add its sticker and write the reward.", {
-    size: type.small, color: colors.muted, maxLines: 3,
-  });
-  flow.space(10);
-
-  const days = booklet.dayPlans;
-  const stops = treatMilestones(days.length);
-  const stopOn = (day: number) => stops.findIndex((stop) => stop.afterDay === day);
-  const halfWidth = (CONTENT_WIDTH - GAP) / 2;
-  const stopHeight = stopCardHeight(ctx);
-  let showEnvelope = true;
-
-  if (days.length <= MAX_TREAT_STOPS) {
-    // One card per day: the day's dots, then its stop.
-    const headerHeight = 24;
-    const cardHeight = headerHeight + stopHeight;
-    const rows = Math.ceil(days.length / 2);
-    const grid = flow.take(rows * cardHeight + (rows - 1) * GAP);
-    days.forEach((day, index) => {
-      const row = Math.floor(index / 2);
-      const alone = index === days.length - 1 && days.length % 2 === 1;
-      const x = alone ? MARGIN + (CONTENT_WIDTH - halfWidth) / 2 : MARGIN + (index % 2) * (halfWidth + GAP);
-      const box = { x, y: grid.y + grid.height - (row + 1) * cardHeight - row * GAP, width: halfWidth, height: cardHeight };
-      const tone = STICKER_TONES[index % STICKER_TONES.length];
-      drawCard(page, box, { fill: colors.white, border: tone.ink, borderWidth: 1 });
-      // The day's dots on a soft band across the top of its card.
-      const header = { x: box.x + 4, y: box.y + stopHeight, width: box.width - 8, height: headerHeight - 4 };
-      drawCard(page, header, { fill: tone.soft, radius: 9 });
-      drawDayTrail(ctx, page, day, index, { x: header.x + 8, cy: header.y + header.height / 2, width: header.width - 16, height: header.height - 2 }, -1);
-      drawStop(ctx, page, stops[index], index, { ...box, height: stopHeight });
+  if (range.part === 1) {
+    flow.text("Colour the dots as your family plays. At the end of each day, add its sticker and write the reward.", {
+      size: type.small, color: colors.muted, maxLines: 3,
     });
-  } else {
-    // Day rows, compressed into columns as the trip grows, then the stops.
-    const stopRows = Math.ceil(stops.length / 2);
-    const cardsHeight = stopRows * stopHeight + (stopRows - 1) * GAP;
-    const rowsSpace = flow.remaining() - cardsHeight - 12;
-    const minRow = 15;
-    const envelopeSpace = ENVELOPE_HEIGHT + 12;
-    const fits = (columns: number, withEnvelope: boolean) => Math.ceil(days.length / columns) * minRow <= rowsSpace - (withEnvelope ? envelopeSpace : 0);
-    const columns = [1, 2, 3].find((count) => fits(count, true)) ?? [1, 2, 3].find((count) => fits(count, false)) ?? 3;
-    showEnvelope = fits(columns, true);
-    const perColumn = Math.ceil(days.length / columns);
-    const rowHeight = Math.min(24, (rowsSpace - (showEnvelope ? envelopeSpace : 0)) / perColumn);
-    const columnGap = 12;
-    const columnWidth = (CONTENT_WIDTH - columnGap * (columns - 1)) / columns;
-    const trail = flow.take(perColumn * rowHeight);
-    days.forEach((day, index) => {
-      const column = Math.floor(index / perColumn);
-      const row = index % perColumn;
-      drawDayTrail(ctx, page, day, index, {
-        x: MARGIN + column * (columnWidth + columnGap),
-        cy: trail.y + trail.height - row * rowHeight - rowHeight / 2,
-        width: columnWidth,
-        height: rowHeight,
-      }, stopOn(day.day));
-    });
-    flow.space(12);
-    const grid = flow.take(cardsHeight);
-    stops.forEach((stop, index) => {
-      const row = Math.floor(index / 2);
-      const box = { x: MARGIN + (index % 2) * (halfWidth + GAP), y: grid.y + grid.height - (row + 1) * stopHeight - row * GAP, width: halfWidth, height: stopHeight };
-      drawCard(page, box, { fill: colors.white, border: colors.softLine });
-      drawStop(ctx, page, stop, index, box);
-    });
+    flow.space(10);
   }
+
+  const stops = treatMilestones(booklet.dayPlans.length);
+  const days = booklet.dayPlans.filter((day) => day.day >= range.firstDay && day.day <= range.lastDay);
+  const columns = booklet.dayPlans.length <= 4 ? 2 : 3;
+  const cardWidth = (CONTENT_WIDTH - GAP * (columns - 1)) / columns;
+  const headerHeight = 24;
+  const stopHeight = stopCardHeight(ctx);
+  const cardHeight = headerHeight + stopHeight;
+  const rows = Math.ceil(days.length / columns);
+  const grid = flow.take(rows * cardHeight + (rows - 1) * GAP);
+  days.forEach((day, slot) => {
+    const index = day.day - 1;
+    const row = Math.floor(slot / columns);
+    // A short last row is centred under the full ones.
+    const inRow = row === rows - 1 ? days.length - row * columns : columns;
+    const rowWidth = inRow * cardWidth + (inRow - 1) * GAP;
+    const x = MARGIN + (CONTENT_WIDTH - rowWidth) / 2 + (slot % columns) * (cardWidth + GAP);
+    const box = { x, y: grid.y + grid.height - (row + 1) * cardHeight - row * GAP, width: cardWidth, height: cardHeight };
+    const tone = STICKER_TONES[index % STICKER_TONES.length];
+    drawCard(page, box, { fill: colors.white, border: tone.ink, borderWidth: 1 });
+    // The day's dots on a soft band across the top of its card.
+    const header = { x: box.x + 4, y: box.y + stopHeight, width: box.width - 8, height: headerHeight - 4 };
+    drawCard(page, header, { fill: tone.soft, radius: 9 });
+    drawDayTrail(ctx, page, day, index, { x: header.x + 8, cy: header.y + header.height / 2, width: header.width - 16, height: header.height - 2 }, -1);
+    drawStop(ctx, page, stops[index], index, { ...box, height: stopHeight });
+  });
+  if (range.part < range.parts) {
+    flow.space(12);
+    flow.text("The trail continues on the next page.", { size: type.small, color: colors.muted, maxLines: 1, align: "center" });
+    return;
+  }
+  const showEnvelope = true;
 
   // The end of the trail.
   const message = "Trail finished? Open your mystery envelope!";

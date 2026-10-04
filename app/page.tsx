@@ -730,7 +730,19 @@ export default function Home() {
 
   const exactPdfPreviewRequest = useMemo(
     () => generatedBooklet?.editionFingerprint
-      ? { url: "/api/pdf", body: { ...editionRequest(generatedBooklet), kind: "booklet" } }
+      ? {
+          url: "/api/pdf",
+          body: {
+            age: generatedBooklet.age,
+            days: generatedBooklet.days,
+            destination: generatedBooklet.destination,
+            itinerary: generatedBooklet.itinerary,
+            family: generatedBooklet.family || children,
+            events: generatedBooklet.events || structuredEvents,
+            editionFingerprint: generatedBooklet.editionFingerprint,
+            kind: "booklet",
+          },
+        }
       : undefined,
     [generatedBooklet, children, structuredEvents],
   );

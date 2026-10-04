@@ -278,10 +278,10 @@ export async function addBookletIllustrations(
   const availableKeys = new Set(
     availability.filter((item) => item.available).map((item) => item.candidate.key),
   );
-  const missing = canGenerate
+  const missing = canGenerate && provider
     ? availability.filter((item) => !item.available).slice(0, maxAiPageImages(runtime, 3))
     : [];
-  if (missing.length) {
+  if (missing.length && provider) {
     publish?.(`Illustrating ${missing.length} custom page${missing.length === 1 ? "" : "s"}…`);
     await Promise.all(missing.map(async ({ candidate }) => {
       try {

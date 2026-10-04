@@ -222,6 +222,15 @@ export function drawStory({ ctx, page, activity, box }: GameArgs) {
 
 // Until spot-the-difference has real paired art, the same subjects become a
 // look-closely checklist rather than a placeholder drawing.
+// A spot-the-difference game whose two pictures could not be made becomes
+// a look-and-find in the real place. Its clues were written for the
+// pictures ("…in the second picture"), so any clue about a picture is
+// replaced with a plain find-it prompt for the same detail.
 export function drawLookAndFind(args: GameArgs) {
-  return drawChecklist(args);
+  const items = (args.activity.items ?? []).map((item) => (
+    /\b(?:pictures?|drawings?|image|copy|copies)\b/i.test(item.clue)
+      ? { ...item, clue: `Find this here: ${item.label.toLocaleLowerCase()}.` }
+      : item
+  ));
+  return drawChecklist({ ...args, activity: { ...args.activity, items } });
 }

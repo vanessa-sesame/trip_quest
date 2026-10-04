@@ -97,7 +97,8 @@ export function drawWordSearch({ ctx, page, activity, box }: GameArgs) {
   return bankTop - pillRows * (pillHeight + 6) + 6;
 }
 
-export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
+export function drawCrossword(args: GameArgs) {
+  const { ctx, page, activity, box } = args;
   const { fonts, type } = ctx;
   const items = activity.items ?? [];
   const puzzle = createCrossword(items.map((item) => item.label));
@@ -117,7 +118,7 @@ export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
   const gridHeight = Math.max(90, box.height - cluesHeight - 16);
   const cell = Math.min(34, box.width / columns, gridHeight / rows);
   if (cell < MIN_WRITABLE_CROSSWORD_CELL) {
-    return drawCrosswordWithAnswerBoxes({ ctx, page, activity, box }, puzzle, { firstRow, firstColumn, rows, columns, used });
+    return drawCrosswordWithAnswerBoxes(args, puzzle, { firstRow, firstColumn, rows, columns, used });
   }
   const width = columns * cell;
   const height = rows * cell;

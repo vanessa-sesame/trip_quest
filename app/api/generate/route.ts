@@ -1,4 +1,5 @@
 import { getRequestExecutionContext } from "vinext/shims/request-context";
+import { isOwnerRequest } from "../../lib/pdf/serve";
 import { claudeModelFrom } from "../../lib/generation/claude";
 import {
   type GeneratedBookletData,
@@ -61,6 +62,7 @@ export const dynamic = "force-dynamic";
 type RuntimeEnvironment = {
   ANTHROPIC_API_KEY?: string;
   CLAUDE_MODEL?: string;
+  TRIPQUEST_OWNER_EMAIL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
   OPENAI_COVER_STYLE?: string;
@@ -394,8 +396,10 @@ export async function POST(request: Request) {
         { status: 503 },
       );
     }
+    // The owner (and local development) is not held to the hourly limit
+    // on new booklets, so test runs and owner checks are not blocked.
     let rateLimitAllowed = true;
-    if (!task) {
+    if (!task && !isOwnerRequest(request, runtime)) {
       try {
         rateLimitAllowed = await consumeRateLimit(request, runtime, apiKey);
       } catch (error) {

@@ -10,7 +10,8 @@ import type { GameArgs } from "./types.ts";
 
 export type { GameArgs } from "./types.ts";
 
-export function drawGame(args: GameArgs) {
+// Draws the game and returns the lowest y it drew to.
+export function drawGame(args: GameArgs): number {
   switch (args.activity.gameType) {
     case "coloring":
       return drawColoringBoard(args);
@@ -27,7 +28,7 @@ export function drawGame(args: GameArgs) {
     case "bingo":
       return drawBingo(args);
     case "spot_the_difference":
-      return drawDifferencePictures(args) || drawLookAndFind(args);
+      return drawDifferencePictures(args) ?? drawLookAndFind(args);
     case "codebreaker":
       return drawCodebreaker(args);
     case "map_puzzle":
@@ -42,10 +43,12 @@ export function drawGame(args: GameArgs) {
 }
 
 // Games that bring their own writing space, so the activity page does not
-// add a field-note card under them.
+// add a field-note card under them. The codebreaker ends in its own
+// "Decoded word" row and every quiz question has its own answer row, which
+// is all their field notes ("Decoded word: __", "My answer: __") ask for.
 export function gameHasOwnWritingSpace(activity: Pick<Activity, "gameType" | "differencePaths">) {
   return activity.gameType === "coloring" || activity.gameType === "drawing" || activity.gameType === "story"
-    || hasDifferencePictures(activity);
+    || activity.gameType === "codebreaker" || activity.gameType === "quiz" || hasDifferencePictures(activity);
 }
 
 export function answerFor(activity: Activity, age: number) {

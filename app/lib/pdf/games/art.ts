@@ -51,14 +51,15 @@ function drawTraceRow(args: GameArgs, word: string, box: Box) {
 }
 
 // Picture A above picture B, each in a rounded frame, with three circles
-// beside picture B to tick off as the changes are found. Returns false when
-// either picture is unavailable, so the caller can fall back to look-and-find.
-export function drawDifferencePictures(args: GameArgs) {
+// beside picture B to tick off as the changes are found. Returns the
+// bottom it drew to, or undefined when either picture is unavailable, so
+// the caller can fall back to look-and-find.
+export function drawDifferencePictures(args: GameArgs): number | undefined {
   const { ctx, page, activity, box } = args;
   const pictures = activity.differencePaths;
   const a = pictures && ctx.artwork[pictures.a];
   const b = pictures && ctx.artwork[pictures.b];
-  if (!a || !b) return false;
+  if (!a || !b) return undefined;
   const { fonts, type } = ctx;
   const labelGap = type.label * 2 + 2;
   const trackerWidth = 34;
@@ -88,7 +89,7 @@ export function drawDifferencePictures(args: GameArgs) {
     }
     top = frame.y - 8;
   });
-  return true;
+  return top + 8;
 }
 
 export function drawDrawingBoard(args: GameArgs) {
@@ -117,6 +118,7 @@ export function drawDrawingBoard(args: GameArgs) {
     });
   }
   drawTraceRow(args, activity.items?.[0]?.label || "Local detail", { x: box.x, y: box.y, width: box.width, height: traceHeight });
+  return box.y;
 }
 
 export function drawColoringBoard(args: GameArgs) {
@@ -157,4 +159,5 @@ export function drawColoringBoard(args: GameArgs) {
     });
   });
   drawTraceRow(args, spec.traceWord, { x: box.x, y: box.y, width: box.width, height: traceHeight });
+  return box.y;
 }

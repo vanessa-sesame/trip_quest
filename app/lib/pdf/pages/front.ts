@@ -65,40 +65,87 @@ export function drawCover(ctx: PdfContext) {
   title(booklet.profile.style, { size: type.body, font: fonts.bold, color: colors.muted, maxLines: 2 });
   flow.y = Math.min(flow.y - 12, CONTENT_TOP - STICKER_DIAMETER - 12);
 
+  // The foot of the cover is laid out bottom-up: the tagline, then the
+  // name and date fields (tall enough to write in at this age). The
+  // picture takes everything between the title and the fields.
+  const blurb = "Games, drawing spaces, local clues and family missions made for this exact trip.";
+  const blurbHeight = measureText(blurb, fonts, CONTENT_WIDTH, { size: type.small, maxLines: 2 }).height;
+  const taglineTop = CONTENT_BOTTOM + blurbHeight + 2 + type.heading * 1.35;
+  const fieldHeight = Math.max(44, type.writeLine + 16);
+  const fieldsHeight = fieldHeight + type.label * 2 + 6;
+  const fields = { x: MARGIN, y: taglineTop + 8 + 18, width: CONTENT_WIDTH, height: fieldsHeight };
+  const stampRadius = 26;
+  const areaAbove = (gap: number) => {
+    const y = fields.y + fields.height + gap;
+    return { x: MARGIN, y, width: CONTENT_WIDTH, height: Math.max(120, flow.y - y) };
+  };
+
   // Picture: AI/curated hero art when available, otherwise the postcard.
-  // The picture takes whatever the name fields and tagline leave over.
-  const reservedBelow = 24 + 44 + type.label * 2 + 6 + 96;
-  const hero = flow.take(Math.max(150, Math.min(300, flow.remaining() - reservedBelow)));
+  // The art is never cropped: a white print-style frame hugs the whole
+  // picture at its own aspect ratio, as large as the area allows, centred.
+  const pad = 6;
+  // The part of the canvas holding the picture (all of it unless the art
+  // has a wide blank margin of plain paper; see art-bounds.ts).
+  const bounds = ctx.coverArtBounds ?? { x: 0, y: 0, width: 1, height: 1 };
+  const frameIn = (area: Box) => {
+    const dims = ctx.coverArtwork!.scale(1);
+    const scale = Math.min((area.width - pad * 2) / (dims.width * bounds.width), (area.height - pad * 2) / (dims.height * bounds.height));
+    const width = dims.width * bounds.width * scale;
+    const height = dims.height * bounds.height * scale;
+    return {
+      x: area.x + (area.width - width - pad * 2) / 2,
+      y: area.y + (area.height - height - pad * 2) / 2,
+      width: width + pad * 2,
+      height: height + pad * 2,
+    };
+  };
+  const sideRoom = (frame: Box, area: Box) => area.x + area.width - (frame.x + frame.width) >= stampRadius * 2 - 6;
+  // Stamps sit beside a narrow picture, or hang ~22pt below a wide one.
+  let area = areaAbove(14);
+  let hero: Box = area;
   if (ctx.coverArtwork) {
-    // The art fills the frame, cropped to it: models return pictures of
-    // any shape, often with a paper-coloured background that would show
-    // as a block inside the frame.
-    drawRoundedRect(page, hero, 18, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
-    const inner = { x: hero.x + 6, y: hero.y + 6, width: hero.width - 12, height: hero.height - 12 };
-    const dims = ctx.coverArtwork.scale(1);
-    const scale = Math.max(inner.width / dims.width, inner.height / dims.height);
+    hero = frameIn(area);
+    if (!sideRoom(hero, area)) {
+      area = areaAbove(30);
+      hero = frameIn(area);
+    }
+    drawRoundedRect(page, hero, 14, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
+    // Scale the whole canvas so its picture box fills the frame; the clip
+    // only ever trims blank paper outside that box.
+    const inner = { x: hero.x + pad, y: hero.y + pad, width: hero.width - pad * 2, height: hero.height - pad * 2 };
+    const canvasWidth = inner.width / bounds.width;
+    const canvasHeight = inner.height / bounds.height;
     page.pushOperators(pushGraphicsState(), rectangle(inner.x, inner.y, inner.width, inner.height), clip(), endPath());
     page.drawImage(ctx.coverArtwork, {
-      x: inner.x + (inner.width - dims.width * scale) / 2,
-      y: inner.y + (inner.height - dims.height * scale) / 2,
-      width: dims.width * scale,
-      height: dims.height * scale,
+      x: inner.x - bounds.x * canvasWidth,
+      y: inner.y + inner.height - (1 - bounds.y) * canvasHeight,
+      width: canvasWidth,
+      height: canvasHeight,
     });
     page.pushOperators(popGraphicsState());
   } else {
+    area = areaAbove(30);
+    hero = area;
     drawPostcardScene(page, hero, theme, `cover-${booklet.destination}`);
   }
-  // Travel stamps overlapping the picture's bottom edge.
-  drawStampCircle(page, fonts, hero.x + hero.width - 88, hero.y + 4, 26, theme.accent, theme.accentSoft, `Age ${booklet.age}`);
-  drawStampCircle(page, fonts, hero.x + hero.width - 30, hero.y + 16, 26, colors.teal, colors.tealSoft, booklet.days === 1 ? "1 day" : `${booklet.days} days`);
-  flow.space(24);
+  // Travel stamps: in the margin beside a narrow picture, overlapping its
+  // edge, or over the bottom-right corner of a wide one.
+  const gutter = area.x + area.width - (hero.x + hero.width);
+  const ageLabel = `Age ${booklet.age}`;
+  const daysLabel = booklet.days === 1 ? "1 day" : `${booklet.days} days`;
+  if (gutter >= stampRadius * 2 - 6) {
+    const cx = hero.x + hero.width + Math.min(gutter - stampRadius - 2, stampRadius - 8);
+    drawStampCircle(page, fonts, cx, hero.y + stampRadius + 52, stampRadius, theme.accent, theme.accentSoft, ageLabel);
+    drawStampCircle(page, fonts, cx, hero.y + stampRadius - 6, stampRadius, colors.teal, colors.tealSoft, daysLabel);
+  } else {
+    drawStampCircle(page, fonts, hero.x + hero.width - 88, hero.y + 4, stampRadius, theme.accent, theme.accentSoft, ageLabel);
+    drawStampCircle(page, fonts, hero.x + hero.width - 30, hero.y + 16, stampRadius, colors.teal, colors.tealSoft, daysLabel);
+  }
 
   const names = familyPack?.children.length
     ? familyPack.children.map((child, index) => pdfText(familyChildDisplayName(child, index))).join(" / ")
     : "";
-  const fieldHeight = 44;
   const fieldWidth = (CONTENT_WIDTH - 12) / 2;
-  const fields = flow.take(fieldHeight + type.label * 2 + 6);
   [
     { label: names ? "Made for" : "Explorer name", x: fields.x },
     { label: "Trip dates", x: fields.x + fieldWidth + 12 },
@@ -109,16 +156,15 @@ export function drawCover(ctx: PdfContext) {
     if (index === 0 && names) {
       drawText(page, names, fonts, { x: box.x + 10, top: pillBox.y - 10, width: box.width - 20 }, { size: type.body, font: fonts.display, color: colors.ink, maxLines: 2 });
     } else {
-      drawHandLine(page, box.x + 12, box.y + 14, box.x + box.width - 12, box.y + 14, colors.line, 1, `cover-field-${index}`);
+      drawHandLine(page, box.x + 12, box.y + 12, box.x + box.width - 12, box.y + 12, colors.line, 1, `cover-field-${index}`);
     }
   });
 
   const tagline = "Pack a pencil. Notice everything.";
-  const taglineTop = CONTENT_BOTTOM + 44;
   drawHandLine(page, MARGIN, taglineTop + 8, PAGE_WIDTH - MARGIN, taglineTop + 8, theme.accent, 1.4, "cover-tagline-rule");
   const block = drawText(page, tagline, fonts, { x: MARGIN, top: taglineTop, width: CONTENT_WIDTH }, { size: type.heading, font: fonts.display, color: theme.accent, maxLines: 1 });
   drawDoodleSparkle(page, MARGIN + fonts.display.widthOfTextAtSize(tagline, type.heading) + 14, block.baselines[0] + 5, 6, colors.yellow);
-  drawText(page, "Games, drawing spaces, local clues and family missions made for this exact trip.", fonts, { x: MARGIN, top: block.bottom - 2, width: CONTENT_WIDTH }, {
+  drawText(page, blurb, fonts, { x: MARGIN, top: block.bottom - 2, width: CONTENT_WIDTH }, {
     size: type.small, color: colors.muted, maxLines: 2,
   });
 }

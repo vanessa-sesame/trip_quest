@@ -78,7 +78,21 @@ export type TypeScale = {
   label: number;
   footer: number;
   lineHeight: number;
+  // Distance between ruled writing lines (see writingLinePitch).
+  writeLine: number;
 };
+
+const MM = 72 / 25.4;
+
+// The space a child gets for one line of handwriting, by age: early
+// writers form big letters (11mm), confident writers need ~9mm, older
+// children ~7.5mm. Every ruled line, answer line and write-in blank in
+// the booklet uses this one value, so no page picks its own.
+export function writingLinePitch(age: number) {
+  if (age <= 6) return 11 * MM;
+  if (age <= 9) return 9.2 * MM;
+  return 7.6 * MM;
+}
 
 // One type scale per age, applied everywhere, so no page picks its own
 // sizes. Early readers get a larger body size; everything else is shared.
@@ -93,6 +107,7 @@ export function typeScale(age: number): TypeScale {
     label: 8.5,
     footer: 8,
     lineHeight: 1.35,
+    writeLine: writingLinePitch(age),
   };
 }
 

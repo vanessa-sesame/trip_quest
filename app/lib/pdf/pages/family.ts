@@ -7,7 +7,8 @@ import {
   mechanicMissionPrompt,
 } from "../../family.ts";
 import { STICKER_DIAMETER, addPage, drawPageHeader, drawStickerSpot, type FamilyPackContext, type PdfContext } from "../context.ts";
-import { drawBulletList, drawCard, drawDottedLine, drawPill, drawText, Flow, measureText, pdfText } from "../layout.ts";
+import { drawBulletList, drawCard, drawPill, drawText, fitTextSize, Flow, measureText, pdfText } from "../layout.ts";
+import { drawRuledRows } from "../writing.ts";
 import { RELAY_DAYS_PER_PAGE } from "../plan.ts";
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, colors } from "../theme.ts";
 
@@ -38,33 +39,60 @@ export function drawFamilyRelayPage(ctx: PdfContext, pack: FamilyPackContext, da
   const footerHeight = part === parts ? 44 : 0;
   const gap = 10;
   const width = (CONTENT_WIDTH - gap) / 2;
-  const rowsPerColumn = RELAY_DAYS_PER_PAGE / 2;
-  const height = (flow.remaining() - footerHeight - gap * (rowsPerColumn - 1)) / rowsPerColumn;
-  days.forEach((day, index) => {
-    const column = index % 2;
-    const row = Math.floor(index / 2);
-    const x = MARGIN + column * (width + gap);
-    const y = flow.y - (row + 1) * height - row * gap;
-    drawCard(page, { x, y, width, height }, { fill: fills[(day.day - 1) % 4] });
-    const titleRow = drawBulletList(page, fonts, [{ title: day.theme, marker: String(day.day) }], {
-      x: x + 10, top: y + height - 10, width: width - 20, size: type.small, marker: "number", markerColor: inks[(day.day - 1) % 4], maxLines: 2,
+  const inner = width - 20;
+  const textSize = 8.5;
+  const textLine = textSize * 1.35;
+  const rowCount = Math.max(1, Math.min(RELAY_DAYS_PER_PAGE / 2, Math.ceil(days.length / 2)));
+  const available = (flow.remaining() - footerHeight - gap * (rowCount - 1)) / rowCount;
+  const texts = days.map((day) => ({
+    interest: `Interest: ${day.interestHook || "Notice one detail that connects to your world."}`,
+    relay: `Relay: ${day.siblingMission || "Share one observation before the next stop."}`,
+  }));
+  // Cards are as tall as their words need (up to five lines each), never
+  // taller, so a short trip doesn't leave half-empty cards.
+  const titleOptions = { size: type.small, marker: "number" as const, maxLines: 2 };
+  const needs = days.map((day, index) =>
+    10 - drawBulletList(null, fonts, [{ title: day.theme, marker: String(day.day) }], { ...titleOptions, x: 0, top: 0, width: inner }).bottom
+    + 5 + measureText(texts[index].interest, fonts, inner, { size: textSize, maxLines: 5 }).height
+    + 3 + measureText(texts[index].relay, fonts, inner, { size: textSize, maxLines: 5 }).height + 10,
+  );
+  let rowTop = flow.y;
+  for (let row = 0; row < rowCount; row += 1) {
+    const height = Math.min(available, Math.max(...needs.slice(row * 2, row * 2 + 2)));
+    days.slice(row * 2, row * 2 + 2).forEach((day, column) => {
+      const index = row * 2 + column;
+      const x = MARGIN + column * (width + gap);
+      const y = rowTop - height;
+      drawCard(page, { x, y, width, height }, { fill: fills[(day.day - 1) % 4] });
+      const titleRow = drawBulletList(page, fonts, [{ title: day.theme, marker: String(day.day) }], {
+        ...titleOptions, x: x + 10, top: y + height - 10, width: inner, markerColor: inks[(day.day - 1) % 4],
+      });
+      const space = (top: number) => Math.max(1, Math.floor((top - y - 8) / textLine));
+      let textTop = titleRow.bottom - 5;
+      const interestLines = Math.min(5, Math.max(1, space(textTop) - 1));
+      textTop = drawText(page, texts[index].interest, fonts, { x: x + 10, top: textTop, width: inner }, {
+        size: textSize, color: colors.teal, maxLines: interestLines,
+      }).bottom - 3;
+      drawText(page, texts[index].relay, fonts, { x: x + 10, top: textTop, width: inner }, {
+        size: textSize, color: colors.muted, maxLines: Math.min(5, space(textTop)),
+      });
     });
-    const interest = day.interestHook || "Notice one detail that connects to your world.";
-    const relay = day.siblingMission || "Share one observation before the next stop.";
-    let textTop = titleRow.bottom - 5;
-    textTop = drawText(page, `Interest: ${interest}`, fonts, { x: x + 10, top: textTop, width: width - 20 }, {
-      size: 8.5, color: colors.teal, maxLines: 3,
-    }).bottom - 3;
-    const relayLines = Math.max(1, Math.floor((textTop - y - 8) / (8.5 * 1.35)));
-    drawText(page, `Relay: ${relay}`, fonts, { x: x + 10, top: textTop, width: width - 20 }, {
-      size: 8.5, color: colors.muted, maxLines: Math.min(3, relayLines),
-    });
-  });
+    rowTop -= height + gap;
+  }
 
   if (footerHeight) {
-    const pill = drawPill(page, fonts, "Explorers in this relay", { x: MARGIN, top: CONTENT_BOTTOM + footerHeight - 4, color: colors.green, fill: colors.greenSoft, size: type.label });
+    const pill = drawPill(page, fonts, "Explorers in this relay", { x: MARGIN, top: rowTop - 4, color: colors.green, fill: colors.greenSoft, size: type.label });
     drawText(page, childList(pack), fonts, { x: MARGIN, top: pill.y - 4, width: CONTENT_WIDTH }, { size: type.small, color: colors.muted, maxLines: 1 });
   }
+}
+
+// Event titles can arrive as raw markdown table rows ("| **Sat 10 Oct** |
+// Plan |"); print them as plain words and skip header/separator rows.
+function plainEventTitle(title: string) {
+  const cells = title.replace(/\*\*|__|`/g, "").split("|").map((cell) => cell.replace(/^#+\s*/, "").trim()).filter(Boolean);
+  const words = cells.filter((cell) => !/^:?-{2,}:?$/.test(cell));
+  if (!words.length || /^(date|day)$/i.test(words[0]) && words.length <= 3 && words.every((cell) => cell.split(" ").length <= 2)) return "";
+  return words.join(" - ");
 }
 
 export function drawFamilyMissionPage(ctx: PdfContext, pack: FamilyPackContext) {
@@ -102,17 +130,20 @@ export function drawFamilyMissionPage(ctx: PdfContext, pack: FamilyPackContext) 
   const threadPill = drawPill(page, fonts, "Trip thread", { x: MARGIN, top: flow.y, color: colors.teal, fill: colors.tealSoft, size: type.label });
   flow.y = threadPill.y - 8;
   const lines = Array.from({ length: booklet.days }, (_, index) => {
-    const events = pack.events.filter((event) => event.day === index + 1).map((event) => event.title).join(" / ");
+    const events = pack.events.filter((event) => event.day === index + 1).map((event) => plainEventTitle(event.title)).filter(Boolean).join(" / ");
     return { marker: String(index + 1), text: events || booklet.dayPlans[index]?.theme || "Open adventure" };
   });
   const columns = lines.length > 7 ? 2 : 1;
   const perColumn = Math.ceil(lines.length / columns);
   const columnWidth = (CONTENT_WIDTH - 12 * (columns - 1)) / columns;
-  const lineHeight = Math.max(8.5 * 1.3, Math.min(20, flow.remaining() / Math.max(1, perColumn)));
+  const size = type.small;
+  // Rows share the space left; with room, each day's thread gets two lines.
+  const rowHeight = Math.max(size * 1.3 + 4, Math.min(size * 1.3 * 2 + 10, flow.remaining() / Math.max(1, perColumn)));
+  const maxLines = rowHeight >= size * 1.3 * 2 + 6 ? 2 : 1;
   for (let column = 0; column < columns; column += 1) {
     lines.slice(column * perColumn, (column + 1) * perColumn).forEach((line, row) => {
       drawBulletList(page, fonts, [line], {
-        x: MARGIN + column * (columnWidth + 12), top: flow.y - row * lineHeight, width: columnWidth, size: 8.5, marker: "number", markerColor: colors.teal, maxLines: 1,
+        x: MARGIN + column * (columnWidth + 12), top: flow.y - row * rowHeight, width: columnWidth, size, marker: "number", markerColor: colors.teal, maxLines, lineHeight: size * 1.3,
       });
     });
   }
@@ -150,11 +181,19 @@ export function drawMissionCardsPage(ctx: PdfContext, pack: FamilyPackContext) {
     const y = flow.y - (Math.floor(index / 2) + 1) * height - Math.floor(index / 2) * gap;
     drawCard(page, { x, y, width, height }, { fill: colors.white, border: inks[index % 4], borderWidth: 1.4, radius: 14 });
     const pill = drawPill(page, fonts, `Day ${day.day} / ${mechanicLabel(mechanic)}`, { x: x + 10, top: y + height - 10, color: inks[index % 4], fill: fills[index % 4], size: type.label, maxWidth: width - 20 });
-    const title = drawText(page, day.theme, fonts, { x: x + 12, top: pill.y - 8, width: width - 24 }, { size: type.heading, font: fonts.display, color: colors.ink, maxLines: 2 });
-    drawText(page, pdfText(mechanicMissionPrompt(mechanic, day.theme)), fonts, { x: x + 12, top: title.bottom - 4, width: width - 24 }, {
-      size: type.small, color: colors.muted, maxLines: Math.max(1, Math.floor((title.bottom - 4 - y - 28) / (type.small * 1.35))),
+    const titleSize = fitTextSize(day.theme, fonts.display, width - 24, type.heading, Math.min(type.heading, 11), 2);
+    const title = drawText(page, day.theme, fonts, { x: x + 12, top: pill.y - 8, width: width - 24 }, { size: titleSize, font: fonts.display, color: colors.ink, maxLines: 2 });
+    // The mission in full where it fits (keeping at least one writing
+    // row), then writing rows for what the child found in the rest.
+    const pitch = type.writeLine;
+    const mission = pdfText(mechanicMissionPrompt(mechanic, day.theme));
+    const promptLine = type.small * 1.35;
+    const promptTop = title.bottom - 4;
+    const promptLines = Math.max(2, Math.floor((promptTop - y - 8 - pitch) / promptLine));
+    const prompt = drawText(page, mission, fonts, { x: x + 12, top: promptTop, width: width - 24 }, {
+      size: type.small, color: colors.muted, maxLines: promptLines,
     });
-    drawDottedLine(page, x + 12, x + width - 12, y + 16, colors.line, 4, 4);
+    drawRuledRows(page, { x: x + 12, y: y + 4, width: width - 24, height: prompt.bottom - y - 6 }, pitch, "bottom");
   });
 }
 
@@ -181,18 +220,20 @@ export function drawBadgeTrackerPage(ctx: PdfContext) {
     width,
     height,
   });
+  // Each cell: the badge's sticker spot (captioned with the badge's name)
+  // and a writing row for who earned it.
   FAMILY_BADGES.forEach((badge, index) => {
     const box = cell(index);
     drawCard(page, box, { fill: fills[index % 4] });
-    drawStickerSpot(ctx, page, { page: "badges", index }, box.x + width / 2, box.y + height - STICKER_DIAMETER / 2 - 10);
-    drawText(page, badge, fonts, { x: box.x + 6, top: box.y + height - STICKER_DIAMETER - 20, width: width - 12 }, { size: type.label, font: fonts.bold, color: colors.ink, maxLines: 2, align: "center" });
-    drawDottedLine(page, box.x + 10, box.x + width - 10, box.y + 12, colors.line, 3, 3);
+    drawStickerSpot(ctx, page, { page: "badges", index }, box.x + width / 2, box.y + height - STICKER_DIAMETER / 2 - 7, badge);
+    const row = Math.min(type.writeLine, box.y + height - STICKER_DIAMETER - 14 - box.y - 4);
+    drawRuledRows(page, { x: box.x + 10, y: box.y + 4, width: width - 20, height: row }, row);
   });
   const reward = cell(FAMILY_BADGES.length);
   drawCard(page, reward, { fill: colors.white, border: colors.softLine });
   const pill = drawPill(page, fonts, "Family reward", { x: reward.x + 8, top: reward.y + reward.height - 8, color: colors.teal, fill: colors.tealSoft, size: type.label });
-  drawText(page, `Collect ${Math.min(8, Math.max(3, booklet.days + 1))} badges, then choose a shared treat together.`, fonts, {
+  const rewardText = drawText(page, `Collect ${Math.min(8, Math.max(3, booklet.days + 1))} badges, then choose a shared treat together.`, fonts, {
     x: reward.x + 8, top: pill.y - 6, width: width - 16,
   }, { size: 8.5, color: colors.muted, maxLines: 5 });
-  drawDottedLine(page, reward.x + 10, reward.x + width - 10, reward.y + 14, colors.line, 3, 3);
+  drawRuledRows(page, { x: reward.x + 10, y: reward.y + 4, width: width - 20, height: rewardText.bottom - reward.y - 8 }, type.writeLine, "bottom");
 }

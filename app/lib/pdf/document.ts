@@ -36,6 +36,7 @@ import { colors, getDestinationTheme, typeScale } from "./theme.ts";
 export type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
 import { normalizedBooklet, planBookletPages } from "./plan.ts";
 import { stickersForBooklet } from "../booklet/stickers.ts";
+import { artContentBounds } from "./art-bounds.ts";
 export { bookletPdfPageCount, bookletPdfPageTitles } from "./plan.ts";
 
 // Self-hosted in public/fonts/ (see public/fonts/manifest.json, both OFL).
@@ -146,7 +147,8 @@ async function loadArtwork(document: PDFDocument, booklet: GeneratedBookletData,
   for (const { key, bytes } of images) if (bytes) artwork[key] = await embedIllustration(document, bytes);
   for (const { dayIndex, bytes } of reveals) if (bytes) revealArtwork[dayIndex] = await embedIllustration(document, bytes);
   const coverArtwork = cover ? await embedIllustration(document, cover) : undefined;
-  return { artwork, revealArtwork, coverArtwork };
+  const coverArtBounds = cover ? artContentBounds(cover) : undefined;
+  return { artwork, revealArtwork, coverArtwork, coverArtBounds };
 }
 
 function drawDayEntry(ctx: PdfContext, entry: DayPageEntry) {
@@ -192,7 +194,7 @@ export async function createBookletPdf(
   const fonts = await loadBookletFonts(document, resolveFontBytes);
   const art = resolveColoringImage
     ? await loadArtwork(document, booklet, resolveColoringImage)
-    : { artwork: {}, revealArtwork: {}, coverArtwork: undefined };
+    : { artwork: {}, revealArtwork: {}, coverArtwork: undefined, coverArtBounds: undefined };
   const plan = planBookletPages(booklet, Boolean(familyPack));
 
   document.setTitle(`${pdfText(booklet.destination)} Explorer - Age ${booklet.age}`);
@@ -215,6 +217,7 @@ export async function createBookletPdf(
     artwork: art.artwork,
     revealArtwork: art.revealArtwork,
     coverArtwork: art.coverArtwork,
+    coverArtBounds: art.coverArtBounds,
     familyPack,
     stickers: stickersForBooklet(booklet, familyPack),
     onStickerSpot: hooks.onStickerSpot,

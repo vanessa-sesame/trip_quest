@@ -202,12 +202,7 @@ export function drawDottedLine(
   }
 }
 
-// Ruled writing lines, evenly spaced, filling `box` from the top down.
-export function drawWriteLines(page: PDFPage, box: Box, pitch = 22, color: RGB = colors.line) {
-  for (let y = box.y + box.height - pitch; y >= box.y + 2; y -= pitch) {
-    drawDottedLine(page, box.x, box.x + box.width, y, color, 2.5, 3);
-  }
-}
+// Ruled writing lines and write-in rows live in writing.ts.
 
 // ---------------------------------------------------------------------------
 // Bullet lists

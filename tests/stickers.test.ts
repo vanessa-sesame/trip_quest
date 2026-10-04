@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
-import { STICKERS_PER_SHEET, stickerPlan, stickersForBooklet, treatMilestones, type Sticker } from "../app/lib/booklet/stickers.ts";
+import { MAX_TREAT_STOPS, STICKERS_PER_SHEET, stickerPlan, stickersForBooklet, treatMilestones, type Sticker } from "../app/lib/booklet/stickers.ts";
 import { normalizeFamilyChildren } from "../app/lib/family.ts";
 import { createBookletPdf } from "../app/lib/pdf/booklet-pdf.ts";
 import { normalizedBooklet } from "../app/lib/pdf/plan.ts";
@@ -39,6 +39,25 @@ test("a family pack adds a spot for each family badge sticker", async () => {
   assert.equal(planned.find((sticker) => sticker.kind === "name")?.label, "Mia");
 });
 
+// The sample booklet's days repeated (renumbered, with their titles made
+// unique) to any trip length.
+function bookletOfDays(days: number) {
+  const sample = sampleGeneratedBooklet();
+  const retitle = (value: unknown, suffix: string): unknown => {
+    if (Array.isArray(value)) return value.map((entry) => retitle(entry, suffix));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) =>
+      [key, (key === "title" || key === "theme") && typeof entry === "string" ? `${entry}${suffix}` : retitle(entry, suffix)]));
+  };
+  const dayPlans = Array.from({ length: days }, (_, index) => {
+    const source = sample.dayPlans[index % sample.dayPlans.length];
+    const round = Math.floor(index / sample.dayPlans.length);
+    const day = (round ? retitle(source, ` ${round + 1}`) : structuredClone(source)) as typeof source;
+    return { ...day, day: index + 1 };
+  });
+  return { ...sample, days, dayPlans, itinerary: dayPlans.map((day) => day.theme) };
+}
+
 test("sticker ids are unique and the envelope sheet holds exactly one sheet", () => {
   const booklet = sampleGeneratedBooklet();
   for (const familyPack of [false, true]) {
@@ -48,10 +67,44 @@ test("sticker ids are unique and the envelope sheet holds exactly one sheet", ()
   }
 });
 
-test("treat stops: one for a day trip, then day 1, halfway and the end", () => {
+test("treat stops: one every day for trips up to four days, then four spread evenly", () => {
   assert.deepEqual(treatMilestones(1).map((stop) => stop.afterDay), [1]);
   assert.deepEqual(treatMilestones(2).map((stop) => stop.afterDay), [1, 2]);
-  assert.deepEqual(treatMilestones(5).map((stop) => stop.afterDay), [1, 3, 5]);
+  assert.deepEqual(treatMilestones(3).map((stop) => stop.afterDay), [1, 2, 3]);
+  assert.deepEqual(treatMilestones(4).map((stop) => stop.afterDay), [1, 2, 3, 4]);
+  assert.deepEqual(treatMilestones(4).map((stop) => stop.label), ["Day 1 done!", "Day 2 done!", "Day 3 done!", "Trip done!"]);
+  assert.deepEqual(treatMilestones(5).map((stop) => stop.afterDay), [1, 3, 4, 5]);
+  assert.deepEqual(treatMilestones(8).map((stop) => stop.afterDay), [2, 4, 6, 8]);
+  assert.deepEqual(treatMilestones(14).map((stop) => stop.afterDay), [4, 7, 11, 14]);
+  assert.equal(treatMilestones(14)[1].label, "Halfway there!");
+  for (let days = 1; days <= 14; days += 1) {
+    const stops = treatMilestones(days);
+    assert.equal(stops.length, Math.min(days, MAX_TREAT_STOPS), `${days} days`);
+    assert.equal(stops[stops.length - 1].afterDay, days, `${days} days ends on the last day`);
+    assert.equal(stops[stops.length - 1].label, "Trip done!");
+    stops.forEach((stop, index) => {
+      assert.ok(stop.afterDay >= 1 && stop.afterDay <= days);
+      if (index > 0) assert.ok(stop.afterDay > stops[index - 1].afterDay, `${days} days: stops are on different days`);
+    });
+  }
+});
+
+test("every trip length draws one spot per treat stop and prints one milestone sticker per stop", async () => {
+  for (const days of [1, 3, 4, 5, 9, 14]) {
+    const booklet = bookletOfDays(days);
+    const planned = stickersForBooklet(normalizedBooklet(booklet));
+    const milestones = planned.filter((sticker) => sticker.kind === "milestone");
+    assert.equal(milestones.length, Math.min(days, MAX_TREAT_STOPS), `${days} days`);
+    const drawn = await spotsDrawn(booklet);
+    assert.deepEqual(
+      drawn.map((sticker) => sticker.id).sort(),
+      planned.filter((sticker) => sticker.spot.page !== "none").map((sticker) => sticker.id).sort(),
+      `${days} days: every planned sticker has exactly one drawn spot`,
+    );
+    assert.equal(planned.filter((sticker) => sticker.sheet === "game").length % STICKERS_PER_SHEET, 0, `${days} days: game sheets are full`);
+    const sheets = await PDFDocument.load(await createStickerSheetPdf(booklet));
+    assert.equal(sheets.getPageCount() * STICKERS_PER_SHEET, planned.length, `${days} days: every sheet is full`);
+  }
 });
 
 test("sticker sheets print every planned sticker on A5 pages of 30mm circles", async () => {

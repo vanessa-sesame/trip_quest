@@ -7,7 +7,8 @@ import {
   normalizePuzzleWord,
 } from "../../booklet/puzzles.ts";
 import { drawRoundedRect } from "../illustrations.ts";
-import { drawBulletList, drawDottedLine, drawPill, drawText, measureText, type BulletItem } from "../layout.ts";
+import { drawBulletList, drawPill, drawText, measureText, type BulletItem } from "../layout.ts";
+import { drawRuledLine, drawRuledRows } from "../writing.ts";
 import { colors } from "../theme.ts";
 import type { GameArgs } from "./types.ts";
 
@@ -79,7 +80,7 @@ export function drawWordSearch({ ctx, page, activity, box }: GameArgs) {
         markerColor: bankInks[index],
       });
     });
-    return;
+    return bankTop - listHeight;
   }
   const pillWidth = (box.width - 12) / 3;
   puzzle.words.forEach((word, index) => {
@@ -92,14 +93,20 @@ export function drawWordSearch({ ctx, page, activity, box }: GameArgs) {
       size: type.small, font: fonts.bold, color: colors.ink, align: "center", maxLines: 1,
     });
   });
+  return bankTop - pillRows * (pillHeight + 6) + 6;
 }
 
 export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
   const { fonts, type } = ctx;
   const items = activity.items ?? [];
   const puzzle = createCrossword(items.map((item) => item.label));
-  const rows = puzzle.grid.length;
-  const columns = puzzle.grid[0]?.length || 1;
+  // Lay out only the rows and columns that hold squares, so empty edges of
+  // the generated grid don't shrink the squares or leave gaps.
+  const used = puzzle.grid.flatMap((row, rowIndex) => row.flatMap((cellValue, columnIndex) => (cellValue ? [{ rowIndex, columnIndex }] : [])));
+  const firstRow = used.length ? Math.min(...used.map((cell) => cell.rowIndex)) : 0;
+  const firstColumn = used.length ? Math.min(...used.map((cell) => cell.columnIndex)) : 0;
+  const rows = used.length ? Math.max(...used.map((cell) => cell.rowIndex)) - firstRow + 1 : 1;
+  const columns = used.length ? Math.max(...used.map((cell) => cell.columnIndex)) - firstColumn + 1 : 1;
   const clues: BulletItem[] = puzzle.entries.map((entry) => ({
     marker: `${entry.number}${entry.direction === "across" ? "A" : "D"}`,
     text: items[entry.answerIndex]?.clue || "Solve this local answer.",
@@ -112,22 +119,20 @@ export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
   const height = rows * cell;
   const x0 = box.x + (box.width - width) / 2;
   const top = box.y + box.height;
-  puzzle.grid.forEach((row, rowIndex) => {
-    row.forEach((cellValue, columnIndex) => {
-      if (!cellValue) return;
-      const x = x0 + columnIndex * cell;
-      const y = top - (rowIndex + 1) * cell;
-      drawRoundedRect(page, { x: x + 1, y: y + 1, width: cell - 2, height: cell - 2 }, 4, {
-        color: colors.white,
-        borderColor: colors.teal,
-        borderWidth: 1.1,
-      });
-      if (cellValue.number) {
-        page.drawText(String(cellValue.number), { x: x + 3, y: y + cell - 10, size: 8, font: fonts.bold, color: colors.coral });
-      }
+  for (const { rowIndex, columnIndex } of used) {
+    const cellValue = puzzle.grid[rowIndex][columnIndex]!;
+    const x = x0 + (columnIndex - firstColumn) * cell;
+    const y = top - (rowIndex - firstRow + 1) * cell;
+    drawRoundedRect(page, { x: x + 1, y: y + 1, width: cell - 2, height: cell - 2 }, 4, {
+      color: colors.white,
+      borderColor: colors.teal,
+      borderWidth: 1.1,
     });
-  });
-  drawBulletList(page, fonts, clues, { ...clueOptions, x: box.x, top: top - height - 16, width: box.width });
+    if (cellValue.number) {
+      page.drawText(String(cellValue.number), { x: x + 3, y: y + cell - 10, size: 8, font: fonts.bold, color: colors.coral });
+    }
+  }
+  return drawBulletList(page, fonts, clues, { ...clueOptions, x: box.x, top: top - height - 16, width: box.width }).bottom;
 }
 
 export function drawMaze({ ctx, page, activity, box }: GameArgs) {
@@ -138,7 +143,8 @@ export function drawMaze({ ctx, page, activity, box }: GameArgs) {
   const gridSize = Math.min(box.width, box.height - pillHeight * 2 - 12);
   const cell = gridSize / maze.length;
   const x0 = box.x + (box.width - gridSize) / 2;
-  const y0 = box.y + pillHeight + 6;
+  // Top-anchored: Start pill, the grid, then the Finish pill.
+  const y0 = box.y + box.height - pillHeight - 6 - gridSize;
   const thickness = maze.length >= 16 ? 1.1 : 1.6;
   const wall = (x1: number, y1: number, x2: number, y2: number) =>
     page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color: colors.ink, lineCap: LineCapStyle.Round });
@@ -157,7 +163,7 @@ export function drawMaze({ ctx, page, activity, box }: GameArgs) {
   page.drawCircle({ x: x0 + cell / 2, y: y0 + gridSize - cell / 2, size: dot, color: colors.green });
   page.drawCircle({ x: x0 + gridSize - cell / 2, y: y0 + cell / 2, size: dot, color: colors.coral });
   drawPill(page, fonts, "Start", { x: x0, top: y0 + gridSize + pillHeight + 6, color: colors.green, fill: colors.greenSoft, size: type.label });
-  drawPill(page, fonts, "Finish", { x: x0 + gridSize, top: y0 - 6, color: colors.coral, fill: colors.coralSoft, size: type.label, align: "right" });
+  return drawPill(page, fonts, "Finish", { x: x0 + gridSize, top: y0 - 6, color: colors.coral, fill: colors.coralSoft, size: type.label, align: "right" }).y;
 }
 
 const codeSymbols = ["@", "#", "$", "%", "&", "+", "=", "?"];
@@ -166,8 +172,12 @@ export function codebreakerPhrase(label: string | undefined) {
   return normalizePuzzleWord(label || "TRIP", 12) || "TRIP";
 }
 
+// The coded word as symbol tiles, each with a one-letter writing space
+// under it, a starter key, the clue, and a full writing row for the
+// decoded word: the game is its own writing space.
 export function drawCodebreaker({ ctx, page, activity, box }: GameArgs) {
   const { fonts, type } = ctx;
+  const pitch = type.writeLine;
   const items = activity.items ?? [];
   const phrase = codebreakerPhrase(items[0]?.label);
   const letters = Array.from(new Set(phrase));
@@ -175,9 +185,12 @@ export function drawCodebreaker({ ctx, page, activity, box }: GameArgs) {
   const tile = Math.min(34, (box.width - (code.length - 1) * 5) / code.length);
   const rowWidth = code.length * tile + (code.length - 1) * 5;
   const startX = box.x + (box.width - rowWidth) / 2;
-  const clueHeight = measureText(`Clue: ${items[0]?.clue || "Crack the local word."}`, fonts, box.width, { size: type.body, maxLines: 3 }).height;
-  const contentHeight = tile + 40 + type.label * 2 + 8 + 30 + 16 + clueHeight + 20 + type.label * 2;
-  let top = box.y + box.height - Math.max(0, (box.height - contentHeight) / 3);
+  const clue = `Clue: ${items[0]?.clue || "Crack the local word."}`;
+  const clueHeight = measureText(clue, fonts, box.width, { size: type.body, maxLines: 3 }).height;
+  const pillHeight = type.label * 2;
+  const keyHeight = 30;
+  const contentHeight = tile + pitch + 18 + pillHeight + 8 + keyHeight + 16 + clueHeight + 16 + pillHeight + 4 + pitch;
+  let top = box.y + box.height - Math.max(0, (box.height - contentHeight) / 2.5);
 
   const symbolSize = Math.min(18, tile * 0.55);
   code.forEach((symbol, index) => {
@@ -190,33 +203,31 @@ export function drawCodebreaker({ ctx, page, activity, box }: GameArgs) {
       font: fonts.monoBold,
       color: colors.ink,
     });
-    drawDottedLine(page, x + 3, x + tile - 3, top - tile - 22, colors.line, 3, 2);
+    // One handwritten letter per tile: a full writing pitch of room.
+    drawRuledLine(page, x + 3, x + tile - 3, top - tile - pitch);
   });
-  top -= tile + 40;
+  top -= tile + pitch + 18;
 
   const key = letters.slice(0, 4);
-  const keyTop = top;
-  drawPill(page, fonts, "Starter key", { x: box.x, top: keyTop, color: colors.teal, fill: colors.tealSoft, size: type.label });
+  drawPill(page, fonts, "Starter key", { x: box.x, top, color: colors.teal, fill: colors.tealSoft, size: type.label });
   const keyWidth = (box.width - 3 * 8) / 4;
+  const keyY = top - pillHeight - 8 - keyHeight;
   key.forEach((letter, index) => {
     const x = box.x + index * (keyWidth + 8);
-    const y = keyTop - type.label * 2 - 8 - 30;
-    drawRoundedRect(page, { x, y, width: keyWidth, height: 30 }, 10, { color: colors.white, borderColor: colors.teal, borderWidth: 1 });
+    drawRoundedRect(page, { x, y: keyY, width: keyWidth, height: keyHeight }, 10, { color: colors.white, borderColor: colors.teal, borderWidth: 1 });
     const text = `${codeSymbols[index]} = ${letter}`;
     page.drawText(text, {
       x: x + (keyWidth - fonts.monoBold.widthOfTextAtSize(text, 13)) / 2,
-      y: y + 10,
+      y: keyY + 10,
       size: 13,
       font: fonts.monoBold,
       color: colors.teal,
     });
   });
-  top = keyTop - type.label * 2 - 8 - 30 - 16;
+  top = keyY - 16;
 
-  top = drawText(page, `Clue: ${items[0]?.clue || "Crack the local word."}`, fonts, { x: box.x, top, width: box.width }, {
-    size: type.body, color: colors.ink, maxLines: 3,
-  }).bottom - 20;
-  drawPill(page, fonts, "Decoded word", { x: box.x, top: Math.max(box.y + type.label * 2, top), color: colors.green, fill: colors.greenSoft, size: type.label });
-  const lineY = Math.max(box.y + type.label * 2, top) - type.label * 2 + 4;
-  drawDottedLine(page, box.x + 110, box.x + box.width, lineY, colors.line, 5, 4);
+  top = drawText(page, clue, fonts, { x: box.x, top, width: box.width }, { size: type.body, color: colors.ink, maxLines: 3 }).bottom - 16;
+  top = Math.max(box.y + pillHeight + 4 + pitch, top);
+  const pill = drawPill(page, fonts, "Decoded word", { x: box.x, top, color: colors.green, fill: colors.greenSoft, size: type.label });
+  return drawRuledRows(page, { x: box.x, y: pill.y - 4 - pitch, width: box.width, height: pitch }, pitch) ? pill.y - 4 - pitch : pill.y;
 }

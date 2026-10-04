@@ -57,15 +57,22 @@ export function gameCheer(gameType: GameType | undefined) {
   return gameCheers[gameType ?? "story"] ?? gameCheers.story;
 }
 
-// The treat-trail stops for a trip: after day 1, halfway, and at the end.
+// The treat trail never has more stops than this: four 30mm sticker spots
+// are what an A5 page can hold beside the day-by-day trail.
+export const MAX_TREAT_STOPS = 4;
+
+// The treat-trail stops for a trip. Trips of up to four days get a stop at
+// the end of every day; longer trips get four stops spread evenly (a
+// quarter, halfway, three quarters), the last always on the final day.
 export function treatMilestones(days: number) {
-  if (days <= 1) return [{ label: "Day 1 done!", afterDay: 1 }];
-  if (days === 2) return [{ label: "Day 1 done!", afterDay: 1 }, { label: "Trip done!", afterDay: 2 }];
-  return [
-    { label: "Day 1 done!", afterDay: 1 },
-    { label: "Halfway there!", afterDay: Math.ceil(days / 2) },
-    { label: "Trip done!", afterDay: days },
-  ];
+  const total = Math.max(1, Math.floor(days));
+  const count = Math.min(total, MAX_TREAT_STOPS);
+  return Array.from({ length: count }, (_, index) => {
+    const afterDay = count === total ? index + 1 : Math.round((total * (index + 1)) / count);
+    const halfway = total > MAX_TREAT_STOPS && index === 1;
+    const label = index === count - 1 ? "Trip done!" : halfway ? "Halfway there!" : `Day ${afterDay} done!`;
+    return { label, afterDay };
+  });
 }
 
 export function stickerPlan(
@@ -101,7 +108,8 @@ export function stickerPlan(
   });
 
   treatMilestones(booklet.dayPlans.length).forEach((milestone, index) => {
-    stickers.push({ id: `treat-${index}`, kind: "milestone", sheet: "game", label: `Stop ${index + 1} treat!`, icon: "heart", tone: (index + 1) % 4, spot: { page: "treats", milestone: index } });
+    // Coloured like the day the stop falls on, so stop and day match.
+    stickers.push({ id: `treat-${index}`, kind: "milestone", sheet: "game", label: `Stop ${index + 1} treat!`, icon: "heart", tone: (milestone.afterDay - 1) % 4, spot: { page: "treats", milestone: index } });
   });
 
   // Extra cheers fill the last game sheet, for anything else worth a

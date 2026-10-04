@@ -81,7 +81,7 @@ export function drawMap({ ctx, page, activity, box }: GameArgs) {
   drawPill(page, fonts, "F = Finish", { x: box.x + box.width, top: box.y + box.height, color: colors.coral, fill: colors.coralSoft, size: type.label, align: "right" });
 
   const legendTop = mapY - 24;
-  columns.forEach((column, index) => {
-    drawBulletList(page, fonts, column, { ...legendOptions, x: box.x + index * (columnWidth + columnGap), top: legendTop, width: columnWidth });
-  });
+  return Math.min(...columns.map((column, index) =>
+    drawBulletList(page, fonts, column, { ...legendOptions, x: box.x + index * (columnWidth + columnGap), top: legendTop, width: columnWidth }).bottom,
+  ));
 }

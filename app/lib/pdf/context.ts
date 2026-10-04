@@ -4,6 +4,7 @@ import { coloringSceneFor, curatedColoringImagePath } from "../booklet/coloring.
 import type { FamilyChild, ItineraryEvent, QuestMechanic } from "../family.ts";
 import { stickerForSpot, type Sticker, type StickerSpot } from "../booklet/stickers.ts";
 import { drawStickerIcon } from "./art/icons.ts";
+import type { ArtBounds } from "./art-bounds.ts";
 import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { drawRoundedRect } from "./illustrations.ts";
 import { drawPill, drawText, fitTextSize, pdfText, type Fonts } from "./layout.ts";
@@ -41,6 +42,8 @@ export type PdfContext = {
   artwork: ColoringArtwork;
   revealArtwork: Record<number, PDFImage>;
   coverArtwork?: PDFImage;
+  // Where the cover art's picture sits inside its canvas (art-bounds.ts).
+  coverArtBounds?: ArtBounds;
   familyPack?: FamilyPackContext;
   // Every sticker in the kit and its spot (app/lib/booklet/stickers.ts).
   stickers: Sticker[];

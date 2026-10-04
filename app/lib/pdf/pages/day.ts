@@ -139,7 +139,7 @@ function drawCounting(ctx: PdfContext, page: PDFPage, day: DayPlan, box: { x: nu
   const columns = 5;
   const rowCount = Math.ceil(count / columns);
   const gap = 12;
-  const diameter = Math.min(46, (area.width - gap * (columns - 1)) / columns, (area.height - gap * (rowCount - 1)) / rowCount);
+  const diameter = Math.min(54, (area.width - gap * (columns - 1)) / columns, (area.height - gap * (rowCount - 1)) / rowCount);
   if (diameter < 16) return;
   const gridWidth = columns * diameter + (columns - 1) * gap;
   const startX = area.x + (area.width - gridWidth) / 2 + diameter / 2;

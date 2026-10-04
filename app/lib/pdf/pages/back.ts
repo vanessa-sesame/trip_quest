@@ -9,7 +9,8 @@ import {
   drawMosaicFragment,
   drawRoundedRect,
 } from "../illustrations.ts";
-import { drawPill, drawText, drawWriteLines, fitTextSize, Flow, pdfText } from "../layout.ts";
+import { drawPill, drawText, fitTextSize, Flow, pdfText } from "../layout.ts";
+import { drawRuledRows } from "../writing.ts";
 import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, PAGE_HEIGHT, PAGE_WIDTH, colors } from "../theme.ts";
 
 export function drawAnswerKeyPage(ctx: PdfContext, entries: AnswerEntry[], part: number, parts: number) {
@@ -51,7 +52,7 @@ export function drawNotesPage(ctx: PdfContext) {
   const top = drawPageHeader(ctx, page, { kicker: "My notes", title: "Notes and doodles", accent: colors.teal, soft: colors.tealSoft, titleLines: 1 });
   const box = { x: MARGIN, y: CONTENT_BOTTOM, width: CONTENT_WIDTH, height: top - CONTENT_BOTTOM };
   drawRoundedRect(page, box, 14, { color: colors.white, borderColor: colors.softLine, borderWidth: 1.2 });
-  drawWriteLines(page, { x: box.x + 16, y: box.y + 10, width: box.width - 32, height: box.height - 16 }, type.body * 2.2);
+  drawRuledRows(page, { x: box.x + 16, y: box.y + 34, width: box.width - 32, height: box.height - 40 }, type.writeLine);
   drawDoodleStar(page, box.x + box.width - 24, box.y + 22, 7, theme.accent);
   drawDoodleSparkle(page, box.x + box.width - 46, box.y + 16, 5, colors.yellow);
 }
@@ -78,10 +79,15 @@ export function drawMemoryPage(ctx: PdfContext) {
   prompts.forEach((prompt, index) => {
     const x = MARGIN + (index % 2) * (width + gap);
     const y = flow.y - (Math.floor(index / 2) + 1) * height - Math.floor(index / 2) * gap;
-    // A pastel frame with a white drawing window inside it.
+    // A pastel frame with a white drawing window inside it, and a writing
+    // row at the foot of the window for a word or two about it.
+    const window = { x: x + 8, y: y + 8, width: width - 16, height: height - 16 - type.label * 2 - 6 };
     drawRoundedRect(page, { x, y, width, height }, 16, { color: fills[index] });
-    drawRoundedRect(page, { x: x + 8, y: y + 8, width: width - 16, height: height - 16 - type.label * 2 - 6 }, 10, { color: colors.white });
+    drawRoundedRect(page, window, 10, { color: colors.white });
     drawPill(page, fonts, prompt, { x: x + 10, top: y + height - 8, color: inks[index], fill: colors.white, size: type.label, maxWidth: width - 20 });
+    if (window.height >= type.writeLine * 3) {
+      drawRuledRows(page, { x: window.x + 10, y: window.y + 2, width: window.width - 20, height: type.writeLine }, type.writeLine);
+    }
   });
 }
 
@@ -113,7 +119,7 @@ export function drawCertificate(ctx: PdfContext) {
   });
   top = sealCy - 62;
 
-  top = drawText(page, "This certifies that", fonts, { ...column, top }, { size: type.small, font: fonts.bold, color: colors.muted, align: "center" }).bottom - 30;
+  top = drawText(page, "This certifies that", fonts, { ...column, top }, { size: type.small, font: fonts.bold, color: colors.muted, align: "center" }).bottom - Math.max(30, type.writeLine);
   drawHandLine(page, column.x + 30, top, column.x + column.width - 30, top, colors.line, 1.2, "cert-name-line");
   top = drawText(page, "Explorer name", fonts, { ...column, top: top - 4 }, { size: type.label, color: colors.muted, align: "center" }).bottom - 14;
   top = drawText(page, "is now a", fonts, { ...column, top }, { size: type.small, font: fonts.bold, color: colors.muted, align: "center" }).bottom - 6;

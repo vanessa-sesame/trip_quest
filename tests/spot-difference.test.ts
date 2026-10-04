@@ -9,6 +9,9 @@ import {
   applyDifferencePaths,
   buildDifferencePicture,
   chooseRegions,
+  differencesForAge,
+  erasableDetails,
+  withDifferenceCount,
 } from "../app/lib/generation/spot-difference.ts";
 
 const SIZE = 512;
@@ -177,19 +180,20 @@ test("the pipeline stores both pictures, reuses them, and assigns them to the ri
     const dayPlans = buildBooklet(7, "Kyoto", 1);
     dayPlans[0].slots.sitDown = { ...dayPlans[0].slots.sitDown, gameType: "spot_the_difference", title: "Garden Differences" };
     const runtime = { BOOKLET_FILES: storage, CLOUDFLARE_ACCOUNT_ID: "test", CLOUDFLARE_API_TOKEN: "test" };
-    const assignments = await addSpotTheDifference(runtime, { destination: "Kyoto", dayPlans });
+    const assignments = await addSpotTheDifference(runtime, { destination: "Kyoto", dayPlans, age: 5 });
     assert.equal(assignments.length, 1);
     assert.equal(assignments[0].slot, "sitDown");
-    assert.equal(calls, 4, "one picture plus one edit per region");
     const pictures = assignments[0].differencePaths;
+    assert.equal(pictures.regions.length, 4);
+    assert.equal(calls, 1 + 2 + 2 * 3, "one picture, one edit per addition, three tries per removal");
     const keyOf = (path: string) => decodeURIComponent(path.split("key=")[1]);
     const storedA = decodeImage(objects.get(keyOf(pictures.a))!.bytes);
     const storedB = decodeImage(objects.get(keyOf(pictures.b))!.bytes);
     assert.equal(storedA.width, SIZE);
     assert.ok(differsOnlyInside(storedA, storedB, pictures.regions));
 
-    const again = await addSpotTheDifference(runtime, { destination: "Kyoto", dayPlans });
-    assert.equal(calls, 4, "the second run reuses the stored pair");
+    const again = await addSpotTheDifference(runtime, { destination: "Kyoto", dayPlans, age: 5 });
+    assert.equal(calls, 9, "the second run reuses the stored pair");
     assert.deepEqual(again, assignments);
 
     const applied = applyDifferencePaths(dayPlans, assignments);
@@ -198,4 +202,63 @@ test("the pipeline stores both pictures, reuses them, and assigns them to the ri
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// The scene plus small separate shapes inside the landmark, like windows.
+function sceneWithWindows() {
+  const a = scene();
+  const windows = [[1.5, 1.5], [3.5, 1.5], [1.5, 3.5], [3.5, 3.5]].map(([col, row]) => [Math.round(col * CELL), Math.round(row * CELL)]);
+  for (const [cx, cy] of windows) {
+    for (let y = cy - 14; y <= cy + 14; y += 1) for (let x = cx - 14; x <= cx + 14; x += 1) a.data[y * SIZE + x] = 255;
+    for (let y = cy - 8; y <= cy + 8; y += 1) for (let x = cx - 8; x <= cx + 8; x += 1) {
+      if (Math.abs(x - cx) > 5 || Math.abs(y - cy) > 5) a.data[y * SIZE + x] = 20;
+    }
+  }
+  return a;
+}
+
+test("older children get more differences", () => {
+  assert.equal(differencesForAge(4), 4);
+  assert.equal(differencesForAge(5), 4);
+  assert.equal(differencesForAge(7), 6);
+});
+
+test("small separate details inside the picture can be erased; big outlines cannot", () => {
+  assert.equal(erasableDetails(scene(), 4, []).length, 0, "the landmark's connected outline is never erased");
+  const details = erasableDetails(sceneWithWindows(), 4, []);
+  assert.equal(details.length, 4);
+  for (const detail of details) assert.ok(detail.box.w <= 20 && detail.box.h <= 20);
+});
+
+test("harder pictures mix added objects with erased details, all inside their regions", async () => {
+  const a = sceneWithWindows();
+  const { b, regions } = await buildDifferencePicture(a, null, "seed", undefined, 6);
+  assert.equal(regions.length, 6);
+  assert.ok(regions.filter((region) => region.label === "something missing").length >= 2);
+  assert.ok(differsOnlyInside(a, b, regions));
+  assert.equal(new Set(regions.map((region) => region.label).filter((label) => label !== "something missing")).size,
+    regions.filter((region) => region.label !== "something missing").length, "no repeated additions");
+});
+
+test("an object the model erases is copied into picture B with the scenery behind it", async () => {
+  const a = sceneWithWindows();
+  // The model takes away the top-left window, whichever area it was asked about.
+  const erased = Uint8Array.from(a.data);
+  const [cx, cy] = [Math.round(1.5 * CELL), Math.round(1.5 * CELL)];
+  for (let y = cy - 10; y <= cy + 10; y += 1) for (let x = cx - 10; x <= cx + 10; x += 1) erased[y * SIZE + x] = 255;
+  const edit = async (prompt: string) => (prompt.includes("Erase") ? toJpeg({ width: SIZE, height: SIZE, data: erased }) : null);
+  const { b, regions, edited } = await buildDifferencePicture(a, edit, "seed", undefined, 5);
+  assert.equal(regions.length, 5);
+  assert.ok(edited >= 1);
+  const missing = regions.filter((region) => region.label === "something missing");
+  assert.ok(missing.some((region) => region.x * SIZE <= cx - 8 && (region.x + region.w) * SIZE >= cx + 8));
+  assert.ok(b.data[(cy - 8) * SIZE + cx] > 200, "the window's frame is gone from B");
+  assert.ok(differsOnlyInside(a, b, regions));
+});
+
+test("the game text names the real number of changes once the pictures exist", () => {
+  assert.equal(withDifferenceCount("Circle three changes between the two pictures.", 6), "Circle six changes between the two pictures.");
+  assert.equal(withDifferenceCount("Three small things changed in picture B.", 5), "Five small things changed in picture B.");
+  assert.equal(withDifferenceCount("Find 3 differences.", 5), "Find 5 differences.");
+  assert.equal(withDifferenceCount("Spot three lanterns.", 6), "Spot three lanterns.");
 });

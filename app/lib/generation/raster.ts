@@ -181,7 +181,7 @@ function circlePoints(cx: number, cy: number, radius: number, count = 48): Array
   });
 }
 
-export const doodleKinds = ["star", "balloon", "sun"] as const;
+export const doodleKinds = ["star", "balloon", "sun", "heart", "flower", "moon"] as const;
 export type DoodleKind = (typeof doodleKinds)[number];
 
 // Draws a doodle centred at (cx, cy) with the given radius; returns its
@@ -207,6 +207,38 @@ export function drawDoodle(image: Grey, kind: DoodleKind, cx: number, cy: number
     strokePath(image, [[cx - r * 0.18, top + r + r * 0.18], [cx, top + r], [cx + r * 0.18, top + r + r * 0.18]], line, true);
     strokePath(image, [[cx, top + r + r * 0.18], [cx - radius * 0.12, cy + radius * 0.6], [cx + radius * 0.08, cy + radius]], line);
     return { x: cx - r, y: top - r, w: r * 2, h: cy + radius - (top - r) };
+  }
+  if (kind === "heart") {
+    const points: Array<[number, number]> = Array.from({ length: 48 }, (_, index) => {
+      const t = (index / 48) * Math.PI * 2;
+      const x = 16 * Math.sin(t) ** 3;
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      return [cx + (x / 17) * radius, cy - (y / 17) * radius - radius * 0.1];
+    });
+    strokePath(image, points, line, true);
+    return { x: cx - radius, y: cy - radius, w: radius * 2, h: radius * 2 };
+  }
+  if (kind === "flower") {
+    const petal = radius * 0.3;
+    for (let index = 0; index < 5; index += 1) {
+      const angle = (index / 5) * Math.PI * 2 - Math.PI / 2;
+      strokePath(image, circlePoints(cx + Math.cos(angle) * radius * 0.55, cy - radius * 0.25 + Math.sin(angle) * radius * 0.55, petal, 32), line, true);
+    }
+    strokePath(image, circlePoints(cx, cy - radius * 0.25, radius * 0.22, 24), line, true);
+    strokeLine(image, cx, cy + radius * 0.5, cx, cy + radius, line);
+    return { x: cx - radius, y: cy - radius, w: radius * 2, h: radius * 2 };
+  }
+  if (kind === "moon") {
+    // A crescent: an outer arc and an inner arc offset to one side.
+    const arc = (ox: number, r: number, from: number, to: number): Array<[number, number]> =>
+      Array.from({ length: 33 }, (_, index) => {
+        const angle = from + ((to - from) * index) / 32;
+        return [cx + ox + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+      });
+    const outer = arc(0, radius * 0.85, Math.PI * 0.35, Math.PI * 1.65);
+    const inner = arc(radius * 0.35, radius * 0.7, Math.PI * 1.55, Math.PI * 0.45);
+    strokePath(image, [...outer, ...inner], line, true);
+    return { x: cx - radius, y: cy - radius, w: radius * 2, h: radius * 2 };
   }
   const r = radius * 0.48;
   strokePath(image, circlePoints(cx, cy, r), line, true);

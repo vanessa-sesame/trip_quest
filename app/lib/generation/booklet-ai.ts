@@ -843,7 +843,7 @@ function validDifferencePictures(value: unknown): { differencePaths?: Difference
   const candidate = value as Record<string, unknown>;
   if (typeof candidate.a !== "string" || !isStoredArtworkPath(candidate.a)) return {};
   if (typeof candidate.b !== "string" || !isStoredArtworkPath(candidate.b)) return {};
-  if (!Array.isArray(candidate.regions) || candidate.regions.length !== 3) return {};
+  if (!Array.isArray(candidate.regions) || candidate.regions.length < 3 || candidate.regions.length > 8) return {};
   const fraction = (number: unknown) => typeof number === "number" && Number.isFinite(number) && number >= 0 && number <= 1;
   const regions: DifferenceRegion[] = [];
   for (const entry of candidate.regions) {

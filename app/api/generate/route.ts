@@ -638,7 +638,7 @@ export async function POST(request: Request) {
                 dayPlans: preparedDraft.dayPlans,
               }, publish),
               addCoverIllustration(runtime, { destination }, publish),
-              addSpotTheDifference(runtime, { destination, dayPlans: preparedDraft.dayPlans }, publish),
+              addSpotTheDifference(runtime, { destination, dayPlans: preparedDraft.dayPlans, age }, publish),
             ]);
             const revealedDayPlans = applyDifferencePaths(illustratedDayPlans, spotPictures).map((day, index) => {
               const photoReveal = revealPhotoDayPlans[index]?.slots?.questReveal;

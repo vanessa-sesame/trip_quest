@@ -29,7 +29,7 @@ export function hasDifferencePictures(activity: GameCopyInput) {
 }
 
 export function gameLabel(activity: GameCopyInput) {
-  if (hasDifferencePictures(activity)) return "Spot 3 differences";
+  if (hasDifferencePictures(activity)) return `Spot ${activity.differencePaths?.regions.length ?? 3} differences`;
   return gameTypeLabels[activity.gameType || ""] || "Travel game";
 }
 
@@ -46,7 +46,11 @@ export function differencePosition(region: Pick<DifferenceRegion, "x" | "y" | "w
 // drawn (Start/Finish on the maze, questions on the quiz). This is render
 // copy, not stored content, so it can change without touching editions.
 export function gameInstruction(activity: GameCopyInput) {
-  if (hasDifferencePictures(activity)) return "Find the 3 things that changed in picture B and circle them.";
+  if (hasDifferencePictures(activity)) {
+    const regions = activity.differencePaths?.regions ?? [];
+    const takenAway = regions.some((region) => region.label === "something missing");
+    return `Find the ${regions.length} things that changed in picture B and circle them.${takenAway ? " Some were added, some were taken away!" : ""}`;
+  }
   switch (activity.gameType) {
     case "word_search":
       return "Find each word in the grid and circle it. Tick it off below.";

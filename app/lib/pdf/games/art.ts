@@ -75,14 +75,16 @@ export function drawDifferencePictures(args: GameArgs): number | undefined {
     drawRoundedRect(page, frame, 12, { color: colors.white, borderColor: color, borderWidth: 1.4 });
     drawImageContained(page, image, { x: frame.x + 5, y: frame.y + 5, width: frame.width - 10, height: frame.height - 10 });
     if (index === 1) {
-      // Three circles down the right of picture B, one per change found.
-      [0, 1, 2].forEach((circle) => {
+      // A circle down the right of picture B for each change to find.
+      const count = pictures.regions.length;
+      const step = Math.min(30, (frame.height - 28) / Math.max(1, count - 1));
+      pictures.regions.forEach((_, circle) => {
         page.drawCircle({
           x: frame.x + frame.width + trackerWidth / 2 + 4,
-          y: frame.y + frame.height - 18 - circle * 30,
+          y: frame.y + frame.height - 18 - circle * step,
           size: 10,
           color: colors.white,
-          borderColor: [colors.coral, colors.teal, colors.green][circle],
+          borderColor: [colors.coral, colors.teal, colors.green][circle % 3],
           borderWidth: 1.6,
         });
       });

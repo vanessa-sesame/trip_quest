@@ -316,7 +316,7 @@ function generationErrorMessage(error: unknown) {
     ? error.message
     : "The booklet could not be generated.";
   console.error("[TripQuest generation]", message);
-  return "The destination research was incomplete. Please try the place again.";
+  return "The booklet could not be finished this time. Please try again.";
 }
 
 export async function POST(request: Request) {

@@ -119,7 +119,10 @@ export function assertBookletQa(booklet: GeneratedBookletData) {
     if (day.slots.inThePlaceSecond && !day.slots.inThePlaceSecond.requiresPresence) {
       throw new Error(`Day ${day.day} second in-place puzzle can be completed before arrival.`);
     }
-    if (/\bYour child\b|THIS BOOK BELONGS TO/i.test(visibleDayText(day).join(" "))) {
+    // The unnamed-child fallback name ("Your child") left in as a name, or
+    // the old name-plate text. Ordinary adult tips ("help your child find
+    // the lanterns", "Your child can count…" at a sentence start) are fine.
+    if (/(?<![.!?]\s|^)\bYour child\b|THIS BOOK BELONGS TO/.test(visibleDayText(day).join(" "))) {
       throw new Error(`Day ${day.day} contains an unresolved child-name placeholder.`);
     }
     const cardKey = normalizedSentence(`${day.slots.sitDown.title} ${day.slots.sitDown.prompt}`);

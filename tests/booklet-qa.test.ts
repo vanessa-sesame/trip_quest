@@ -192,3 +192,12 @@ test("a codebreaker whose answer is not a word is flagged", () => {
   day.slots.inThePlace = { ...day.slots.inThePlace, items: ["Mosaic", "Orange", "Stall", "Cup"].map((label) => ({ label, clue: `What is the ${label}?` })) };
   assert.ok(!composedContentIssues({ dayPlans: [day] }).some((issue) => /codebreaker but its first label/.test(issue)));
 });
+
+test("adult tips may say 'your child'; only the leftover placeholder name fails", () => {
+  const tip = strictBooklet();
+  tip.dayPlans[0].slots.beforeYouGo = "Help your child spot the lanterns. Your child can count them.";
+  assert.doesNotThrow(() => assertBookletQa(tip));
+  const leftover = strictBooklet();
+  leftover.dayPlans[1].siblingMission = "Take turns: Your child points and the grown-up counts.";
+  assert.throws(() => assertBookletQa(leftover), /child-name placeholder/i);
+});

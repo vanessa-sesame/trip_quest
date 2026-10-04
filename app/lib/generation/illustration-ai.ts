@@ -340,9 +340,9 @@ export async function addCoverIllustration(
     kind: "cover-art",
     style,
     destination: input.destination.toLocaleLowerCase(),
-    // Covers made before the lettering check could have the city's name
-    // written into the picture; this makes every destination draw afresh.
-    check: "no-text-1",
+    // Covers made before the lettering and flaw check could have the city's
+    // name or hole-punch dots in the picture; this draws every one afresh.
+    check: "clean-2",
   });
   const hash = await digest(identity);
   const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
@@ -387,7 +387,7 @@ async function coverHasLettering(runtime: IllustrationRuntime, bytes: Uint8Array
   try {
     const verdict = await askAboutImage(
       { bytes, contentType: sniffImageContentType(bytes) },
-      "Is any writing visible anywhere in this picture: letters, words, numbers, a title, a signature or a sign?",
+      "Does this picture have any writing (letters, words, numbers, a title, a signature or a sign) or any printing flaw: hole-punch dots, stray black dots or blobs, a border or frame, or a torn or cropped paper edge? Answer hasText true if either is present.",
       {
         type: "object",
         additionalProperties: false,

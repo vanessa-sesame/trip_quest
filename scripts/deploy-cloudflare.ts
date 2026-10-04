@@ -31,6 +31,10 @@ built.workers_dev = true;
 built.vars = { ...(built.vars as Record<string, string>), ...config.vars };
 built.d1_databases = [{ binding: "DB", database_name: config.d1.database_name, database_id: config.d1.database_id }];
 built.r2_buckets = [{ binding: "BOOKLET_FILES", bucket_name: config.r2.bucket_name }];
+// The PDF renderer reads fonts and curated pictures from the site's own
+// static files through env.ASSETS; without the binding it falls back to
+// Helvetica and drawn art (a Worker cannot fetch its own workers.dev URL).
+built.assets = { ...(built.assets as Record<string, unknown>), binding: "ASSETS" };
 built.routes = withDomains ? config.domains.map((pattern) => ({ pattern, custom_domain: true })) : [];
 writeFileSync(builtPath, `${JSON.stringify(built, null, 2)}\n`);
 console.log(`Deploying ${config.name} to account ${config.account_id}${withDomains ? ` on ${config.domains.join(", ")}` : " (workers.dev only)"}`);

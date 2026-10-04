@@ -66,13 +66,11 @@ test("the free PDF needs no purchase when the request names the stored edition",
   const { runtime, input, fingerprint } = await storedEdition();
 
   const stickers = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint, kind: "stickers" });
-  assert.equal(stickers.status, 200);
-  assert.equal(stickers.headers.get("content-type"), "application/pdf");
-  assert.equal(stickers.headers.get("x-tripquest-edition"), fingerprint);
-  assert.ok((await PDFDocument.load(await stickers.arrayBuffer())).getPageCount() >= 1);
+  assert.equal(stickers.status, 402, "sticker sheets come printed in the mailed kit");
 
   const booklet = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint.toUpperCase() });
   assert.equal(booklet.status, 200);
+  assert.equal(booklet.headers.get("x-tripquest-edition"), fingerprint);
   assert.equal(booklet.headers.get("x-tripquest-pdf-cache"), "generated");
   const bookletBytes = await booklet.arrayBuffer();
   assert.ok((await PDFDocument.load(bookletBytes)).getPageCount() > 4);
@@ -83,7 +81,7 @@ test("the free PDF needs no purchase when the request names the stored edition",
   assert.equal((await again.arrayBuffer()).byteLength, bookletBytes.byteLength);
 
   const parentGuide = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint, kind: "parent-guide" });
-  assert.equal(parentGuide.status, 402, "the parent answer guide is not part of the free child PDF");
+  assert.equal(parentGuide.status, 402, "the parent answer guide comes printed in the mailed kit");
 });
 
 test("a default-named single child still shares the durable PDF cache", async () => {
@@ -100,15 +98,15 @@ test("a default-named single child still shares the durable PDF cache", async ()
 test("the free PDF is refused unless the edition matches a stored one", async () => {
   const { runtime, input, fingerprint } = await storedEdition();
 
-  const missing = await prepareFreePdf(visitor(), runtime, input, { kind: "stickers" });
+  const missing = await prepareFreePdf(visitor(), runtime, input, {});
   assert.equal(missing.status, 409, "a fingerprint is required");
 
-  const other = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: "a".repeat(64), kind: "stickers" });
+  const other = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: "a".repeat(64) });
   assert.equal(other.status, 409, "a different edition is not rendered");
 
   // A trip nobody generated: nothing is generated on demand.
   const unknownTrip = pdfRequestFor({ ...sampleGeneratedBooklet(), destination: "Lisbon" });
-  const notCreated = await prepareFreePdf(visitor(), runtime, unknownTrip, { editionFingerprint: fingerprint, kind: "stickers" });
+  const notCreated = await prepareFreePdf(visitor(), runtime, unknownTrip, { editionFingerprint: fingerprint });
   assert.equal(notCreated.status, 404);
 
   const noStorage = await prepareFreePdf(visitor(), {}, input, { editionFingerprint: fingerprint });
@@ -117,7 +115,7 @@ test("the free PDF is refused unless the edition matches a stored one", async ()
 
 test("an expired edition is no longer free to download", async () => {
   const { runtime, input, fingerprint } = await storedEdition({ expiresAt: Date.now() - 1 });
-  const response = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint, kind: "stickers" });
+  const response = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint });
   assert.equal(response.status, 404);
 });
 

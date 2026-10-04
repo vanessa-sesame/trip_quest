@@ -37,6 +37,7 @@ import {
   type GeneratedBookletProfile,
   isGeneratedBookletData,
 } from "./lib/generation/booklet-ai";
+import { KitIllustration, KitShowcase } from "./components/kit-showcase";
 import { PdfPreview } from "./components/pdf-preview";
 import { bookletPdfPageTitles } from "./lib/pdf/plan";
 import {
@@ -62,7 +63,6 @@ import {
 } from "./lib/family";
 import { KIT_CONTENTS, KIT_SHIPS_WITHIN_DAYS, PRODUCTS, purchaseProductFrom, type PurchaseProduct } from "./lib/products";
 
-type FreePdfKind = "booklet" | "stickers";
 
 type Trip = {
   age: number;
@@ -131,7 +131,7 @@ function checkoutContext() {
     sessionId,
     pdfUrl: `/api/pdf?session_id=${encodeURIComponent(sessionId)}`,
     note: product === "kit"
-      ? `Payment received. ${kitShippingNote()} Preparing your free PDF and sticker sheets…`
+      ? `Payment received. ${kitShippingNote()} Preparing your booklet PDF…`
       : "Payment received. Preparing your PDF…",
     product,
   };
@@ -234,7 +234,7 @@ export default function Home() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutNote, setCheckoutNote] = useState("");
   const [pdfState, setPdfState] = useState<"idle" | "generating">("idle");
-  const [freePdfState, setFreePdfState] = useState<"idle" | FreePdfKind>("idle");
+  const [freePdfState, setFreePdfState] = useState<"idle" | "booklet">("idle");
   const [freePdfNote, setFreePdfNote] = useState("");
   const [paidDownloadState, setPaidDownloadState] = useState<PaidDownloadState>("idle");
   const { pdfUrl: paidPdfUrl, product: paidProduct, sessionId: checkoutSessionId } = checkoutReturn;
@@ -331,7 +331,7 @@ export default function Home() {
             setPaidDownloadState("ready");
             setCheckoutNote(
               paidProduct === "kit"
-                ? `Payment received. ${kitShippingNote()} The printable PDF and sticker sheets are free to download below while you wait.`
+                ? `Payment received. ${kitShippingNote()} The stickers, parent guide, mystery envelope and pencils come in the parcel. The booklet PDF is below if you want a peek before it arrives.`
                 : "Payment received. Your PDF is ready. If it does not download automatically, use the button below.",
             );
             // A kit buyer paid for the post, not the file: offer the free
@@ -757,27 +757,27 @@ export default function Home() {
       ? "/samples/tripquest-singapore-age-5-preview-20261004-m51.pdf"
       : undefined;
 
-  // The printable PDF and its sticker sheets are free for a created
-  // booklet; the server renders the stored edition matching the preview.
-  async function downloadFreePdf(kind: FreePdfKind) {
+  // The booklet PDF is free for a created booklet; the server renders the
+  // stored edition matching the preview. Everything else is in the kit.
+  async function downloadFreePdf() {
     if (!generatedBooklet?.editionFingerprint) {
-      setFreePdfNote("Create a custom booklet above first. Its PDF and sticker sheets are then free to download.");
+      setFreePdfNote("Create a custom booklet above first. Its booklet PDF is then free to download.");
       return;
     }
-    setFreePdfState(kind);
-    setFreePdfNote(kind === "booklet" ? "Preparing your free booklet PDF…" : "Preparing your free sticker sheets…");
+    setFreePdfState("booklet");
+    setFreePdfNote("Preparing your free booklet PDF…");
     try {
       const response = await fetch("/api/pdf", {
         method: "POST",
         headers: { Accept: "application/pdf", "Content-Type": "application/json" },
-        body: JSON.stringify({ ...editionRequest(generatedBooklet), kind }),
+        body: JSON.stringify(editionRequest(generatedBooklet)),
       });
       if (!response.ok || !(response.headers.get("content-type") || "").includes("application/pdf")) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error || "The PDF could not be prepared. Please try again.");
       }
       const filename = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") || "")?.[1]
-        || (kind === "stickers" ? "TripQuest-stickers.pdf" : "TripQuest-booklet.pdf");
+        || "TripQuest-booklet.pdf";
       const objectUrl = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -787,11 +787,7 @@ export default function Home() {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      setFreePdfNote(
-        kind === "booklet"
-          ? "Your booklet PDF is downloading. Print it at home, as many copies as you like."
-          : "Your sticker sheets are downloading. Print them on A5 sticker paper at 100% scale.",
-      );
+      setFreePdfNote("Your booklet PDF is downloading. Print it at home, as many copies as you like.");
     } catch (error) {
       setFreePdfNote(error instanceof Error ? error.message : "The PDF could not be prepared. Please try again.");
     } finally {
@@ -881,23 +877,11 @@ export default function Home() {
                 <Download size={18} />
                 {paidDownloadState !== "ready"
                   ? "Try download again"
-                  : paidProduct === "kit" ? "Download free PDF" : "Download your PDF"}
+                  : paidProduct === "kit" ? "Download booklet PDF" : "Download your PDF"}
               </a>
             ) : (
               <LoaderCircle className="payment-result-loader spin" size={24} aria-label="Preparing PDF" />
             )}
-            {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
-              <a className="paid-extra-link" href={`${paidPdfUrl}&kind=stickers`} download="TripQuest-stickers.pdf">
-                <Download size={15} />
-                Sticker sheets PDF: print on A5 sticker paper
-              </a>
-            ) : null}
-            {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
-              <a className="paid-extra-link" href={`${paidPdfUrl}&kind=parent-guide`} download="TripQuest-parent-guide.pdf">
-                <Download size={15} />
-                Parent guide and answer sheet
-              </a>
-            ) : null}
           </div>
         </section>
       ) : null}
@@ -1273,8 +1257,8 @@ export default function Home() {
 
           <div className="purchase-bar">
             <div className="purchase-bar-copy">
-              <span>Printable PDF · free</span>
-              <strong>Print it at home, or we post the kit</strong>
+              <span>Booklet PDF free · explorer kit {PRODUCTS.kit.priceLabel}</span>
+              <strong>Print the booklet at home, or let us post the whole kit</strong>
             </div>
             <div className="purchase-actions">
               <button
@@ -1282,7 +1266,7 @@ export default function Home() {
                 type="button"
                 disabled={freePdfState !== "idle"}
                 aria-busy={freePdfState === "booklet"}
-                onClick={() => void downloadFreePdf("booklet")}
+                onClick={() => void downloadFreePdf()}
               >
                 {freePdfState === "booklet" ? <LoaderCircle className="spin" size={18} /> : <Download size={18} />}
                 Download free PDF
@@ -1299,22 +1283,23 @@ export default function Home() {
                 Mail me the explorer kit · {PRODUCTS.kit.priceLabel}
               </button>
             </div>
-            <div className="purchase-bar-extra">
-              <button
-                className="paid-extra-link link-button"
-                type="button"
-                disabled={freePdfState !== "idle"}
-                aria-busy={freePdfState === "stickers"}
-                onClick={() => void downloadFreePdf("stickers")}
-              >
-                {freePdfState === "stickers" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />}
-                Sticker sheets PDF, free: print on A5 sticker paper
-              </button>
-              {freePdfNote ? <p className="free-pdf-note" role="status">{freePdfNote}</p> : null}
-            </div>
+            {freePdfNote ? (
+              <div className="purchase-bar-extra">
+                <p className="free-pdf-note" role="status">{freePdfNote}</p>
+              </div>
+            ) : null}
           </div>
         </section>
       </section>
+
+      <KitShowcase
+        destination={destinationName}
+        childName={familyChildDisplayName(leadChild, 0)}
+        onOrder={() => {
+          setCheckoutNote("");
+          setCheckoutOpen(true);
+        }}
+      />
 
       <section
         className="trip-outline"
@@ -1368,6 +1353,7 @@ export default function Home() {
             >
               <X size={19} />
             </button>
+            <KitIllustration destination={destinationName} childName={familyChildDisplayName(leadChild, 0)} compact />
             <p className="eyebrow">Explorer kit</p>
             <h2 id="checkout-title">Mail me the {destinationName} kit</h2>
             <p className="modal-subtitle">
@@ -1379,7 +1365,7 @@ export default function Home() {
                   <strong>Explorer kit, posted to you</strong>
                   <span className="product-option-price">{PRODUCTS.kit.priceLabel}</span>
                 </span>
-                <span className="product-option-note">{PRODUCTS.kit.note} · posted within {KIT_SHIPS_WITHIN_DAYS} working days</span>
+                <span className="product-option-note">{PRODUCTS.kit.note} · printed to order and posted within {KIT_SHIPS_WITHIN_DAYS} working days</span>
                 <ul>
                   {KIT_CONTENTS.map((item) => (
                     <li key={item}><Check size={14} /> {item}</li>
@@ -1388,7 +1374,7 @@ export default function Home() {
               </div>
             </div>
             <p className="kit-free-pdf-note">
-              Only want to print at home? The PDF and sticker sheets are free: close this and use Download free PDF.
+              Only want to print at home? The booklet PDF is free: close this and use Download free PDF. Stickers, the parent guide and the mystery envelope come only in the kit.
             </p>
             <button
               className="primary-button checkout-button"

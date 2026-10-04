@@ -2117,3 +2117,187 @@ p {
   color: var(--ink);
   font: inherit;
 }
+
+/* The explorer kit showcase: a flat-lay of the parcel beside what is in it,
+   then the free PDF vs kit comparison. */
+.kit-showcase {
+  margin-top: 20px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-lg);
+  background: var(--paper);
+  padding: var(--space-6);
+}
+
+.kit-showcase-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: center;
+}
+
+.kit-illustration {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.kit-illustration-compact {
+  max-width: 300px;
+  margin: 0 auto var(--space-3);
+}
+
+.kit-showcase-copy h2 {
+  margin: var(--space-2) 0 var(--space-3);
+  font-family: var(--font-display), var(--font-body);
+  font-size: clamp(1.45rem, 2.4vw, 2rem);
+  line-height: 1.2;
+}
+
+.kit-showcase-copy > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.kit-perks {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kit-perks li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  line-height: 1.45;
+}
+
+.kit-perks strong {
+  display: block;
+}
+
+.kit-perk-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-pill);
+  background: var(--pale-yellow);
+}
+
+.kit-perks li:nth-child(2) .kit-perk-icon { background: var(--pale-coral); }
+.kit-perks li:nth-child(3) .kit-perk-icon { background: var(--pale-blue); }
+.kit-perks li:nth-child(4) .kit-perk-icon { background: var(--pale-leaf); }
+
+.kit-showcase-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.kit-showcase-note {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: var(--space-3) 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.kit-compare {
+  width: 100%;
+  margin-top: var(--space-6);
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.94rem;
+}
+
+.kit-compare caption {
+  margin-bottom: var(--space-3);
+  font-family: var(--font-display), var(--font-body);
+  font-size: 1.15rem;
+  text-align: left;
+}
+
+.kit-compare th,
+.kit-compare td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.kit-compare thead th {
+  border-bottom: 1px solid var(--ink);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kit-compare tbody th {
+  font-weight: 600;
+}
+
+.kit-compare .kit-compare-kit {
+  background: var(--pale-yellow);
+}
+
+.kit-compare thead .kit-compare-kit {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.kit-compare tbody tr:last-child .kit-compare-kit {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.kit-compare thead .kit-compare-kit span {
+  display: block;
+  color: var(--coral);
+  font-size: 1rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.kit-compare-yes {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.kit-compare-yes svg {
+  flex: none;
+  color: var(--leaf);
+}
+
+.kit-compare-no {
+  color: var(--line);
+}
+
+@media (max-width: 980px) {
+  .kit-showcase-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kit-showcase-art {
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .kit-showcase {
+    padding: var(--space-4);
+  }
+
+  .kit-compare {
+    font-size: 0.86rem;
+  }
+
+  .kit-compare th,
+  .kit-compare td {
+    padding: 10px 8px;
+  }
+}

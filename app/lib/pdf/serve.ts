@@ -46,8 +46,9 @@ export type RuntimeEnvironment = PaymentRuntime & {
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
 
-// "booklet" is the child-facing printable booklet; paid sessions can also
-// request the matching sticker sheets and parent answer guide.
+// "booklet" is the child-facing printable booklet, the only file anyone
+// downloads. The sticker sheets and parent answer guide belong to the mailed
+// explorer kit: only the owner renders them (orders, library) to print.
 export type PdfKind = "booklet" | "stickers" | "parent-guide";
 
 export function pdfKindFrom(value: unknown): PdfKind {
@@ -227,14 +228,13 @@ export async function prepareFreePdf(
       { status: 409 },
     );
   }
-  const kind = pdfKindFrom(body.kind);
-  if (kind === "parent-guide") {
+  if (pdfKindFrom(body.kind) !== "booklet") {
     return Response.json(
-      { error: "The parent guide and answer sheet are included with the paid printable kit." },
+      { error: "The sticker sheets and parent guide come printed in the mailed explorer kit." },
       { status: 402 },
     );
   }
-  return preparePdf(request, runtime, input, null, requestedFingerprint, kind);
+  return preparePdf(request, runtime, input, null, requestedFingerprint, "booklet");
 }
 
 export type EditionPdfInput = {

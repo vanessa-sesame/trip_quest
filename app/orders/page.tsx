@@ -165,6 +165,7 @@ export default function OrdersPage() {
               <div className="order-buttons">
                 <a className="secondary-button" href={file("booklet")} download><Download size={16} /> Booklet</a>
                 <a className="secondary-button" href={file("stickers")} download><Download size={16} /> Stickers</a>
+                <a className="secondary-button" href={file("parent-guide")} download><Download size={16} /> Parent guide</a>
                 <a className="secondary-button" href={file("slip")} download><Download size={16} /> Packing slip</a>
                 {order.fulfilmentStatus === "new" ? (
                   <button className="primary-button" type="button" disabled={saving === order.id} onClick={() => void mark(order, "printed")}>

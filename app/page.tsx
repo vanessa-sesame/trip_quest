@@ -61,7 +61,7 @@ import {
   type FamilyChild,
   type ItineraryEvent,
 } from "./lib/family";
-import { KIT_CONTENTS, KIT_SHIPS_WITHIN_DAYS, PRODUCTS, purchaseProductFrom, type PurchaseProduct } from "./lib/products";
+import { CONTACT_EMAIL, KIT_CONTENTS, KIT_SHIPS_WITHIN_DAYS, PRODUCTS, purchaseProductFrom, type PurchaseProduct } from "./lib/products";
 
 
 type Trip = {
@@ -1376,6 +1376,9 @@ export default function Home() {
             <p className="kit-free-pdf-note">
               Only want to print at home? The booklet PDF is free: close this and use Download free PDF. Stickers, the parent guide and the mystery envelope come only in the kit.
             </p>
+            <p className="kit-free-pdf-note">
+              Full refund if you cancel before we print it. <a href="/policies#refunds" target="_blank" rel="noopener">Shipping and refunds</a>
+            </p>
             <button
               className="primary-button checkout-button"
               type="button"
@@ -1571,6 +1574,13 @@ export default function Home() {
           </section>
         </div>
       ) : null}
+      <footer className="site-footer">
+        <span>TripQuest Kids · Singapore</span>
+        <a href="/policies#shipping">Shipping</a>
+        <a href="/policies#refunds">Refunds</a>
+        <a href="/policies#privacy">Privacy</a>
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+      </footer>
     </main>
   );
 }

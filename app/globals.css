@@ -2301,3 +2301,66 @@ p {
     padding: 10px 8px;
   }
 }
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--space-6);
+  padding: var(--space-5) var(--space-4);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.site-footer a {
+  color: var(--ink);
+}
+
+.policies-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.policies-nav a {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.88rem;
+  text-decoration: none;
+}
+
+.policies-page section {
+  margin-bottom: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  scroll-margin-top: var(--space-4);
+}
+
+.policies-page h2 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display), var(--font-body);
+  font-size: 1.25rem;
+}
+
+.policies-page p,
+.policies-page li {
+  line-height: 1.6;
+}
+
+.policies-page ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.policies-page li + li {
+  margin-top: var(--space-2);
+}

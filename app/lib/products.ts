@@ -19,6 +19,10 @@ export const PRODUCTS = {
   },
 } as const satisfies Record<CheckoutProduct, { name: string; priceLabel: string; defaultCents: number; note: string }>;
 
+// Shown on the site, the policies page and order questions; forwarded to
+// the owner's inbox by Cloudflare Email Routing.
+export const CONTACT_EMAIL = "hello@tripquestkids.com";
+
 // Working days from payment to posting a kit. Every kit is printed to order;
 // lower this once the print supplier is settled.
 export const KIT_SHIPS_WITHIN_DAYS = 10;

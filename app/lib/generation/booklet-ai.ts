@@ -762,10 +762,13 @@ function requireText(
   return `${candidate.slice(0, wordEnd > 0 ? wordEnd : candidate.length)}…`;
 }
 
+const differenceCountWords = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+
 function gameInstructions(
   gameType: GameType,
   items: Array<{ label: string; clue: string }>,
   original: string,
+  differenceCount = 3,
 ) {
   const labels = items.map((item) => item.label);
   switch (gameType) {
@@ -780,7 +783,10 @@ function gameInstructions(
     case "bingo":
       return "Explore with your family and mark each square when you spot its real local detail.";
     case "spot_the_difference":
-      return `Circle three changes between the two ${labels[0]}-inspired pictures.`;
+      // Must match withDifferenceCount (spot-difference.ts), which writes
+      // the real count once the pictures exist: the stored edition is
+      // re-validated on every read, and its fingerprint has to hold.
+      return `Circle ${differenceCountWords[differenceCount] ?? differenceCount} changes between the two ${labels[0]}-inspired pictures.`;
     case "codebreaker":
       return "Use the starter key to crack the coded local word, then complete the missing letter matches.";
     case "map_puzzle":
@@ -972,11 +978,12 @@ function validateActivity(
   }
   usedTitles.add(normalizedTitle);
 
+  const pictures = gameType === "spot_the_difference" ? validDifferencePictures(activity.differencePaths) : {};
   return {
     title,
     kind,
     body: requireText(
-      gameInstructions(gameType, items, body),
+      gameInstructions(gameType, items, body, pictures.differencePaths?.regions.length),
       `Activity instructions on day ${dayIndex + 1}`,
       15,
       360,
@@ -1005,7 +1012,7 @@ function validateActivity(
     ...(typeof activity.illustrationPath === "string" && isStoredArtworkPath(activity.illustrationPath)
       ? { illustrationPath: activity.illustrationPath }
       : {}),
-    ...(gameType === "spot_the_difference" ? validDifferencePictures(activity.differencePaths) : {}),
+    ...pictures,
   };
 }
 

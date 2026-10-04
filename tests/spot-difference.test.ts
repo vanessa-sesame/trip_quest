@@ -262,3 +262,32 @@ test("the game text names the real number of changes once the pictures exist", (
   assert.equal(withDifferenceCount("Find 3 differences.", 5), "Find 5 differences.");
   assert.equal(withDifferenceCount("Spot three lanterns.", 6), "Spot three lanterns.");
 });
+
+// Stored editions are re-validated on every read and their fingerprint must
+// not move: the count written into the game text once the pictures exist
+// has to be exactly what validation writes. (A mismatch once refused every
+// download and checkout of a booklet with a spot-the-difference game.)
+test("a booklet with more than three differences keeps its text through validation", () => {
+  const dayPlans = buildBooklet(7, "Kyoto", 1);
+  const items = [
+    { label: "Lantern", clue: "What glows above the gate?" },
+    { label: "Bridge", clue: "What crosses the pond?" },
+    { label: "Gate", clue: "What is painted bright red?" },
+    { label: "Koi", clue: "What swims under the bridge?" },
+  ];
+  const slots = dayPlans[0].slots;
+  slots.inThePlace = { ...slots.inThePlace, gameType: "spot_the_difference", items };
+  slots.sitDown = { ...slots.sitDown, gameType: "story", items };
+  delete slots.inThePlaceSecond;
+  dayPlans[0].activities = [slots.inThePlace, slots.sitDown];
+  const profile = { style: "Temple gardens", intro: "Quiet gardens and bright gates.", word: "arigatou - thank you", etiquette: "Bow gently at the gate." };
+  const validated = validateBookletDraft({ profile, dayPlans }, 1, 7);
+  const path = (letter: string) => `/api/illustration?key=${encodeURIComponent(`illustrations/v2/${letter.repeat(64)}/artwork.png`)}`;
+  for (const count of [3, 4, 6]) {
+    const regions = Array.from({ length: count }, (_, index) => ({ x: 0.1 * index, y: 0.1, w: 0.08, h: 0.08, label: `a thing ${index}` }));
+    const applied = applyDifferencePaths(validated.dayPlans, [{ dayIndex: 0, slot: "inThePlace", differencePaths: { a: path("a"), b: path("b"), regions } }]);
+    const again = validateBookletDraft({ profile: validated.profile, dayPlans: applied }, 1, 7);
+    assert.deepEqual(again.dayPlans, applied, `${count} differences`);
+    assert.match(again.dayPlans[0].slots.inThePlace.body, new RegExp(`^Circle ${["three", "four", "five", "six"][count - 3]} changes`));
+  }
+});

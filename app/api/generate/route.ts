@@ -71,6 +71,9 @@ type RuntimeEnvironment = {
   CLOUDFLARE_AI_IMAGE_MODEL?: string;
   CLOUDFLARE_AI_EDIT_MODEL?: string;
   IMAGE_PROVIDER?: string;
+  TRIPQUEST_COST_MODE?: string;
+  TRIPQUEST_IMAGE_BUDGET?: string;
+  TRIPQUEST_MAX_AI_PAGE_IMAGES?: string;
   DB?: BookletDatabase;
   BOOKLET_FILES?: BookletObjectStorage;
 };

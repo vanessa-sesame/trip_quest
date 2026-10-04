@@ -102,6 +102,38 @@ test("cover illustration is skipped (not thrown) when neither provider is config
   assert.equal(path, undefined);
 });
 
+test("lean cost mode reuses cached cover art without generating a new image", async () => {
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    calls.push(String(input));
+    return Response.json({ result: { image: jpegBase64() } });
+  };
+  try {
+    const path = await addCoverIllustration({
+      TRIPQUEST_COST_MODE: "lean",
+      CLOUDFLARE_ACCOUNT_ID: "acct-123",
+      CLOUDFLARE_API_TOKEN: "cf-token",
+      BOOKLET_FILES: {
+        async get() {
+          return { async text() { return ""; } };
+        },
+        async put() {
+          throw new Error("lean mode must not write new cover art");
+        },
+        async delete() {
+          return undefined;
+        },
+      },
+    }, { destination: "Lisbon" });
+
+    assert.ok(path);
+    assert.equal(calls.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("a Cloudflare error response is caught and falls back to no cover art", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response("rate limited", { status: 429 });

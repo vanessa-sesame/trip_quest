@@ -1,4 +1,5 @@
 import type { Activity, DayPlan, DifferencePictures, DifferenceRegion } from "../booklet/booklet.ts";
+import { canGenerateImageExtras, canReadCachedImages } from "./cost-controls.ts";
 import {
   generateIllustrationPng,
   resolveImageProvider,
@@ -348,7 +349,7 @@ const illustrationPath = (key: string) => `/api/illustration?key=${encodeURIComp
 async function pictureFor(runtime: SpotRuntime, destination: string, candidate: Candidate): Promise<DifferencePictures | null> {
   const storage = runtime.BOOKLET_FILES;
   const provider = resolveImageProvider(runtime);
-  if (!storage || !provider) return null;
+  if (!storage || !canReadCachedImages(runtime)) return null;
   const identity = JSON.stringify({
     version: VERSION,
     destination: destination.toLocaleLowerCase(),
@@ -369,6 +370,8 @@ async function pictureFor(runtime: SpotRuntime, destination: string, candidate: 
   } catch (error) {
     console.error("[TripQuest spot-the-difference cache]", error);
   }
+
+  if (!provider || !canGenerateImageExtras(runtime)) return null;
 
   // FLUX.2 klein follows "no fills, no text" far better than the default
   // illustration model, for about the same cost; other providers still work.
@@ -397,7 +400,7 @@ export async function addSpotTheDifference(
   publish?: (message: string) => void,
 ): Promise<SpotAssignment[]> {
   const candidates = spotCandidates(input.dayPlans);
-  if (!candidates.length || !runtime.BOOKLET_FILES || !resolveImageProvider(runtime)) return [];
+  if (!candidates.length || !runtime.BOOKLET_FILES || !canReadCachedImages(runtime)) return [];
   publish?.(`Drawing ${candidates.length === 1 ? "a spot-the-difference puzzle" : "spot-the-difference puzzles"}…`);
   const results = await Promise.all(candidates.map(async (candidate) => {
     try {

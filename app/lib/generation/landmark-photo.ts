@@ -1,5 +1,6 @@
 import type { DayPlan } from "../booklet/booklet.ts";
 import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
+import { canGenerateImageExtras, canReadCachedImages, type CostRuntime } from "./cost-controls.ts";
 import { sniffImageContentType } from "./illustration-ai.ts";
 import { DEFAULT_CLAUDE_MODEL, askAboutImage, claudeJson } from "./claude.ts";
 
@@ -43,7 +44,7 @@ export type LandmarkPhoto = {
   match: "target" | "place";
 };
 
-export type PhotoRuntime = {
+export type PhotoRuntime = CostRuntime & {
   BOOKLET_FILES?: BookletObjectStorage;
   ANTHROPIC_API_KEY?: string;
   CLAUDE_MODEL?: string;
@@ -355,7 +356,8 @@ export async function addRevealPhotos(
   fetchImpl: typeof fetch = fetch,
 ): Promise<DayPlan[]> {
   const storage = runtime.BOOKLET_FILES;
-  if (!storage) return input.dayPlans;
+  if (!storage || !canReadCachedImages(runtime)) return input.dayPlans;
+  const canGenerate = canGenerateImageExtras(runtime);
   const site = runtime.TRIPQUEST_PUBLIC_URL?.trim();
   if (site) userAgent = `TripQuestKids/1.0 (${site}; children's travel activity booklets)`;
   const apiKey = runtime.ANTHROPIC_API_KEY?.trim();
@@ -380,6 +382,7 @@ export async function addRevealPhotos(
     } catch (error) {
       console.error("[TripQuest photo cache]", error);
     }
+    if (!canGenerate) return null;
     if (!announced) {
       announced = true;
       publish?.("Finding real photos for the reveal pages…");

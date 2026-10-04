@@ -1,12 +1,13 @@
 import type { DayPlan } from "../booklet/booklet.ts";
 import type { BookletObjectStorage } from "../storage/booklet-storage.ts";
 import { curatedColoringImagePath } from "../booklet/coloring.ts";
+import { canGenerateImages, canReadCachedImages, maxAiPageImages, type CostRuntime } from "./cost-controls.ts";
 import { DEFAULT_CLAUDE_MODEL, askAboutImage } from "./claude.ts";
 
 const ILLUSTRATION_VERSION = "v2";
 const encoder = new TextEncoder();
 
-export type IllustrationRuntime = {
+export type IllustrationRuntime = CostRuntime & {
   BOOKLET_FILES?: BookletObjectStorage;
   OPENAI_API_KEY?: string;
   OPENAI_IMAGE_MODEL?: string;
@@ -223,7 +224,8 @@ export async function addBookletIllustrations(
 ) {
   const storage = runtime.BOOKLET_FILES;
   const provider = resolveImageProvider(runtime);
-  if (!storage || !provider) return input.dayPlans;
+  if (!storage || !canReadCachedImages(runtime)) return input.dayPlans;
+  const canGenerate = canGenerateImages(runtime);
   const candidates: Array<{
     dayIndex: number;
     activityIndex: number;
@@ -276,7 +278,9 @@ export async function addBookletIllustrations(
   const availableKeys = new Set(
     availability.filter((item) => item.available).map((item) => item.candidate.key),
   );
-  const missing = availability.filter((item) => !item.available).slice(0, 3);
+  const missing = canGenerate
+    ? availability.filter((item) => !item.available).slice(0, maxAiPageImages(runtime, 3))
+    : [];
   if (missing.length) {
     publish?.(`Illustrating ${missing.length} custom page${missing.length === 1 ? "" : "s"}…`);
     await Promise.all(missing.map(async ({ candidate }) => {
@@ -332,7 +336,7 @@ export async function addCoverIllustration(
 ): Promise<string | undefined> {
   const storage = runtime.BOOKLET_FILES;
   const provider = resolveImageProvider(runtime);
-  if (!storage || !provider) return undefined;
+  if (!storage || !canReadCachedImages(runtime)) return undefined;
   const style: CoverArtStyle = runtime.OPENAI_COVER_STYLE?.trim() === "photo" ? "photo" : "line-art";
 
   const identity = JSON.stringify({
@@ -354,7 +358,7 @@ export async function addCoverIllustration(
     console.error("[TripQuest illustration cache] cover art", error);
   }
 
-  if (!available) {
+  if (!available && provider && canGenerateImages(runtime)) {
     publish?.("Illustrating the cover…");
     try {
       const prompt = printableCoverArtPrompt(input.destination, style);

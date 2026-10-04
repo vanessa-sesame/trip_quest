@@ -181,7 +181,7 @@ test("reveal photos are stored with their credit and reused from the cache", asy
 
   const first = mockFetch({ targetPick: 11, targetEvidence: "Turtle", placePicks: [] });
   const [withPhoto] = await withGlobalFetch(first.fetchImpl, () => addRevealPhotos(runtime, { destination: "Barcelona", dayPlans: [day] }, undefined, first.fetchImpl));
-  assert.match(withPhoto.slots.questReveal?.photoPath ?? "", /^\/api\/illustration\?key=illustrations%2Fv2%2F[a-f0-9]{64}%2Fartwork\.png$/);
+  assert.match(withPhoto.slots.questReveal?.photoPath ?? "", /^\/api\/illustration\?key=illustrations%2Fv3%2F[a-f0-9]{64}%2Fartwork\.png$/);
   assert.equal(withPhoto.slots.questReveal?.photoCredit, "Photo: Stanislav Kozlovskiy / CC BY-SA 3.0 / Wikimedia Commons");
 
   const second = mockFetch({ targetPick: 0, targetEvidence: "", placePicks: [] });

@@ -863,6 +863,12 @@ export default function Home() {
                 Sticker sheets PDF: print on A5 sticker paper
               </a>
             ) : null}
+            {checkoutSessionId && paidPdfUrl && paidDownloadState === "ready" ? (
+              <a className="paid-extra-link" href={`${paidPdfUrl}&kind=parent-guide`} download="TripQuest-parent-guide.pdf">
+                <Download size={15} />
+                Parent guide and answer sheet
+              </a>
+            ) : null}
           </div>
         </section>
       ) : null}

@@ -81,6 +81,9 @@ test("the free PDF needs no purchase when the request names the stored edition",
   const again = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint });
   assert.equal(again.headers.get("x-tripquest-pdf-cache"), "durable");
   assert.equal((await again.arrayBuffer()).byteLength, bookletBytes.byteLength);
+
+  const parentGuide = await prepareFreePdf(visitor(), runtime, input, { editionFingerprint: fingerprint, kind: "parent-guide" });
+  assert.equal(parentGuide.status, 402, "the parent answer guide is not part of the free child PDF");
 });
 
 test("a default-named single child still shares the durable PDF cache", async () => {

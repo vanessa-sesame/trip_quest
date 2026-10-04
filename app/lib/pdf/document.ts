@@ -34,7 +34,7 @@ import { drawTreatTrail } from "./pages/treats.ts";
 import { colors, getDestinationTheme, typeScale } from "./theme.ts";
 
 export type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
-import { normalizedBooklet, planBookletPages } from "./plan.ts";
+import { answerPagesForBooklet, normalizedBooklet, planBookletPages } from "./plan.ts";
 import { stickersForBooklet } from "../booklet/stickers.ts";
 import { artContentBounds } from "./art-bounds.ts";
 export { bookletPdfPageCount, bookletPdfPageTitles } from "./plan.ts";
@@ -58,6 +58,10 @@ export function bookletPdfFilename(booklet: Pick<GeneratedBookletData, "destinat
 
 export function familyPackPdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
   return bookletPdfFilename(booklet).replace(/\.pdf$/i, "-family-pack.pdf");
+}
+
+export function parentGuidePdfFilename(booklet: Pick<GeneratedBookletData, "destination" | "age">) {
+  return bookletPdfFilename(booklet).replace(/\.pdf$/i, "-parent-guide.pdf");
 }
 
 // Embeds the font at `path` when a resolver can supply it, falling back to
@@ -238,5 +242,46 @@ export async function createBookletPdf(
       case "badges": drawBadgeTrackerPage(ctx); break;
     }
   }
+  return document.save();
+}
+
+export async function createParentGuidePdf(
+  inputBooklet: GeneratedBookletData,
+  familyPack?: FamilyPackContext,
+  resolveFontBytes?: FontResolver,
+) {
+  const booklet = normalizedBooklet(inputBooklet);
+  assertBookletQa(booklet);
+  const document = await PDFDocument.create();
+  const fonts = await loadBookletFonts(document, resolveFontBytes);
+  const answerPages = answerPagesForBooklet(booklet);
+  const totalPages = 1 + answerPages.length;
+
+  document.setTitle(`${pdfText(booklet.destination)} Parent Guide - Age ${booklet.age}`);
+  document.setAuthor("TripQuest");
+  document.setSubject("TripQuest parent guide and answer sheet");
+  document.setKeywords(["travel", "children", "parent guide", "answer sheet", pdfText(booklet.destination)]);
+  document.setCreator("TripQuest Kids");
+  document.setProducer("TripQuest Kids");
+  document.setCreationDate(new Date(booklet.generatedAt));
+  document.setModificationDate(new Date());
+
+  const ctx: PdfContext = {
+    document,
+    fonts,
+    booklet,
+    theme: getDestinationTheme(booklet.destination),
+    type: typeScale(booklet.age),
+    totalPages,
+    pageNumber: 0,
+    artwork: {},
+    revealArtwork: {},
+    coverArtwork: undefined,
+    coverArtBounds: undefined,
+    familyPack,
+    stickers: stickersForBooklet(booklet, familyPack),
+  };
+  drawGuide(ctx);
+  for (const page of answerPages) drawAnswerKeyPage(ctx, page.entries, page.part, page.parts);
   return document.save();
 }

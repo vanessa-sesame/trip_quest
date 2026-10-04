@@ -23,7 +23,7 @@ import {
 // for pixel. Any region the model could not change cleanly gets a drawn
 // doodle instead, so every game always has exactly three differences.
 
-const VERSION = "spot-v1";
+const VERSION = "spot-v2";
 const SIZE = 512;
 const GRID = 5;
 const MAX_GAMES = 2;
@@ -91,21 +91,23 @@ function placeWords(cell: Cell) {
   return `${vertical} ${horizontal}`;
 }
 
-// The three emptiest cells of a 5x5 grid, outside the centre (where the
-// subject is) and never next to each other.
+// Three low-ink cells near, but not on top of, the subject. Earlier versions
+// used the outer ring only, which made the changes too obvious and detached
+// from the actual picture.
 export function chooseRegions(a: Grey): Cell[] {
   const cellSize = a.width / GRID;
   const cells: Cell[] = [];
   for (let row = 0; row < GRID; row += 1) {
     for (let col = 0; col < GRID; col += 1) {
-      if (row > 0 && row < GRID - 1 && col > 0 && col < GRID - 1) continue;
+      if (row === 2 && col === 2) continue;
       let ink = 0;
       for (let y = Math.floor(row * cellSize); y < Math.floor((row + 1) * cellSize); y += 1) {
         for (let x = Math.floor(col * cellSize); x < Math.floor((col + 1) * cellSize); x += 1) {
           if (a.data[y * a.width + x] < A_INK) ink += 1;
         }
       }
-      cells.push({ col, row, ink: ink / (cellSize * cellSize) });
+      const edgePenalty = row === 0 || row === GRID - 1 || col === 0 || col === GRID - 1 ? 0.08 : 0;
+      cells.push({ col, row, ink: ink / (cellSize * cellSize) + edgePenalty });
     }
   }
   const chosen: Cell[] = [];
@@ -210,7 +212,7 @@ function regionFromBox(box: { x: number; y: number; w: number; h: number }, size
 function editPrompt(object: string, cell: Cell) {
   return [
     "Edit this black-and-white coloring-book line drawing. Keep the exact same drawing, composition, line style and every existing object unchanged.",
-    `Add one new object: ${object}, drawn in the ${placeWords(cell)} area of the picture, fully inside the picture and not touching its edge, in empty space where it does not overlap other lines.`,
+    `Add one tiny plausible detail: ${object}, drawn in the ${placeWords(cell)} area of the picture, fully inside the picture and near the existing scenery, but not touching its edge and not covering important lines.`,
     "Clean dark outlines on white paper, no shading, no color, no text.",
   ].join(" ");
 }
@@ -273,7 +275,7 @@ export async function buildDifferencePicture(a: Grey, edit: EditFn | null, seed:
       const cellSize = size / GRID;
       const doodle = doodleOrder[doodles % doodleOrder.length];
       doodles += 1;
-      const radius = cellSize * 0.3;
+      const radius = cellSize * 0.24;
       drawDoodle(b, doodle, (outcome.cell.col + 0.5) * cellSize, (outcome.cell.row + 0.5) * cellSize, radius);
       const box = { x: (outcome.cell.col + 0.5) * cellSize - radius * 1.12, y: (outcome.cell.row + 0.5) * cellSize - radius * 1.12, w: radius * 2.24, h: radius * 2.24 };
       regions.push(regionFromBox(box, size, `a ${doodle}`));

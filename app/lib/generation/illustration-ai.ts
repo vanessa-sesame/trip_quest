@@ -346,7 +346,7 @@ export async function addCoverIllustration(
     destination: input.destination.toLocaleLowerCase(),
     // Covers made before the lettering and flaw check could have the city's
     // name or hole-punch dots in the picture; this draws every one afresh.
-    check: "clean-2",
+    check: "clean-3-no-text-required",
   });
   const hash = await digest(identity);
   const key = `illustrations/${ILLUSTRATION_VERSION}/${hash}/artwork.png`;
@@ -363,13 +363,18 @@ export async function addCoverIllustration(
     try {
       const prompt = printableCoverArtPrompt(input.destination, style);
       // Image models often write the place's name into the picture despite
-      // the prompt, so Claude looks at each attempt; up to three tries, then
-      // the last attempt is used anyway (lettering beats no cover).
-      let png = await generateIllustrationPng(provider, prompt, "1536x1024");
-      for (let attempt = 1; attempt < 3 && await coverHasLettering(runtime, png); attempt += 1) {
+      // the prompt, so Claude looks at each attempt. If every attempt has
+      // lettering or print flaws, use the designed no-photo cover instead.
+      let png: Uint8Array | undefined;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const candidate = await generateIllustrationPng(provider, prompt, "1536x1024");
+        if (!await coverHasLettering(runtime, candidate)) {
+          png = candidate;
+          break;
+        }
         console.info(`[TripQuest illustration] cover art had lettering, redrawing (${attempt})`);
-        png = await generateIllustrationPng(provider, prompt, "1536x1024");
       }
+      if (!png) return undefined;
       await storage.put(key, png, {
         httpMetadata: { cacheControl: "public, max-age=31536000, immutable", contentType: sniffImageContentType(png) },
         customMetadata: { destination: input.destination, title: `Cover art (${style})`, model: provider.model },
@@ -412,7 +417,7 @@ export function illustrationStorageKey(path: string) {
     const url = new URL(path, "https://tripquest.invalid");
     if (url.pathname !== "/api/illustration") return null;
     const key = url.searchParams.get("key") || "";
-    return /^illustrations\/v(?:1|2)\/[a-f0-9]{64}\/artwork\.png$/i.test(key) ? key : null;
+    return /^illustrations\/v(?:1|2|3)\/[a-f0-9]{64}\/artwork\.png$/i.test(key) ? key : null;
   } catch {
     return null;
   }

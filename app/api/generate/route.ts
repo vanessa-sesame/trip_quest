@@ -56,6 +56,7 @@ import {
 import { logGenerationTiming, logStorageFailure } from "../../lib/generation/log";
 import { type CachedValue, getCached, setCached } from "../../lib/generation/memory-cache";
 import { assertResearchMatchesRequest, researchDestination } from "../../lib/generation/research";
+import { titleCaseDestination } from "../../lib/pdf/request";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ function normalizeDestination(value: unknown) {
     throw new Error("Use a city, region, or country name only.");
   }
 
-  return destination;
+  return titleCaseDestination(destination);
 }
 
 function consumeMemoryRateLimit(key: string, limit: number, now: number) {
@@ -333,6 +334,7 @@ export async function POST(request: Request) {
     const family = normalizeFamilyChildren(body.family);
     const events = normalizeItineraryEvents(body.events, days);
     const familyContext = familyPromptSummary(family);
+    const editionContext = familyEditionContext(family, events);
     const hasSiblings = family.length > 1;
     const balancePlan = mechanicPlanForTrip(family, days)
       .map((plan) => `Day ${plan.day}: ${plan.mechanics.join(" + ")}`)
@@ -341,7 +343,7 @@ export async function POST(request: Request) {
     // Rotated by destination so different trips don't all land on the exact
     // same day-1 game pair for a given age band — see
     // balancedGameTypePlanForTrip's own comment for why.
-    const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan, destination);
+    const gameTypePlan = balancedGameTypePlanForTrip(age, days, interestPlan, `${destination}|${editionContext}`);
     const runtime = await getRuntimeEnvironment();
     // One Claude model does the research and the writing.
     const researchModel = claudeModelFrom(runtime);
@@ -355,7 +357,7 @@ export async function POST(request: Request) {
       composerModel,
       familyContext,
       familySize: family.length,
-      editionContext: familyEditionContext(family, events),
+      editionContext,
     };
     const cacheKey = await createBookletCacheKey(identity);
     const cached = getCached(bookletCache, cacheKey);

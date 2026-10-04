@@ -62,11 +62,11 @@ function withObjects(a: Grey, cells: Array<{ col: number; row: number }>) {
   return { width: SIZE, height: SIZE, data };
 }
 
-test("regions are the emptiest cells, away from the centre and each other", () => {
+test("regions are empty cells near the scene but away from the centre and each other", () => {
   const cells = chooseRegions(scene());
   assert.equal(cells.length, 3);
   for (const cell of cells) {
-    assert.ok(cell.row === 0 || cell.row === 4 || cell.col === 0 || cell.col === 4, "outside the centre");
+    assert.ok(!(cell.col === 2 && cell.row === 2), "not the centre");
     assert.ok(!(cell.col === 4 && cell.row === 4), "not the inked corner");
   }
   for (const [index, cell] of cells.entries()) {

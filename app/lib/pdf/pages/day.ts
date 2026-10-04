@@ -22,13 +22,13 @@ import { CONTENT_BOTTOM, CONTENT_WIDTH, MARGIN, colors } from "../theme.ts";
 // Label and colour for the queue page's secret-target ticket, keyed by
 // QueueTargetKind. Presentational only; unknown kinds use the default.
 export const queueTargetKindCopy: Record<string, { prefix: string; accent: RGB; soft: RGB }> = {
-  shape: { prefix: "Your secret shape", accent: colors.teal, soft: colors.tealSoft },
-  colour: { prefix: "Your secret colour", accent: colors.coral, soft: colors.coralSoft },
-  object: { prefix: "Your secret object", accent: colors.green, soft: colors.greenSoft },
-  sound: { prefix: "Your secret sound", accent: colors.coral, soft: colors.coralSoft },
-  person: { prefix: "Who to spot", accent: colors.green, soft: colors.greenSoft },
+  shape: { prefix: "2. Secret thing to spot", accent: colors.teal, soft: colors.tealSoft },
+  colour: { prefix: "2. Secret colour to spot", accent: colors.coral, soft: colors.coralSoft },
+  object: { prefix: "2. Secret object to spot", accent: colors.green, soft: colors.greenSoft },
+  sound: { prefix: "2. Secret sound to hear", accent: colors.coral, soft: colors.coralSoft },
+  person: { prefix: "2. Helpful person to notice", accent: colors.green, soft: colors.greenSoft },
 };
-const defaultQueueTargetKindCopy = { prefix: "Your secret target", accent: colors.teal, soft: colors.tealSoft };
+const defaultQueueTargetKindCopy = { prefix: "2. Secret target to spot", accent: colors.teal, soft: colors.tealSoft };
 
 // A soft card holding a label pill and wrapped text; returns its bottom.
 function drawNoteCard(
@@ -73,9 +73,9 @@ export function drawQueuePage(ctx: PdfContext, day: DayPlan) {
   }
 
   const flow = new Flow(page, fonts, { x: MARGIN, top: y, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  const notes: BulletItem[] = [{ title: "Grown-up tip", text: day.slots.beforeYouGo }];
+  const notes: BulletItem[] = [{ title: "Before you go", text: day.slots.beforeYouGo }];
   const lens = day.interestHook || day.siblingMission;
-  if (lens) notes.push({ title: "Family lens", text: lens });
+  if (lens) notes.push({ title: "Family mission", text: lens });
   flow.bullets(notes, { size: type.small, marker: "dot", markerColor: colors.teal, maxLines: 3, gap: 6 });
   flow.space(12);
 
@@ -92,7 +92,7 @@ export function drawQueuePage(ctx: PdfContext, day: DayPlan) {
     drawDoodleSparkle(page, box.x + box.width - 20, box.y + height - 20, 7, colors.yellow);
     flow.space(8);
     if (reveal.bonusQuest) {
-      flow.bullets([{ title: "Bonus quest", text: reveal.bonusQuest }], { size: type.small, marker: "dot", markerColor: kind.accent, maxLines: 2 });
+      flow.bullets([{ title: "3. Try after you find it", text: reveal.bonusQuest }], { size: type.small, marker: "dot", markerColor: kind.accent, maxLines: 2 });
     }
     flow.space(12);
   }
@@ -112,6 +112,27 @@ function drawFacts(ctx: PdfContext, page: PDFPage, facts: BulletItem[], top: num
   return drawBulletList(page, fonts, facts, { x: MARGIN, top: pill.y - 8, width: CONTENT_WIDTH, size: type.small, markerColor: accent, maxLines: 2 }).bottom;
 }
 
+function countingGrid(count: number, width: number, height: number) {
+  let best: { columns: number; rows: number; diameter: number; waste: number } | undefined;
+  for (let columns = 3; columns <= 6; columns += 1) {
+    const rows = Math.ceil(count / columns);
+    const gap = 12;
+    const diameter = Math.min(54, (width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) / rows);
+    if (diameter < 16) continue;
+    const lastRow = count - columns * (rows - 1);
+    const waste = rows > 1 ? Math.abs(columns - lastRow) : 0;
+    const candidate = { columns, rows, diameter, waste };
+    if (
+      !best ||
+      candidate.waste < best.waste ||
+      candidate.waste === best.waste && candidate.diameter > best.diameter
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 // Count-while-you-wait: big circles to colour in for younger explorers, a
 // tally card for older ones.
 function drawCounting(ctx: PdfContext, page: PDFPage, day: DayPlan, box: { x: number; y: number; width: number; height: number }, hasQueueGame: boolean) {
@@ -119,7 +140,7 @@ function drawCounting(ctx: PdfContext, page: PDFPage, day: DayPlan, box: { x: nu
   const queue = day.slots.whileYouWait;
   if (box.height < 70) return;
   const top = box.y + box.height;
-  const pill = drawPill(page, fonts, "Count while you wait", { x: box.x, top, color: colors.teal, fill: colors.tealSoft, size: type.label });
+  const pill = drawPill(page, fonts, "1. Count while you wait", { x: box.x, top, color: colors.teal, fill: colors.tealSoft, size: type.label });
   let y = pill.y - 6;
   // With a queue game, its own page carries the instruction; here the
   // counting prompt is just the count label.
@@ -136,11 +157,10 @@ function drawCounting(ctx: PdfContext, page: PDFPage, day: DayPlan, box: { x: nu
     return;
   }
   const count = Math.max(1, Math.min(ctx.booklet.age <= 5 ? 10 : 20, queue.countTo));
-  const columns = 5;
-  const rowCount = Math.ceil(count / columns);
+  const grid = countingGrid(count, area.width, area.height);
+  if (!grid) return;
+  const { columns, diameter } = grid;
   const gap = 12;
-  const diameter = Math.min(54, (area.width - gap * (columns - 1)) / columns, (area.height - gap * (rowCount - 1)) / rowCount);
-  if (diameter < 16) return;
   const gridWidth = columns * diameter + (columns - 1) * gap;
   const startX = area.x + (area.width - gridWidth) / 2 + diameter / 2;
   const startY = area.y + area.height - diameter / 2;

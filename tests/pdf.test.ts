@@ -6,6 +6,7 @@ import {
   bookletPdfFilename,
   bookletPdfPageCount,
   createBookletPdf,
+  createParentGuidePdf,
 } from "../app/lib/pdf/booklet-pdf.ts";
 import { sampleGeneratedBooklet } from "./fixtures/generated-booklet.ts";
 import { buildBooklet, getDestinationProfile } from "../app/lib/booklet/booklet.ts";
@@ -20,8 +21,8 @@ test("a generated booklet becomes a complete A5 PDF", async () => {
   assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
   // cover, guide, treat trail, 5 days x (queue + in-place + sit-down),
-  // answer notes, memory, certificate = 21, padded with "My notes" to 24.
-  assert.equal(document.getPageCount(), 24);
+  // memory, certificate = 20. Answer notes live in the separate parent guide.
+  assert.equal(document.getPageCount(), 20);
   assert.equal(document.getTitle(), "Singapore Explorer - Age 7");
   for (const page of document.getPages()) {
     assert.ok(Math.abs(page.getWidth() - 419.53) < 0.1);
@@ -76,11 +77,20 @@ test("every game gets its own A5 page and the total pads to a multiple of 4", as
   const document = await PDFDocument.load(bytes);
   assert.equal(document.getPageCount(), bookletPdfPageCount(booklet));
   // cover, guide, treat trail, (queue + queue game + in-place + second
-  // in-place + sit-down) x 2 days, answer notes, memory, certificate = 16:
+  // in-place + sit-down) x 2 days, memory, certificate = 15:
   // already whole sheets, so no "My notes" page.
   const kinds = bookletDayPageEntries(booklet.dayPlans).map((entry) => entry.kind === "activity" ? entry.slot : entry.kind);
   assert.deepEqual(kinds.slice(0, 5), ["queue", "queueGame", "inThePlace", "inThePlaceSecond", "sitDown"]);
   assert.equal(document.getPageCount(), 16);
+});
+
+test("parent guide is a separate answer-sheet PDF", async () => {
+  const booklet = sampleGeneratedBooklet();
+  const bytes = await createParentGuidePdf(booklet);
+  const document = await PDFDocument.load(bytes);
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
+  assert.ok(document.getPageCount() >= 2);
+  assert.equal(document.getTitle(), "Singapore Parent Guide - Age 7");
 });
 
 test("a queue mystery with a reveal adds exactly one page for that day, and only that day", async () => {

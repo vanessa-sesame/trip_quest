@@ -5,6 +5,8 @@ import { applySiblingPlan, type GeneratedBookletData } from "../generation/bookl
 import {
   familyPackPdfFilename,
   createBookletPdf,
+  createParentGuidePdf,
+  parentGuidePdfFilename,
   type FamilyPackContext,
 } from "./booklet-pdf.ts";
 import {
@@ -22,7 +24,6 @@ import {
   writeStoredBookletPdf,
 } from "../storage/booklet-storage.ts";
 import {
-  readPurchasePdf,
   setPurchasePdfKey,
   writePurchasePdf,
   type PaymentRuntime,
@@ -43,11 +44,12 @@ export type RuntimeEnvironment = PaymentRuntime & {
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
 
-// "booklet" is the printable booklet; "stickers" its matching sticker sheets.
-export type PdfKind = "booklet" | "stickers";
+// "booklet" is the child-facing printable booklet; paid sessions can also
+// request the matching sticker sheets and parent answer guide.
+export type PdfKind = "booklet" | "stickers" | "parent-guide";
 
 export function pdfKindFrom(value: unknown): PdfKind {
-  return value === "stickers" ? "stickers" : "booklet";
+  return value === "stickers" || value === "parent-guide" ? value : "booklet";
 }
 
 // Fonts and illustrations for the renderers: R2-stored illustrations by
@@ -154,17 +156,9 @@ export async function preparePdf(
   // (POST) or built the request from the purchase itself (GET, orders).
   const cacheKey = purchase?.cacheKey || await createBookletCacheKey(input.identity);
 
-  if (purchase?.pdfKey && kind === "booklet") {
-    const storedPurchasePdf = await readPurchasePdf(
-      runtime.BOOKLET_FILES,
-      purchase.pdfKey,
-      purchase.edition?.fingerprint,
-    );
-    if (storedPurchasePdf) {
-      const editionFingerprint = purchase.edition?.fingerprint;
-      return pdfResponse(storedPurchasePdf, "tripquest-booklet.pdf", "purchase", editionFingerprint);
-    }
-  }
+  // Do not reuse older paid booklet bytes: the preserved edition snapshot is
+  // stable, but the renderer can improve. Rendering from the snapshot keeps
+  // preview/download aligned after design fixes.
   if (purchase && !purchase.edition) {
     return Response.json(
       { error: "This earlier purchase has no preserved edition snapshot. Please contact TripQuest support rather than downloading a different booklet." },
@@ -228,7 +222,14 @@ export async function prepareFreePdf(
       { status: 409 },
     );
   }
-  return preparePdf(request, runtime, input, null, requestedFingerprint, pdfKindFrom(body.kind));
+  const kind = pdfKindFrom(body.kind);
+  if (kind === "parent-guide") {
+    return Response.json(
+      { error: "The parent guide and answer sheet are included with the paid printable kit." },
+      { status: 402 },
+    );
+  }
+  return preparePdf(request, runtime, input, null, requestedFingerprint, kind);
 }
 
 export type EditionPdfInput = {
@@ -262,6 +263,20 @@ export async function renderEditionPdf(
     );
     return pdfResponse(stickers, stickerSheetsPdfFilename(personalizedBooklet), "stickers", editionFingerprint);
   }
+  if (kind === "parent-guide") {
+    if (!purchase && !isOwnerRequest(request, runtime)) {
+      return Response.json(
+        { error: "The parent guide and answer sheet are included with the paid printable kit." },
+        { status: 402 },
+      );
+    }
+    const guide = await createParentGuidePdf(
+      personalizedBooklet,
+      familyPackFor(input.family, input.events, input.days),
+      resolveStaticAsset,
+    );
+    return pdfResponse(guide, parentGuidePdfFilename(personalizedBooklet), "parent-guide", editionFingerprint);
+  }
   const filename = familyPackPdfFilename(personalizedBooklet);
   const reusablePdf = input.family.length <= 1 && !hasPersonalFamilyNames(input);
   if (reusablePdf) {
@@ -269,7 +284,7 @@ export async function renderEditionPdf(
     if (stored) return pdfResponse(stored.bytes, filename, "durable", editionFingerprint);
   }
 
-  const jobKey = `${purchase?.purchaseId || "free"}:${cacheKey}:${editionFingerprint}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
+  const jobKey = `${kind}:${purchase?.purchaseId || "free"}:${cacheKey}:${editionFingerprint}:${input.family.map((child, index) => `${index}:${child.name}`).join("|")}`;
   let job = pdfJobs.get(jobKey);
   if (!job) {
     const familyPack: FamilyPackContext = familyPackFor(input.family, input.events, input.days);
@@ -300,4 +315,3 @@ export function errorResponse(error: unknown) {
   const isInputError = /destination|age|trip length|daily plans|day \d+ plan/i.test(message);
   return Response.json({ error: isInputError ? message : "The printable PDF could not be created. Please try again." }, { status: isInputError ? 400 : 500 });
 }
-

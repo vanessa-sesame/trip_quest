@@ -29,7 +29,15 @@ export function normalizeDestination(value: unknown) {
   if (!/^[\p{L}\p{M}\d .,'’()&/-]+$/u.test(destination)) {
     throw new Error("Use a city, region, or country name only.");
   }
-  return destination;
+  return titleCaseDestination(destination);
+}
+
+export function titleCaseDestination(destination: string) {
+  return destination.replace(/[\p{L}\p{M}\d]+/gu, (word) => {
+    if (/\p{Lu}/u.test(word)) return word;
+    if (/^\d+$/.test(word)) return word;
+    return word.slice(0, 1).toLocaleUpperCase() + word.slice(1).toLocaleLowerCase();
+  });
 }
 
 export function normalizePdfRequest(

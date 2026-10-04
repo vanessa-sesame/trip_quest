@@ -35,6 +35,19 @@ function chunk<T>(values: T[], size: number) {
   return chunks.length ? chunks : [[]];
 }
 
+export function answerEntriesForBooklet(booklet: GeneratedBookletData): AnswerEntry[] {
+  return booklet.dayPlans.flatMap((day) =>
+    dayGameActivities(day)
+      .map((activity, index) => ({ day: day.day, index, activity }))
+      .filter((entry) => entry.activity.answerMode === "closed" || hasDifferencePictures(entry.activity)),
+  );
+}
+
+export function answerPagesForBooklet(booklet: GeneratedBookletData) {
+  const answerChunks = chunk(answerEntriesForBooklet(booklet), ANSWERS_PER_PAGE);
+  return answerChunks.map((entries, index) => ({ kind: "answers" as const, entries, part: index + 1, parts: answerChunks.length }));
+}
+
 export function normalizedBooklet(booklet: GeneratedBookletData): GeneratedBookletData {
   return { ...booklet, ...validateBookletDraft(booklet, booklet.days, booklet.age) };
 }
@@ -42,12 +55,6 @@ export function normalizedBooklet(booklet: GeneratedBookletData): GeneratedBookl
 // A5 booklets are printed as folded sheets, so the total is padded to a
 // multiple of 4 with "My notes" pages after the days.
 export function planBookletPages(booklet: GeneratedBookletData, includeFamilyPack: boolean): BookletPage[] {
-  const answers: AnswerEntry[] = booklet.dayPlans.flatMap((day) =>
-    dayGameActivities(day)
-      .map((activity, index) => ({ day: day.day, index, activity }))
-      .filter((entry) => entry.activity.answerMode === "closed" || hasDifferencePictures(entry.activity)),
-  );
-  const answerChunks = chunk(answers, ANSWERS_PER_PAGE);
   const relayChunks = chunk(booklet.dayPlans, RELAY_DAYS_PER_PAGE);
   const front: BookletPage[] = [
     { kind: "cover" },
@@ -56,7 +63,6 @@ export function planBookletPages(booklet: GeneratedBookletData, includeFamilyPac
     ...bookletDayPageEntries(booklet.dayPlans).map((entry) => ({ kind: "day" as const, entry })),
   ];
   const back: BookletPage[] = [
-    ...answerChunks.map((entries, index) => ({ kind: "answers" as const, entries, part: index + 1, parts: answerChunks.length })),
     { kind: "memory" },
     { kind: "certificate" },
     ...(includeFamilyPack

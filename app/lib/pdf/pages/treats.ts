@@ -7,8 +7,8 @@ import { drawBulletList, drawCard, drawDottedLine, drawNumberBadge, drawPill, dr
 import { CONTENT_WIDTH, CONTENT_BOTTOM, MARGIN, colors } from "../theme.ts";
 import { drawWriteArea } from "../writing.ts";
 
-// The treat trail: one dot per game to colour in, day by day, with treat
-// stops along the way (app/lib/booklet/stickers.ts treatMilestones). Each
+// The treat trail: day-by-day progress dots plus treat stops
+// (app/lib/booklet/stickers.ts treatMilestones). Each
 // stop is a card with its numbered badge, a 30mm sticker spot and a
 // writing row where a grown-up writes the treat; the end of the trail
 // opens the mystery envelope.
@@ -83,7 +83,7 @@ export function drawTreatTrail(ctx: PdfContext) {
     titleLines: 1,
   });
   const flow = new Flow(page, fonts, { x: MARGIN, top, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
-  flow.text("Colour a dot for every game you finish. Reach a stop, add its sticker, and enjoy the treat!", {
+  flow.text("Colour the dots as your family plays. At each treat stop, add its sticker and write the reward.", {
     size: type.small, color: colors.muted, maxLines: 3,
   });
   flow.space(10);

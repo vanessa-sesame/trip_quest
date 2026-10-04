@@ -127,9 +127,9 @@ test("family PDF adds a usable pack section without changing the base booklet", 
   });
   assert.equal((await PDFDocument.load(base)).getPageCount(), bookletPdfPageCount(booklet));
   assert.equal((await PDFDocument.load(family)).getPageCount(), bookletPdfPageCount(booklet, true));
-  // 21 base pages (with the treat trail) + relay, mission map, mission
-  // cards and badge tracker = 25, padded to 28.
-  assert.equal((await PDFDocument.load(family)).getPageCount(), 28);
+  // 20 base pages (answers are separate) + relay, mission map, mission
+  // cards and badge tracker = 24.
+  assert.equal((await PDFDocument.load(family)).getPageCount(), 24);
   assert.equal(familyPackPdfFilename(booklet), "tripquest-singapore-age-7-family-pack.pdf");
 });
 

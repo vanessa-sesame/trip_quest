@@ -1,7 +1,7 @@
 import { LineCapStyle } from "pdf-lib";
 import { createRoutePuzzle } from "../../booklet/puzzles.ts";
 import { drawRoundedRect } from "../illustrations.ts";
-import { drawBulletList, drawNumberBadge, drawPill, type BulletItem } from "../layout.ts";
+import { drawBulletList, drawNumberBadge, drawPill, drawText, type BulletItem } from "../layout.ts";
 import { colors } from "../theme.ts";
 import type { GameArgs } from "./types.ts";
 
@@ -45,11 +45,19 @@ export function drawMap({ ctx, page, activity, box }: GameArgs) {
     const middle = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
     const length = Math.hypot(to.x - from.x, to.y - from.y) || 1;
     const unit = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
-    const perpendicular = { x: -unit.y * 5, y: unit.x * 5 };
+    const perpendicular = { x: -unit.y * 8, y: unit.x * 8 };
+    page.drawLine({
+      start: from,
+      end: to,
+      thickness: 2.2,
+      color: colors.coralSoft,
+      lineCap: LineCapStyle.Round,
+      dashArray: [6, 4],
+    });
     page.drawLine({
       start: { x: middle.x - perpendicular.x, y: middle.y - perpendicular.y },
       end: { x: middle.x + perpendicular.x, y: middle.y + perpendicular.y },
-      thickness: 2.4,
+      thickness: 3.2,
       color: colors.coral,
       lineCap: LineCapStyle.Round,
     });
@@ -79,8 +87,13 @@ export function drawMap({ ctx, page, activity, box }: GameArgs) {
 
   drawPill(page, fonts, "S = Start", { x: box.x, top: box.y + box.height, color: colors.green, fill: colors.greenSoft, size: type.label });
   drawPill(page, fonts, "F = Finish", { x: box.x + box.width, top: box.y + box.height, color: colors.coral, fill: colors.coralSoft, size: type.label, align: "right" });
+  drawText(page, "Red dashed roads are closed. Trace a route around them.", fonts, {
+    x: box.x,
+    top: mapY - 8,
+    width: box.width,
+  }, { size: type.label, font: fonts.bold, color: colors.coral, maxLines: 1, align: "center" });
 
-  const legendTop = mapY - 24;
+  const legendTop = mapY - 30;
   return Math.min(...columns.map((column, index) =>
     drawBulletList(page, fonts, column, { ...legendOptions, x: box.x + index * (columnWidth + columnGap), top: legendTop, width: columnWidth }).bottom,
   ));

@@ -47,6 +47,13 @@ function visibleDayText(day: DayPlan) {
   ];
 }
 
+function assertNoBrokenText(day: DayPlan) {
+  const broken = visibleDayText(day).find((value) =>
+    /^\s*(?:\.{3}|…)\s*$/.test(value) || /(?:\.{3}|…)\S/.test(value) || /\bwaht\b/i.test(value),
+  );
+  if (broken) throw new Error(`Day ${day.day} contains broken placeholder or misspelled text: "${broken.slice(0, 80)}"`);
+}
+
 function assertFacts(day: DayPlan) {
   const facts = day.slots.factCard;
   if (facts.length !== 0 && facts.length !== 3) {
@@ -110,6 +117,7 @@ export function assertBookletQa(booklet: GeneratedBookletData) {
     assertLandmarkVariables(day);
     assertFacts(day);
     assertFamily(day, booklet.family?.length || 1);
+    assertNoBrokenText(day);
     if (day.slots.whileYouWait.required && !day.slots.whileYouWait.instruction.trim()) {
       throw new Error(`Day ${day.day} is missing its required queue page.`);
     }
@@ -165,6 +173,7 @@ export function composedContentProblems(
   plannedTypes: Array<{ day: number; gameTypes: string[] }> = [],
 ): ContentProblem[] {
   const problems: ContentProblem[] = [];
+  const closedAnswerWords = new Map<string, { day: number; title: string; slot: RepairableSlot }>();
   for (const day of draft.dayPlans) {
     const slots = (["inThePlace", "inThePlaceSecond", "sitDown"] as const)
       .filter((slot) => day.slots[slot]?.gameType)
@@ -228,6 +237,32 @@ export function composedContentProblems(
             message: `Day ${day.day} "${game.title}" is a quiz but "${notQuestions[0].clue}" is not a question; each quiz clue must be a real question whose answer is its label.`,
           });
         }
+      }
+      if (game.gameType && ["crossword", "word_search", "codebreaker"].includes(game.gameType)) {
+        for (const item of items) {
+          const key = normalizePuzzleWord(item.label, 12);
+          if (!key) continue;
+          const previous = closedAnswerWords.get(key);
+          if (previous && previous.day !== day.day) {
+            problems.push({
+              day: day.day,
+              slot: game.slot,
+              message: `Day ${day.day} "${game.title}" repeats the answer "${item.label}" from Day ${previous.day} "${previous.title}"; choose a different local answer word.`,
+            });
+          } else {
+            closedAnswerWords.set(key, { day: day.day, title: game.title, slot: game.slot });
+          }
+        }
+      }
+      const broken = [game.title, ...(items.flatMap((item) => [item.label, item.clue]))].find((value) =>
+        /^\s*(?:\.{3}|…)\s*$/.test(value) || /(?:\.{3}|…)\S/.test(value) || /\bwaht\b/i.test(value),
+      );
+      if (broken) {
+        problems.push({
+          day: day.day,
+          slot: game.slot,
+          message: `Day ${day.day} "${game.title}" contains broken placeholder text or a typo ("${broken}"); rewrite it as complete polished copy.`,
+        });
       }
     }
   }

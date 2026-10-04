@@ -14,7 +14,7 @@ import { DEFAULT_CLAUDE_MODEL, askAboutImage, claudeJson } from "./claude.ts";
 // photo of the place itself.
 
 const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
-const PHOTO_VERSION = "v2";
+const PHOTO_VERSION = "v3";
 const PHOTO_WIDTH = 1200;
 const MAX_PHOTO_BYTES = 6_000_000;
 // Licences that allow commercial printing with a credit. NC and ND
@@ -223,7 +223,7 @@ async function photoShows(
   const bytes = new Uint8Array(await response.arrayBuffer());
   const verdict = await askAboutImage(
     { bytes, contentType: sniffImageContentType(bytes) },
-    `Does this photograph clearly show ${description}? It must be a real photo (not a painting, drawing or map), taken of the subject rather than from it, and no person's face may be its main subject.`,
+    `Does this photograph clearly show ${description}? It must be a real photo (not a painting, drawing or map), taken of the subject rather than from it, useful for a printed children's booklet, and no person's face may be its main subject. Reject it if the subject is tiny, mostly cropped, mostly hidden by scaffolding/construction works/temporary barriers, or if the image is too cluttered to understand quickly.`,
     {
       type: "object",
       additionalProperties: false,

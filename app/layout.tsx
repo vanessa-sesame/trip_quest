@@ -31,7 +31,9 @@ const description =
   "Create thoughtful travel adventures tailored to a child's age, destination, and trip length.";
 
 export function generateMetadata(): Metadata {
-  const socialImage = "https://tripquest-booklet.allophones.chatgpt.site/og.png";
+  // Link previews need an absolute URL; the 1200x630 JPEG stays small
+  // enough for chat apps that skip large preview images.
+  const socialImage = "https://tripquestkids.com/og.jpg";
 
   return {
     title,

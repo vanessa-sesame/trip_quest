@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { copyFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFile, readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { POST as generateBooklet } from "../app/api/generate/route.ts";
 import { readGenerationResponse } from "../app/lib/generation/stream.ts";
@@ -11,6 +11,9 @@ const matrix = new URL("../artifacts/booklets/matrix-2026-10-04/", import.meta.u
 const jsonDirectory = new URL("json/", matrix);
 const pdfDirectory = new URL("pdfs/", matrix);
 const publicDirectory = new URL("../public/samples/", import.meta.url);
+const approvedCoverPath = "/illustrations/singapore-cover-line-art-v1.jpg";
+const approvedCoverSource = new URL(`../public${approvedCoverPath}`, import.meta.url);
+const renderExisting = process.argv.includes("--render-existing");
 
 mkdirSync(jsonDirectory, { recursive: true });
 mkdirSync(pdfDirectory, { recursive: true });
@@ -33,29 +36,51 @@ const body = {
   }],
 };
 
-const response = await generateBooklet(new Request("http://tripquest.local/api/generate", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "cf-connecting-ip": "198.51.100.51",
-  },
-  body: JSON.stringify(body),
-}));
-
-if (!response.ok) {
-  const payload = await response.json().catch(() => ({})) as { error?: string };
-  throw new Error(payload.error || `Generation returned HTTP ${response.status}.`);
-}
-
-const booklet = await readGenerationResponse(response, (message) => {
-  if (message) console.log(`[TripQuest homepage sample] ${message}`);
-}) as GeneratedBookletData;
-const pdf = await createBookletPdf(booklet);
-
 const jsonPath = new URL(`${caseName}.json`, jsonDirectory);
 const pdfPath = new URL(`${caseName}.pdf`, pdfDirectory);
 const publicPath = new URL("tripquest-singapore-age-5-preview-20261004-m51.pdf", publicDirectory);
 const legacyPublicPath = new URL("tripquest-singapore-age-5-preview.pdf", publicDirectory);
+
+let booklet: GeneratedBookletData;
+if (renderExisting) {
+  booklet = JSON.parse(readFileSync(jsonPath, "utf8")) as GeneratedBookletData;
+} else {
+  const response = await generateBooklet(new Request("http://tripquest.local/api/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "cf-connecting-ip": "198.51.100.51",
+    },
+    body: JSON.stringify(body),
+  }));
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(payload.error || `Generation returned HTTP ${response.status}.`);
+  }
+
+  booklet = await readGenerationResponse(response, (message) => {
+    if (message) console.log(`[TripQuest homepage sample] ${message}`);
+  }) as GeneratedBookletData;
+}
+
+// Direct route invocation has no Cloudflare R2 binding. Pin the homepage to
+// the approved Singapore sketch recovered from the reviewed matrix booklet
+// instead of silently publishing the generic vector fallback.
+if (!existsSync(approvedCoverSource)) throw new Error("Approved Singapore cover artwork is missing.");
+booklet.coverIllustrationPath = approvedCoverPath;
+
+const resolveAsset = async (path: string) => {
+  if (!path.startsWith("/") || path.startsWith("//")) return null;
+  if (path.startsWith("/api/illustration")) {
+    const response = await fetch(new URL(path, "https://tripquestkids.com"));
+    if (!response.ok) throw new Error(`Could not load stored artwork (${response.status}).`);
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  return new Uint8Array(await readFile(new URL(`../public${path}`, import.meta.url)));
+};
+
+const pdf = await createBookletPdf(booklet, undefined, resolveAsset, resolveAsset);
 
 writeFileSync(jsonPath, `${JSON.stringify(booklet, null, 2)}\n`);
 writeFileSync(pdfPath, pdf);

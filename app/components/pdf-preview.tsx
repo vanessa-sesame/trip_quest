@@ -34,19 +34,35 @@ async function buildPdf(booklet: GeneratedBookletData, familyPack: FamilyPackCon
   return pdfjs.getDocument({ data: bytes }).promise;
 }
 
+// The exact edition's PDF, rendered by the server. Right after a booklet
+// finishes, the first render can be cut off (a fresh Worker loading every
+// picture at once), so connection failures and 5xx answers are retried a
+// few times before the preview shows "Try again".
 async function fetchServerPdf(request: ServerPdfRequest) {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-  const response = await fetch(request.url, {
-    method: "POST",
-    headers: { Accept: "application/pdf", "Content-Type": "application/json" },
-    body: JSON.stringify(request.body),
-  });
-  if (!response.ok || !(response.headers.get("content-type") || "").includes("application/pdf")) {
+  let lastError: unknown;
+  for (const wait of [0, 2_000, 5_000]) {
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    let response: Response;
+    try {
+      response = await fetch(request.url, {
+        method: "POST",
+        headers: { Accept: "application/pdf", "Content-Type": "application/json" },
+        body: JSON.stringify(request.body),
+      });
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+    if (response.ok && (response.headers.get("content-type") || "").includes("application/pdf")) {
+      return pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
+    }
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error || "The exact printable PDF could not be prepared.");
+    lastError = new Error(payload.error || "The exact printable PDF could not be prepared.");
+    if (response.status < 500) break;
   }
-  return pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
+  throw lastError instanceof Error ? lastError : new Error("The exact printable PDF could not be prepared.");
 }
 
 async function fetchStaticPdf(url: string) {

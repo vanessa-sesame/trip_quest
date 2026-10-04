@@ -116,7 +116,8 @@ export function drawTreatTrail(ctx: PdfContext) {
     });
   } else {
     // Day rows, compressed into columns as the trip grows, then the stops.
-    const cardsHeight = 2 * stopHeight + GAP;
+    const stopRows = Math.ceil(stops.length / 2);
+    const cardsHeight = stopRows * stopHeight + (stopRows - 1) * GAP;
     const rowsSpace = flow.remaining() - cardsHeight - 12;
     const minRow = 15;
     const envelopeSpace = ENVELOPE_HEIGHT + 12;

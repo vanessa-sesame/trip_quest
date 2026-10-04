@@ -14,6 +14,7 @@ import type { GameArgs } from "./types.ts";
 
 const bankFills = [colors.coralSoft, colors.tealSoft, colors.yellowSoft, colors.greenSoft];
 const bankInks = [colors.coral, colors.teal, colors.yellow, colors.green];
+const MIN_WRITABLE_CROSSWORD_CELL = 24;
 
 export function wordSearchSizeForAge(age: number) {
   return age <= 8 ? 10 : age <= 11 ? 11 : 12;
@@ -115,6 +116,9 @@ export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
   const cluesHeight = box.height - drawBulletList(null, fonts, clues, { ...clueOptions, x: 0, top: box.height, width: box.width }).bottom;
   const gridHeight = Math.max(90, box.height - cluesHeight - 16);
   const cell = Math.min(34, box.width / columns, gridHeight / rows);
+  if (cell < MIN_WRITABLE_CROSSWORD_CELL) {
+    return drawCrosswordWithAnswerBoxes({ ctx, page, activity, box }, puzzle, { firstRow, firstColumn, rows, columns, used });
+  }
   const width = columns * cell;
   const height = rows * cell;
   const x0 = box.x + (box.width - width) / 2;
@@ -133,6 +137,92 @@ export function drawCrossword({ ctx, page, activity, box }: GameArgs) {
     }
   }
   return drawBulletList(page, fonts, clues, { ...clueOptions, x: box.x, top: top - height - 16, width: box.width }).bottom;
+}
+
+function drawCrosswordWithAnswerBoxes(
+  args: GameArgs,
+  puzzle: ReturnType<typeof createCrossword>,
+  grid: {
+    firstRow: number;
+    firstColumn: number;
+    rows: number;
+    columns: number;
+    used: Array<{ rowIndex: number; columnIndex: number }>;
+  },
+) {
+  const { ctx, page, activity, box } = args;
+  const { fonts, type } = ctx;
+  const items = activity.items ?? [];
+  const miniSize = Math.min(box.width, Math.max(90, Math.min(128, box.height * 0.28)));
+  const miniCell = Math.min(miniSize / grid.columns, miniSize / grid.rows);
+  const miniWidth = grid.columns * miniCell;
+  const miniHeight = grid.rows * miniCell;
+  const miniX = box.x + (box.width - miniWidth) / 2;
+  const miniTop = box.y + box.height;
+  for (const { rowIndex, columnIndex } of grid.used) {
+    const cellValue = puzzle.grid[rowIndex][columnIndex]!;
+    const x = miniX + (columnIndex - grid.firstColumn) * miniCell;
+    const y = miniTop - (rowIndex - grid.firstRow + 1) * miniCell;
+    drawRoundedRect(page, { x: x + 0.6, y: y + 0.6, width: miniCell - 1.2, height: miniCell - 1.2 }, 3, {
+      color: colors.white,
+      borderColor: colors.teal,
+      borderWidth: 0.9,
+    });
+    if (cellValue.number) {
+      page.drawText(String(cellValue.number), {
+        x: x + 2,
+        y: y + miniCell - Math.min(7, miniCell * 0.45),
+        size: Math.max(8, Math.min(9, miniCell * 0.38)),
+        font: fonts.bold,
+        color: colors.coral,
+      });
+    }
+  }
+
+  let top = miniTop - miniHeight - 12;
+  const answerGap = 8;
+  const rowHeight = Math.min(42, Math.max(31, (top - box.y - answerGap * 3) / Math.max(1, puzzle.entries.length)));
+  for (const entry of puzzle.entries) {
+    const item = items[entry.answerIndex];
+    const label = `${entry.number}${entry.direction === "across" ? "A" : "D"}`;
+    const y = top - rowHeight;
+    drawRoundedRect(page, { x: box.x, y, width: box.width, height: rowHeight }, 9, {
+      color: colors.white,
+      borderColor: colors.softLine,
+      borderWidth: 1,
+    });
+    drawText(page, label, fonts, { x: box.x + 8, top: top - 8, width: 26 }, {
+      size: type.label,
+      font: fonts.bold,
+      color: colors.coral,
+      maxLines: 1,
+    });
+    const clueX = box.x + 38;
+    const boxCount = Math.max(3, entry.answer.length);
+    const letterGap = 3;
+    const available = box.width - 46;
+    const letterSize = Math.min(24, (available - letterGap * (boxCount - 1)) / boxCount);
+    const boxesY = y + 6;
+    for (let index = 0; index < boxCount; index += 1) {
+      const x = clueX + index * (letterSize + letterGap);
+      drawRoundedRect(page, { x, y: boxesY, width: letterSize, height: letterSize }, 4, {
+        color: colors.tealSoft,
+        borderColor: colors.teal,
+        borderWidth: 0.8,
+      });
+    }
+    drawText(page, item?.clue || "Solve this local answer.", fonts, {
+      x: clueX,
+      top: boxesY - 4,
+      width: available,
+    }, {
+      size: type.label,
+      color: colors.muted,
+      maxLines: 1,
+    });
+    top = y - answerGap;
+  }
+  return Math.max(box.y, top);
 }
 
 export function drawMaze({ ctx, page, activity, box }: GameArgs) {

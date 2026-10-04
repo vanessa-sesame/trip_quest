@@ -67,16 +67,16 @@ test("sticker ids are unique and the envelope sheet holds exactly one sheet", ()
   }
 });
 
-test("treat stops: one every day for trips up to four days, then four spread evenly", () => {
+test("treat stops: one every day for trips up to four days, then four spread evenly with an early second-day stop", () => {
   assert.deepEqual(treatMilestones(1).map((stop) => stop.afterDay), [1]);
   assert.deepEqual(treatMilestones(2).map((stop) => stop.afterDay), [1, 2]);
   assert.deepEqual(treatMilestones(3).map((stop) => stop.afterDay), [1, 2, 3]);
   assert.deepEqual(treatMilestones(4).map((stop) => stop.afterDay), [1, 2, 3, 4]);
   assert.deepEqual(treatMilestones(4).map((stop) => stop.label), ["Day 1 done!", "Day 2 done!", "Day 3 done!", "Trip done!"]);
-  assert.deepEqual(treatMilestones(5).map((stop) => stop.afterDay), [1, 3, 4, 5]);
+  assert.deepEqual(treatMilestones(5).map((stop) => stop.afterDay), [1, 2, 3, 5]);
   assert.deepEqual(treatMilestones(8).map((stop) => stop.afterDay), [2, 4, 6, 8]);
-  assert.deepEqual(treatMilestones(14).map((stop) => stop.afterDay), [4, 7, 11, 14]);
-  assert.equal(treatMilestones(14)[1].label, "Halfway there!");
+  assert.deepEqual(treatMilestones(14).map((stop) => stop.afterDay), [3, 7, 10, 14]);
+  assert.equal(treatMilestones(14)[2].label, "Halfway there!");
   for (let days = 1; days <= 14; days += 1) {
     const stops = treatMilestones(days);
     assert.equal(stops.length, Math.min(days, MAX_TREAT_STOPS), `${days} days`);

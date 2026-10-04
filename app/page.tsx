@@ -728,6 +728,13 @@ export default function Home() {
     };
   }
 
+  const exactPdfPreviewRequest = useMemo(
+    () => generatedBooklet?.editionFingerprint
+      ? { url: "/api/pdf", body: { ...editionRequest(generatedBooklet), kind: "booklet" } }
+      : undefined,
+    [generatedBooklet, children, structuredEvents],
+  );
+
   // The printable PDF and its sticker sheets are free for a created
   // booklet; the server renders the stored edition matching the preview.
   async function downloadFreePdf(kind: FreePdfKind) {
@@ -1180,6 +1187,7 @@ export default function Home() {
                 documentKey={previewKey}
                 page={currentPage}
                 zoom={previewZoom}
+                serverPdfRequest={exactPdfPreviewRequest}
               />
             </div>
 

@@ -34,12 +34,33 @@ async function buildPdf(booklet: GeneratedBookletData, familyPack: FamilyPackCon
   return pdfjs.getDocument({ data: bytes }).promise;
 }
 
+async function fetchServerPdf(request: ServerPdfRequest) {
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const response = await fetch(request.url, {
+    method: "POST",
+    headers: { Accept: "application/pdf", "Content-Type": "application/json" },
+    body: JSON.stringify(request.body),
+  });
+  if (!response.ok || !(response.headers.get("content-type") || "").includes("application/pdf")) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error || "The exact printable PDF could not be prepared.");
+  }
+  return pdfjs.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise;
+}
+
+export type ServerPdfRequest = {
+  url: string;
+  body: Record<string, unknown>;
+};
+
 export function PdfPreview({
   booklet,
   familyPack,
   documentKey,
   page,
   zoom,
+  serverPdfRequest,
   onPageCount,
 }: {
   booklet: GeneratedBookletData;
@@ -48,6 +69,10 @@ export function PdfPreview({
   documentKey: string;
   page: number;
   zoom: number;
+  // Once a real edition exists, render the same server PDF endpoint used by
+  // download. Draft/sample previews still use the client renderer so the UI
+  // can stay responsive before a stored edition exists.
+  serverPdfRequest?: ServerPdfRequest;
   onPageCount?: (count: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -57,9 +82,9 @@ export function PdfPreview({
   const [attempt, setAttempt] = useState(0);
   const [width, setWidth] = useState(0);
   const pdf = built?.pdf ?? null;
-  const latest = useRef({ booklet, familyPack, onPageCount });
+  const latest = useRef({ booklet, familyPack, onPageCount, serverPdfRequest });
   useEffect(() => {
-    latest.current = { booklet, familyPack, onPageCount };
+    latest.current = { booklet, familyPack, onPageCount, serverPdfRequest };
   });
 
   // Rebuild the PDF when the booklet changes (debounced: streaming days
@@ -68,7 +93,10 @@ export function PdfPreview({
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      buildPdf(latest.current.booklet, latest.current.familyPack)
+      const pdfPromise = latest.current.serverPdfRequest
+        ? fetchServerPdf(latest.current.serverPdfRequest)
+        : buildPdf(latest.current.booklet, latest.current.familyPack);
+      pdfPromise
         .then((document) => {
           if (cancelled) {
             releasePdf(document);

@@ -12,7 +12,7 @@ import {
 
 export const RESEARCH_CACHE_VERSION = "research-2026-09-15-2";
 export const BOOKLET_CACHE_VERSION = "booklet-2026-09-27-real-photos";
-export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-09-27-real-photos";
+export const BOOKLET_PDF_CACHE_VERSION = "pdf-2026-10-04-canonical-preview";
 export const BOOKLET_BATCH_CACHE_VERSION = "batch-2026-09-21-1";
 
 type D1Value = string | number | null;

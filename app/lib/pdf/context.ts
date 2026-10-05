@@ -15,6 +15,7 @@ import {
   PAGE_HEIGHT,
   PAGE_SIZE,
   PAGE_WIDTH,
+  PRINT_BLEED,
   colors,
   type DestinationTheme,
   type TypeScale,
@@ -47,9 +48,11 @@ export type PdfContext = {
   familyPack?: FamilyPackContext;
   // Every sticker in the kit and its spot (app/lib/booklet/stickers.ts).
   stickers: Sticker[];
-  // Test hook: called for every sticker spot drawn.
-  onStickerSpot?: (sticker: Sticker) => void;
+  // Test hook: called for every sticker spot drawn, with where it sits.
+  onStickerSpot?: (sticker: Sticker, placed: PlacedStickerSpot) => void;
 };
+
+export type PlacedStickerSpot = { page: number; x: number; y: number; radius: number };
 
 // Stickers are 30mm circles (the kit's circle punch).
 export const STICKER_DIAMETER = (30 / 25.4) * 72;
@@ -73,7 +76,7 @@ export function drawStickerSpot(ctx: PdfContext, page: PDFPage, spot: StickerSpo
   const size = ctx.type.label;
   const width = ctx.fonts.bold.widthOfTextAtSize(caption, size);
   page.drawText(caption, { x: cx - width / 2, y: cy - 20, size, font: ctx.fonts.bold, color: tone.ink });
-  ctx.onStickerSpot?.(sticker);
+  ctx.onStickerSpot?.(sticker, { page: ctx.pageNumber, x: cx, y: cy, radius });
   return sticker;
 }
 
@@ -87,10 +90,11 @@ export function coloringArtworkKey(activity: Activity, context: string) {
 export function addPage(ctx: PdfContext, section: string, accent: RGB) {
   ctx.pageNumber += 1;
   const page = ctx.document.addPage(PAGE_SIZE);
-  page.drawRectangle({ x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT, color: colors.paper });
+  const bleed = PRINT_BLEED;
+  page.drawRectangle({ x: -bleed, y: -bleed, width: PAGE_WIDTH + bleed * 2, height: PAGE_HEIGHT + bleed * 2, color: colors.paper });
   const bandHeight = 9;
-  page.drawRectangle({ x: 0, y: PAGE_HEIGHT - bandHeight, width: PAGE_WIDTH, height: bandHeight, color: accent });
-  for (let x = 6; x < PAGE_WIDTH; x += 12) {
+  page.drawRectangle({ x: -bleed, y: PAGE_HEIGHT - bandHeight, width: PAGE_WIDTH + bleed * 2, height: bandHeight + bleed, color: accent });
+  for (let x = -6; x < PAGE_WIDTH + bleed; x += 12) {
     page.drawCircle({ x, y: PAGE_HEIGHT - bandHeight, size: 4, color: accent });
   }
 

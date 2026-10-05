@@ -48,7 +48,8 @@ export function drawGame(args: GameArgs): number {
 // is all their field notes ("Decoded word: __", "My answer: __") ask for.
 export function gameHasOwnWritingSpace(activity: Pick<Activity, "gameType" | "differencePaths">) {
   return activity.gameType === "coloring" || activity.gameType === "drawing" || activity.gameType === "story"
-    || activity.gameType === "codebreaker" || activity.gameType === "quiz" || hasDifferencePictures(activity);
+    || activity.gameType === "codebreaker" || activity.gameType === "quiz" || activity.gameType === "crossword"
+    || hasDifferencePictures(activity);
 }
 
 export function answerFor(activity: Activity, age: number) {

@@ -46,10 +46,10 @@ export function drawAnswerKeyPage(ctx: PdfContext, entries: AnswerEntry[], part:
   );
 }
 
-export function drawNotesPage(ctx: PdfContext) {
+export function drawNotesPage(ctx: PdfContext, copy = { section: "My notes", kicker: "My notes", title: "Notes and doodles" }) {
   const { type, theme } = ctx;
-  const page = addPage(ctx, "My notes", colors.teal);
-  const top = drawPageHeader(ctx, page, { kicker: "My notes", title: "Notes and doodles", accent: colors.teal, soft: colors.tealSoft, titleLines: 1 });
+  const page = addPage(ctx, copy.section, colors.teal);
+  const top = drawPageHeader(ctx, page, { kicker: copy.kicker, title: copy.title, accent: colors.teal, soft: colors.tealSoft, titleLines: 1 });
   const box = { x: MARGIN, y: CONTENT_BOTTOM, width: CONTENT_WIDTH, height: top - CONTENT_BOTTOM };
   drawRoundedRect(page, box, 14, { color: colors.white, borderColor: colors.softLine, borderWidth: 1.2 });
   drawRuledRows(page, { x: box.x + 16, y: box.y + 34, width: box.width - 32, height: box.height - 40 }, type.writeLine);

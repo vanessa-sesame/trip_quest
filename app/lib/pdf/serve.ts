@@ -152,6 +152,7 @@ export async function preparePdf(
   purchase: PurchaseRecord | null,
   requestedFingerprint = "",
   kind: PdfKind = "booklet",
+  print = false,
 ) {
   if (!runtime.DB || !runtime.BOOKLET_FILES) {
     return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
@@ -206,6 +207,7 @@ export async function preparePdf(
     input,
     purchase,
     kind,
+    print,
   });
 }
 
@@ -244,7 +246,11 @@ export type EditionPdfInput = {
   input: NormalizedPdfRequest;
   purchase: PurchaseRecord | null;
   kind: PdfKind;
+  // The print-shop file (3mm bleed, A5 trim box), for the owner's orders.
+  print?: boolean;
 };
+
+const printFilename = (filename: string) => filename.replace(/\.pdf$/i, "-print-3mm-bleed.pdf");
 
 // Renders an already-verified edition: sticker sheets, or the booklet from
 // the durable PDF cache when it carries no family names (otherwise it is
@@ -252,7 +258,7 @@ export type EditionPdfInput = {
 export async function renderEditionPdf(
   request: Request,
   runtime: RuntimeEnvironment,
-  { booklet: storedBooklet, editionFingerprint, cacheKey, input, purchase, kind }: EditionPdfInput,
+  { booklet: storedBooklet, editionFingerprint, cacheKey, input, purchase, kind, print = false }: EditionPdfInput,
 ) {
   if (!runtime.DB || !runtime.BOOKLET_FILES) {
     return Response.json({ error: "PDF storage is not connected yet." }, { status: 503 });
@@ -279,10 +285,17 @@ export async function renderEditionPdf(
       personalizedBooklet,
       familyPackFor(input.family, input.events, input.days),
       resolveStaticAsset,
+      { resolveImage: resolveStaticAsset, printBleed: print },
     );
-    return pdfResponse(guide, parentGuidePdfFilename(personalizedBooklet), "parent-guide", editionFingerprint);
+    const guideName = parentGuidePdfFilename(personalizedBooklet);
+    return pdfResponse(guide, print ? printFilename(guideName) : guideName, "parent-guide", editionFingerprint);
   }
   const filename = familyPackPdfFilename(personalizedBooklet);
+  if (print) {
+    const familyPack = familyPackFor(input.family, input.events, input.days);
+    const pdf = await createBookletPdf(personalizedBooklet, familyPack, resolveStaticAsset, resolveStaticAsset, { printBleed: true });
+    return pdfResponse(pdf, printFilename(filename), "print", editionFingerprint);
+  }
   const reusablePdf = input.family.length <= 1 && !hasPersonalFamilyNames(input);
   if (reusablePdf) {
     const stored = await readStoredBookletPdf(runtime.DB, runtime.BOOKLET_FILES, cacheKey, Date.now(), editionFingerprint);

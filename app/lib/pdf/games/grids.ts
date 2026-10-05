@@ -14,7 +14,10 @@ import type { GameArgs } from "./types.ts";
 
 const bankFills = [colors.coralSoft, colors.tealSoft, colors.yellowSoft, colors.greenSoft];
 const bankInks = [colors.coral, colors.teal, colors.yellow, colors.green];
-const MIN_WRITABLE_CROSSWORD_CELL = 24;
+// Crossword squares: big enough to write a capital letter in comfortably
+// (~13mm) when the page allows, never below ~8mm.
+const MAX_CROSSWORD_CELL = 37;
+const MIN_CROSSWORD_CELL = 23;
 
 export function wordSearchSizeForAge(age: number) {
   return age <= 8 ? 10 : age <= 11 ? 11 : 12;
@@ -97,6 +100,10 @@ export function drawWordSearch({ ctx, page, activity, box }: GameArgs) {
   return bankTop - pillRows * (pillHeight + 6) + 6;
 }
 
+// The crossword is its own writing space: the grid is drawn as large as
+// the page allows (squares up to ~13mm) and children write the letters
+// straight into it. The clues sit underneath in Across and Down groups,
+// side by side when that leaves bigger squares, each with its letter count.
 export function drawCrossword(args: GameArgs) {
   const { ctx, page, activity, box } = args;
   const { fonts, type } = ctx;
@@ -109,121 +116,61 @@ export function drawCrossword(args: GameArgs) {
   const firstColumn = used.length ? Math.min(...used.map((cell) => cell.columnIndex)) : 0;
   const rows = used.length ? Math.max(...used.map((cell) => cell.rowIndex)) - firstRow + 1 : 1;
   const columns = used.length ? Math.max(...used.map((cell) => cell.columnIndex)) - firstColumn + 1 : 1;
-  const clues: BulletItem[] = puzzle.entries.map((entry) => ({
-    marker: `${entry.number}${entry.direction === "across" ? "A" : "D"}`,
-    text: items[entry.answerIndex]?.clue || "Solve this local answer.",
-  }));
-  const clueOptions = { size: type.small, marker: "number" as const, maxLines: 3, gap: 7, markerColor: colors.yellow };
-  const cluesHeight = box.height - drawBulletList(null, fonts, clues, { ...clueOptions, x: 0, top: box.height, width: box.width }).bottom;
-  const gridHeight = Math.max(90, box.height - cluesHeight - 16);
-  const cell = Math.min(34, box.width / columns, gridHeight / rows);
-  if (cell < MIN_WRITABLE_CROSSWORD_CELL) {
-    return drawCrosswordWithAnswerBoxes(args, puzzle, { firstRow, firstColumn, rows, columns, used });
-  }
+
+  const groups = (["across", "down"] as const)
+    .map((direction) => ({
+      title: direction === "across" ? "Across" : "Down",
+      clues: puzzle.entries
+        .filter((entry) => entry.direction === direction)
+        .map((entry): BulletItem => {
+          const clue = items[entry.answerIndex]?.clue.trim() || "Solve this local answer.";
+          return { marker: String(entry.number), text: `${clue.charAt(0).toLocaleUpperCase()}${clue.slice(1)} (${entry.answer.length})` };
+        }),
+    }))
+    .filter((group) => group.clues.length);
+  const clueOptions = { size: type.small, marker: "number" as const, maxLines: 3, gap: 5, markerColor: colors.coral };
+  const headingHeight = type.label * 2 + 6;
+  const groupHeight = (clues: BulletItem[], width: number) =>
+    headingHeight - drawBulletList(null, fonts, clues, { ...clueOptions, x: 0, top: 0, width }).bottom;
+  const columnGap = 14;
+  const columnWidth = (box.width - columnGap) / 2;
+  const sideBySide = Math.max(...groups.map((group) => groupHeight(group.clues, columnWidth)));
+  const stacked = groups.reduce((total, group) => total + groupHeight(group.clues, box.width), 0) + (groups.length - 1) * 8;
+  const gridGap = 16;
+  const cellFor = (cluesHeight: number) => Math.min(MAX_CROSSWORD_CELL, box.width / columns, (box.height - cluesHeight - gridGap) / rows);
+  const useColumns = groups.length > 1 && cellFor(sideBySide) >= cellFor(stacked);
+  const cell = Math.max(MIN_CROSSWORD_CELL, cellFor(useColumns ? sideBySide : stacked));
+
   const width = columns * cell;
   const height = rows * cell;
   const x0 = box.x + (box.width - width) / 2;
   const top = box.y + box.height;
+  const numberSize = Math.max(8, Math.min(11, cell * 0.3));
   for (const { rowIndex, columnIndex } of used) {
     const cellValue = puzzle.grid[rowIndex][columnIndex]!;
     const x = x0 + (columnIndex - firstColumn) * cell;
     const y = top - (rowIndex - firstRow + 1) * cell;
-    drawRoundedRect(page, { x: x + 1, y: y + 1, width: cell - 2, height: cell - 2 }, 4, {
+    drawRoundedRect(page, { x: x + 1, y: y + 1, width: cell - 2, height: cell - 2 }, Math.min(5, cell * 0.14), {
       color: colors.white,
       borderColor: colors.teal,
-      borderWidth: 1.1,
+      borderWidth: 1.2,
     });
     if (cellValue.number) {
-      page.drawText(String(cellValue.number), { x: x + 3, y: y + cell - 10, size: 8, font: fonts.bold, color: colors.coral });
-    }
-  }
-  return drawBulletList(page, fonts, clues, { ...clueOptions, x: box.x, top: top - height - 16, width: box.width }).bottom;
-}
-
-function drawCrosswordWithAnswerBoxes(
-  args: GameArgs,
-  puzzle: ReturnType<typeof createCrossword>,
-  grid: {
-    firstRow: number;
-    firstColumn: number;
-    rows: number;
-    columns: number;
-    used: Array<{ rowIndex: number; columnIndex: number }>;
-  },
-) {
-  const { ctx, page, activity, box } = args;
-  const { fonts, type } = ctx;
-  const items = activity.items ?? [];
-  const miniSize = Math.min(box.width, Math.max(90, Math.min(128, box.height * 0.28)));
-  const miniCell = Math.min(miniSize / grid.columns, miniSize / grid.rows);
-  const miniWidth = grid.columns * miniCell;
-  const miniHeight = grid.rows * miniCell;
-  const miniX = box.x + (box.width - miniWidth) / 2;
-  const miniTop = box.y + box.height;
-  for (const { rowIndex, columnIndex } of grid.used) {
-    const cellValue = puzzle.grid[rowIndex][columnIndex]!;
-    const x = miniX + (columnIndex - grid.firstColumn) * miniCell;
-    const y = miniTop - (rowIndex - grid.firstRow + 1) * miniCell;
-    drawRoundedRect(page, { x: x + 0.6, y: y + 0.6, width: miniCell - 1.2, height: miniCell - 1.2 }, 3, {
-      color: colors.white,
-      borderColor: colors.teal,
-      borderWidth: 0.9,
-    });
-    if (cellValue.number) {
-      page.drawText(String(cellValue.number), {
-        x: x + 2,
-        y: y + miniCell - Math.min(7, miniCell * 0.45),
-        size: Math.max(8, Math.min(9, miniCell * 0.38)),
-        font: fonts.bold,
-        color: colors.coral,
-      });
+      page.drawText(String(cellValue.number), { x: x + 3.5, y: y + cell - numberSize - 2, size: numberSize, font: fonts.bold, color: colors.coral });
     }
   }
 
-  let top = miniTop - miniHeight - 12;
-  const answerGap = 8;
-  const rowHeight = Math.min(42, Math.max(31, (top - box.y - answerGap * 3) / Math.max(1, puzzle.entries.length)));
-  for (const entry of puzzle.entries) {
-    const item = items[entry.answerIndex];
-    const label = `${entry.number}${entry.direction === "across" ? "A" : "D"}`;
-    const y = top - rowHeight;
-    drawRoundedRect(page, { x: box.x, y, width: box.width, height: rowHeight }, 9, {
-      color: colors.white,
-      borderColor: colors.softLine,
-      borderWidth: 1,
-    });
-    drawText(page, label, fonts, { x: box.x + 8, top: top - 8, width: 26 }, {
-      size: type.label,
-      font: fonts.bold,
-      color: colors.coral,
-      maxLines: 1,
-    });
-    const clueX = box.x + 38;
-    const boxCount = Math.max(3, entry.answer.length);
-    const letterGap = 3;
-    const available = box.width - 46;
-    const letterSize = Math.min(24, (available - letterGap * (boxCount - 1)) / boxCount);
-    const boxesY = y + 6;
-    for (let index = 0; index < boxCount; index += 1) {
-      const x = clueX + index * (letterSize + letterGap);
-      drawRoundedRect(page, { x, y: boxesY, width: letterSize, height: letterSize }, 4, {
-        color: colors.tealSoft,
-        borderColor: colors.teal,
-        borderWidth: 0.8,
-      });
-    }
-    drawText(page, item?.clue || "Solve this local answer.", fonts, {
-      x: clueX,
-      top: boxesY - 4,
-      width: available,
-    }, {
-      size: type.label,
-      color: colors.muted,
-      maxLines: 1,
-    });
-    top = y - answerGap;
-  }
-  return Math.max(box.y, top);
+  let bottom = top - height;
+  const cluesTop = top - height - gridGap;
+  groups.forEach((group, index) => {
+    const x = useColumns ? box.x + index * (columnWidth + columnGap) : box.x;
+    const width = useColumns ? columnWidth : box.width;
+    const groupTop = useColumns || index === 0 ? cluesTop : bottom - 8;
+    const pill = drawPill(page, fonts, group.title, { x, top: groupTop, color: colors.coral, fill: colors.coralSoft, size: type.label });
+    const listBottom = drawBulletList(page, fonts, group.clues, { ...clueOptions, x, top: pill.y - 6, width }).bottom;
+    bottom = useColumns ? Math.min(bottom, listBottom) : listBottom;
+  });
+  return bottom;
 }
 
 export function drawMaze({ ctx, page, activity, box }: GameArgs) {

@@ -29,9 +29,9 @@ import {
   drawFamilyRelayPage,
   drawMissionCardsPage,
 } from "./pages/family.ts";
-import { drawCover, drawGuide } from "./pages/front.ts";
+import { drawCover, drawGuide, drawParentGuideCover } from "./pages/front.ts";
 import { drawTreatTrail } from "./pages/treats.ts";
-import { colors, getDestinationTheme, typeScale } from "./theme.ts";
+import { PAGE_HEIGHT, PAGE_WIDTH, PRINT_BLEED, colors, getDestinationTheme, typeScale } from "./theme.ts";
 
 export type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
 import { answerPagesForBooklet, normalizedBooklet, planBookletPages } from "./plan.ts";
@@ -185,12 +185,23 @@ function drawDayEntry(ctx: PdfContext, entry: DayPageEntry) {
   }
 }
 
+// The print-shop file: every page widened by the 3mm bleed its paper and
+// top band are already drawn into (addPage), with the trim box at A5, so
+// the shop trims to exactly 148 x 210 mm.
+function addPrintBleed(document: PDFDocument) {
+  for (const page of document.getPages()) {
+    page.setMediaBox(-PRINT_BLEED, -PRINT_BLEED, PAGE_WIDTH + PRINT_BLEED * 2, PAGE_HEIGHT + PRINT_BLEED * 2);
+    page.setBleedBox(-PRINT_BLEED, -PRINT_BLEED, PAGE_WIDTH + PRINT_BLEED * 2, PAGE_HEIGHT + PRINT_BLEED * 2);
+    page.setTrimBox(0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+  }
+}
+
 export async function createBookletPdf(
   inputBooklet: GeneratedBookletData,
   familyPack?: FamilyPackContext,
   resolveColoringImage?: ColoringImageResolver,
   resolveFontBytes?: FontResolver,
-  hooks: { onStickerSpot?: PdfContext["onStickerSpot"] } = {},
+  hooks: { onStickerSpot?: PdfContext["onStickerSpot"]; printBleed?: boolean } = {},
 ) {
   const booklet = normalizedBooklet(inputBooklet);
   assertBookletQa(booklet);
@@ -242,20 +253,35 @@ export async function createBookletPdf(
       case "badges": drawBadgeTrackerPage(ctx); break;
     }
   }
+  if (hooks.printBleed) addPrintBleed(document);
   return document.save();
 }
 
+// The parent guide: its own cover (the booklet's picture, "for the
+// grown-ups"), the grown-ups page, every answer, then notes pages to a
+// multiple of 4 so it prints and folds like the booklet.
 export async function createParentGuidePdf(
   inputBooklet: GeneratedBookletData,
   familyPack?: FamilyPackContext,
   resolveFontBytes?: FontResolver,
+  options: { resolveImage?: ColoringImageResolver; printBleed?: boolean } = {},
 ) {
   const booklet = normalizedBooklet(inputBooklet);
   assertBookletQa(booklet);
   const document = await PDFDocument.create();
   const fonts = await loadBookletFonts(document, resolveFontBytes);
   const answerPages = answerPagesForBooklet(booklet);
-  const totalPages = 1 + answerPages.length;
+  const notesPages = (4 - ((2 + answerPages.length) % 4)) % 4;
+  const totalPages = 2 + answerPages.length + notesPages;
+  let coverBytes: Uint8Array | null = null;
+  if (booklet.coverIllustrationPath && options.resolveImage) {
+    try {
+      coverBytes = await options.resolveImage(booklet.coverIllustrationPath);
+    } catch (error) {
+      console.error("[TripQuest illustration] parent guide cover art", error);
+    }
+  }
+  const coverArtwork = coverBytes ? await embedIllustration(document, coverBytes) : undefined;
 
   document.setTitle(`${pdfText(booklet.destination)} Parent Guide - Age ${booklet.age}`);
   document.setAuthor("TripQuest");
@@ -276,12 +302,17 @@ export async function createParentGuidePdf(
     pageNumber: 0,
     artwork: {},
     revealArtwork: {},
-    coverArtwork: undefined,
-    coverArtBounds: undefined,
+    coverArtwork,
+    coverArtBounds: coverBytes ? artContentBounds(coverBytes) : undefined,
     familyPack,
     stickers: stickersForBooklet(booklet, familyPack),
   };
+  drawParentGuideCover(ctx);
   drawGuide(ctx);
   for (const page of answerPages) drawAnswerKeyPage(ctx, page.entries, page.part, page.parts);
+  for (let index = 0; index < notesPages; index += 1) {
+    drawNotesPage(ctx, { section: "Grown-up notes", kicker: "Grown-up notes", title: "Notes for the trip" });
+  }
+  if (options.printBleed) addPrintBleed(document);
   return document.save();
 }

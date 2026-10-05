@@ -55,7 +55,7 @@ export function gameInstruction(activity: GameCopyInput) {
     case "word_search":
       return "Find each word in the grid and circle it. Tick it off below.";
     case "crossword":
-      return "Solve each clue, then write the answer in the matching squares.";
+      return "Write one letter in each square. The number after each clue is how many letters it has.";
     case "maze":
       return "Trace one path from Start to Finish without crossing a wall.";
     case "matching":

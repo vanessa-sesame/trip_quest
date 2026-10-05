@@ -142,3 +142,40 @@ test("a booklet without a named child still fills both sheets", () => {
   assert.equal(stickers.filter((sticker) => sticker.sheet === "envelope").length, STICKERS_PER_SHEET);
   assert.equal(stickers.filter((sticker) => sticker.sheet === "game").length % STICKERS_PER_SHEET, 0);
 });
+
+// Every sticker spot measured in real booklets, so a 30mm sticker always
+// fits: the spot is wider than the sticker, sits clear of the trimmed edge
+// and the staples, and never overlaps another spot on its page.
+test("a 30mm sticker fits every spot, clear of the trim and of other spots", async () => {
+  const mm = 72 / 25.4;
+  const sticker = 30 * mm;
+  const pageWidth = 419.53;
+  const pageHeight = 595.28;
+  for (const days of [1, 3, 5, 9, 14]) {
+    for (const family of [false, true]) {
+      const booklet = bookletOfDays(days);
+      const familyPack = family
+        ? { children: normalizeFamilyChildren([{ name: "Mia", age: 5 }, { name: "Leo", age: 9 }]), events: [], mechanicsByDay: [] }
+        : undefined;
+      const spots: Array<{ id: string; page: number; x: number; y: number; radius: number }> = [];
+      await createBookletPdf(booklet, familyPack, undefined, undefined, { onStickerSpot: (placed, at) => spots.push({ id: placed.id, ...at }) });
+      assert.ok(spots.length > days, `${days} days: spots drawn`);
+      for (const spot of spots) {
+        const where = `${days} days${family ? " + family" : ""}, ${spot.id} on page ${spot.page}`;
+        assert.ok(spot.radius * 2 >= sticker + 1.5 * mm, `${where}: spot ${(spot.radius * 2 / mm).toFixed(1)}mm is not wider than the 30mm sticker`);
+        // 8mm from every trimmed edge: trimming wanders ~1mm and the inner
+        // pages of a saddle-stitched booklet creep outwards.
+        const edge = 8 * mm;
+        assert.ok(spot.x - spot.radius >= edge && spot.x + spot.radius <= pageWidth - edge, `${where}: too close to a side edge`);
+        assert.ok(spot.y - spot.radius >= edge && spot.y + spot.radius <= pageHeight - edge, `${where}: too close to the top or bottom`);
+      }
+      for (const [index, spot] of spots.entries()) {
+        for (const other of spots.slice(index + 1)) {
+          if (other.page !== spot.page) continue;
+          const gap = Math.hypot(spot.x - other.x, spot.y - other.y) - spot.radius - other.radius;
+          assert.ok(gap >= 2 * mm, `${days} days: ${spot.id} and ${other.id} on page ${spot.page} are ${(gap / mm).toFixed(1)}mm apart`);
+        }
+      }
+    }
+  }
+});

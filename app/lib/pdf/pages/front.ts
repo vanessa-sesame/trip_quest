@@ -44,6 +44,43 @@ function drawPostcardScene(page: PDFPage, box: Box, theme: DestinationTheme, see
   drawDoodleSparkle(page, box.x + box.width - 30, box.y + box.height * 0.42, 6, colors.white);
 }
 
+// The cover art is never cropped: a white print-style frame hugs the whole
+// picture at its own aspect ratio, as large as `area` allows, centred.
+const ART_PAD = 6;
+function coverArtFrame(ctx: PdfContext, area: Box): Box {
+  // The part of the canvas holding the picture (all of it unless the art
+  // has a wide blank margin of plain paper; see art-bounds.ts).
+  const bounds = ctx.coverArtBounds ?? { x: 0, y: 0, width: 1, height: 1 };
+  const dims = ctx.coverArtwork!.scale(1);
+  const scale = Math.min((area.width - ART_PAD * 2) / (dims.width * bounds.width), (area.height - ART_PAD * 2) / (dims.height * bounds.height));
+  const width = dims.width * bounds.width * scale;
+  const height = dims.height * bounds.height * scale;
+  return {
+    x: area.x + (area.width - width - ART_PAD * 2) / 2,
+    y: area.y + (area.height - height - ART_PAD * 2) / 2,
+    width: width + ART_PAD * 2,
+    height: height + ART_PAD * 2,
+  };
+}
+
+function drawCoverArt(ctx: PdfContext, page: PDFPage, hero: Box) {
+  const bounds = ctx.coverArtBounds ?? { x: 0, y: 0, width: 1, height: 1 };
+  drawRoundedRect(page, hero, 14, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
+  // Scale the whole canvas so its picture box fills the frame; the clip
+  // only ever trims blank paper outside that box.
+  const inner = { x: hero.x + ART_PAD, y: hero.y + ART_PAD, width: hero.width - ART_PAD * 2, height: hero.height - ART_PAD * 2 };
+  const canvasWidth = inner.width / bounds.width;
+  const canvasHeight = inner.height / bounds.height;
+  page.pushOperators(pushGraphicsState(), rectangle(inner.x, inner.y, inner.width, inner.height), clip(), endPath());
+  page.drawImage(ctx.coverArtwork!, {
+    x: inner.x - bounds.x * canvasWidth,
+    y: inner.y + inner.height - (1 - bounds.y) * canvasHeight,
+    width: canvasWidth,
+    height: canvasHeight,
+  });
+  page.pushOperators(popGraphicsState());
+}
+
 export function drawCover(ctx: PdfContext) {
   const { fonts, type, theme, booklet, familyPack } = ctx;
   const page = addPage(ctx, "Cover", theme.accent);
@@ -81,48 +118,17 @@ export function drawCover(ctx: PdfContext) {
   };
 
   // Picture: AI/curated hero art when available, otherwise the postcard.
-  // The art is never cropped: a white print-style frame hugs the whole
-  // picture at its own aspect ratio, as large as the area allows, centred.
-  const pad = 6;
-  // The part of the canvas holding the picture (all of it unless the art
-  // has a wide blank margin of plain paper; see art-bounds.ts).
-  const bounds = ctx.coverArtBounds ?? { x: 0, y: 0, width: 1, height: 1 };
-  const frameIn = (area: Box) => {
-    const dims = ctx.coverArtwork!.scale(1);
-    const scale = Math.min((area.width - pad * 2) / (dims.width * bounds.width), (area.height - pad * 2) / (dims.height * bounds.height));
-    const width = dims.width * bounds.width * scale;
-    const height = dims.height * bounds.height * scale;
-    return {
-      x: area.x + (area.width - width - pad * 2) / 2,
-      y: area.y + (area.height - height - pad * 2) / 2,
-      width: width + pad * 2,
-      height: height + pad * 2,
-    };
-  };
   const sideRoom = (frame: Box, area: Box) => area.x + area.width - (frame.x + frame.width) >= stampRadius * 2 - 6;
   // Stamps sit beside a narrow picture, or hang ~22pt below a wide one.
   let area = areaAbove(14);
   let hero: Box = area;
   if (ctx.coverArtwork) {
-    hero = frameIn(area);
+    hero = coverArtFrame(ctx, area);
     if (!sideRoom(hero, area)) {
       area = areaAbove(30);
-      hero = frameIn(area);
+      hero = coverArtFrame(ctx, area);
     }
-    drawRoundedRect(page, hero, 14, { color: colors.white, borderColor: colors.line, borderWidth: 1.2 });
-    // Scale the whole canvas so its picture box fills the frame; the clip
-    // only ever trims blank paper outside that box.
-    const inner = { x: hero.x + pad, y: hero.y + pad, width: hero.width - pad * 2, height: hero.height - pad * 2 };
-    const canvasWidth = inner.width / bounds.width;
-    const canvasHeight = inner.height / bounds.height;
-    page.pushOperators(pushGraphicsState(), rectangle(inner.x, inner.y, inner.width, inner.height), clip(), endPath());
-    page.drawImage(ctx.coverArtwork, {
-      x: inner.x - bounds.x * canvasWidth,
-      y: inner.y + inner.height - (1 - bounds.y) * canvasHeight,
-      width: canvasWidth,
-      height: canvasHeight,
-    });
-    page.pushOperators(popGraphicsState());
+    drawCoverArt(ctx, page, hero);
   } else {
     area = areaAbove(30);
     hero = area;
@@ -167,6 +173,65 @@ export function drawCover(ctx: PdfContext) {
   drawText(page, blurb, fonts, { x: MARGIN, top: block.bottom - 2, width: CONTENT_WIDTH }, {
     size: type.small, color: colors.muted, maxLines: 2,
   });
+}
+
+// The parent guide's cover: the booklet's own picture, so the two read as a
+// set, but in the grown-ups' green, with who it is for and a clear note
+// that the answers are inside.
+export function drawParentGuideCover(ctx: PdfContext) {
+  const { fonts, type, theme, booklet, familyPack } = ctx;
+  const page = addPage(ctx, "Parent guide", colors.green);
+  const flow = new Flow(page, fonts, { x: MARGIN, top: CONTENT_TOP, width: CONTENT_WIDTH, bottom: CONTENT_BOTTOM });
+  const pill = drawPill(page, fonts, "TripQuest Parent Guide", { x: MARGIN, top: CONTENT_TOP, color: colors.green, fill: colors.greenSoft, size: type.label });
+  flow.y = pill.y - 10;
+  flow.y = drawText(page, "For the grown-ups", fonts, { x: MARGIN, top: flow.y, width: CONTENT_WIDTH }, { size: type.heading, font: fonts.display, color: colors.green, maxLines: 1 }).bottom;
+  const destination = pdfText(booklet.destination);
+  const destinationSize = fitTextSize(destination, fonts.display, CONTENT_WIDTH, 40, 24, 2);
+  flow.y = drawText(page, destination, fonts, { x: MARGIN, top: flow.y, width: CONTENT_WIDTH }, {
+    size: destinationSize, font: fonts.display, color: colors.ink, maxLines: 2, lineHeight: destinationSize * 1.08,
+  }).bottom;
+  flow.space(2);
+  flow.y = drawText(page, `Every answer and a few tips for the ${destination} Explorer booklet.`, fonts, { x: MARGIN, top: flow.y, width: CONTENT_WIDTH }, {
+    size: type.body, font: fonts.bold, color: colors.muted, maxLines: 2,
+  }).bottom;
+  flow.space(14);
+
+  // The foot, bottom-up: the "answers inside" note, then who it is for.
+  const noteHeight = 46;
+  const note = { x: MARGIN, y: CONTENT_BOTTOM, width: CONTENT_WIDTH, height: noteHeight };
+  const names = familyPack?.children.length
+    ? familyPack.children.map((child, index) => pdfText(familyChildDisplayName(child, index))).join(" / ")
+    : "";
+  const facts = [
+    { label: "Made for", value: names || "Your explorer" },
+    { label: "Age", value: String(booklet.age) },
+    { label: "Trip", value: booklet.days === 1 ? "1 day" : `${booklet.days} days` },
+  ];
+  const factsHeight = type.label * 2 + 8 + type.body * 1.6 + 14;
+  const factsBox = { x: MARGIN, y: note.y + noteHeight + 12, width: CONTENT_WIDTH, height: factsHeight };
+  drawRoundedRect(page, factsBox, 12, { color: colors.white, borderColor: colors.softLine, borderWidth: 1 });
+  const columns = [CONTENT_WIDTH * 0.5, CONTENT_WIDTH * 0.2, CONTENT_WIDTH * 0.3];
+  let x = factsBox.x;
+  facts.forEach((fact, index) => {
+    const label = drawPill(page, fonts, fact.label, { x: x + 10, top: factsBox.y + factsHeight - 8, color: colors.muted, fill: colors.white, size: type.label });
+    drawText(page, fact.value, fonts, { x: x + 12, top: label.y - 6, width: columns[index] - 20 }, { size: type.body, font: fonts.display, color: colors.ink, maxLines: 1 });
+    x += columns[index];
+  });
+
+  drawRoundedRect(page, note, 12, { color: colors.yellowSoft, borderColor: colors.yellow, borderWidth: 1 });
+  drawDoodleStar(page, note.x + 22, note.y + noteHeight / 2, 8, colors.yellow);
+  drawText(page, "The answers are inside: keep this guide with the grown-ups, away from little explorers.", fonts, {
+    x: note.x + 40, top: note.y + noteHeight - 10, width: note.width - 52,
+  }, { size: type.small, font: fonts.bold, color: colors.ink, maxLines: 2 });
+
+  // The picture takes everything between the title and the facts.
+  const areaBottom = factsBox.y + factsHeight + 14;
+  const area = { x: MARGIN, y: areaBottom, width: CONTENT_WIDTH, height: Math.max(120, flow.y - areaBottom) };
+  if (ctx.coverArtwork) {
+    drawCoverArt(ctx, page, coverArtFrame(ctx, area));
+  } else {
+    drawPostcardScene(page, area, theme, `guide-cover-${booklet.destination}`);
+  }
 }
 
 export function drawGuide(ctx: PdfContext) {

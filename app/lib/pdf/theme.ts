@@ -46,6 +46,10 @@ export const colors = {
 export const PAGE_WIDTH = 419.53;
 export const PAGE_HEIGHT = 595.28;
 export const PAGE_SIZE: [number, number] = [PAGE_WIDTH, PAGE_HEIGHT];
+// Colour that runs to the trimmed edge (page paper, the top band) is drawn
+// 3mm past it. A home print never shows it; the print-shop file widens the
+// page to include it so trimming leaves no white sliver.
+export const PRINT_BLEED = (3 / 25.4) * 72;
 export const MARGIN = 34;
 export const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 // Everything a page draws sits between these two lines; the accent band

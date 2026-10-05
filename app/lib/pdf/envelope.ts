@@ -4,7 +4,7 @@ import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { artContentBounds, type ArtBounds } from "./art-bounds.ts";
 import type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
 import { bookletPdfFilename, embedIllustration, loadBookletFonts } from "./document.ts";
-import { drawDoodleSparkle, drawDoodleStar, drawHandLine, drawRoundedRect, drawStampCircle } from "./illustrations.ts";
+import { drawDoodleCloud, drawDoodleSparkle, drawDoodleStar, drawHandLine, drawRoundedRect } from "./illustrations.ts";
 import { drawPill, drawText, fitTextSize, pdfText, type Fonts } from "./layout.ts";
 import { drawPostcardScene } from "./pages/front.ts";
 import { normalizedBooklet } from "./plan.ts";
@@ -81,6 +81,13 @@ function drawPerforatedFrame(page: PDFPage, box: { x: number; y: number; width: 
   }
 }
 
+function drawDoodleHeart(page: PDFPage, cx: number, cy: number, size: number, color: RGB) {
+  const r = size;
+  page.drawSvgPath(`M 0,${r * 0.9} C ${-r * 1.6},${-r * 0.1} ${-r * 0.8},${-r * 1.3} 0,${-r * 0.45} C ${r * 0.8},${-r * 1.3} ${r * 1.6},${-r * 0.1} 0,${r * 0.9} Z`, {
+    x: cx, y: cy, color, borderColor: color, borderWidth: 0.8,
+  });
+}
+
 // Wavy postmark cancellation lines.
 function drawPostmarkWaves(page: PDFPage, x: number, y: number, width: number, color: RGB) {
   const segments = 6;
@@ -119,34 +126,24 @@ function drawPostcardFront(card: Card, booklet: GeneratedBookletData, art: { ima
     baseline -= size * 1.02;
   }
 
-  // A dotted flight path ending in a little paper plane, and a postmark
-  // overlapping the frame's corner.
-  const pathTop = baseline + size * 0.55;
-  page.drawSvgPath(`M 0,0 C ${column.width * 0.35},-26 ${column.width * 0.55},12 ${column.width * 0.82},-14`, {
-    x: column.x, y: pathTop - 8, borderColor: theme.accent, borderWidth: 1.2, borderDashArray: [2, 3],
+  // A dotted flight path looping down the column to a little paper plane,
+  // with a cloud and a few soft doodles along the way.
+  const pathTop = baseline + size * 0.4;
+  const pathBottom = frame.y + 40;
+  const w = column.width;
+  const h = pathTop - pathBottom;
+  page.drawSvgPath(`M 4,0 C ${w * 0.9},${h * 0.12} ${w * 0.95},${h * 0.42} ${w * 0.45},${h * 0.5} C ${w * 0.02},${h * 0.58} ${w * 0.1},${h * 0.9} ${w * 0.72},${h * 0.96}`, {
+    x: column.x, y: pathTop, borderColor: theme.accent, borderWidth: 1.3, borderDashArray: [2, 3.2],
   });
-  const planeX = column.x + column.width * 0.82;
-  const planeY = pathTop - 22;
   // A paper plane: two triangles folded along a centre crease.
-  page.drawSvgPath("M 0,6 L 18,0 L 6,10 Z", { x: planeX, y: planeY + 16, color: colors.white, borderColor: colors.ink, borderWidth: 1 });
-  page.drawSvgPath("M 6,10 L 18,0 L 8,15 Z", { x: planeX, y: planeY + 16, color: theme.accentSoft, borderColor: colors.ink, borderWidth: 1 });
-  // "Say it like a local": the booklet's own local word, on a luggage tag.
-  const word = pdfText(booklet.profile.word || "");
-  if (word) {
-    const tagTop = pathTop - 40;
-    const textHeight = drawText(null, word, fonts, { x: 0, top: 0, width: column.width - 20 }, { size: 9.5, font: fonts.bold, maxLines: 3 }).height;
-    const tag = { x: column.x, y: tagTop - (7.5 * 2 + 10 + textHeight + 10), width: column.width, height: 7.5 * 2 + 10 + textHeight + 10 };
-    if (tag.y > frame.y + 62) {
-      drawRoundedRect(page, tag, 9, { color: colors.white, borderColor: theme.accent, borderWidth: 1 });
-      page.drawCircle({ x: tag.x + tag.width - 11, y: tag.y + tag.height - 11, size: 3, color: background, borderColor: theme.accent, borderWidth: 0.8 });
-      const pill = drawPill(page, fonts, "Say it like a local", { x: tag.x + 9, top: tag.y + tag.height - 8, color: theme.accent, fill: theme.accentSoft, size: 7.5 });
-      drawText(page, word, fonts, { x: tag.x + 10, top: pill.y - 6, width: tag.width - 20 }, { size: 9.5, font: fonts.bold, color: colors.ink, maxLines: 3 });
-    }
-  }
-  const year = new Date(booklet.generatedAt).getFullYear();
-  drawStampCircle(page, fonts, frame.x + frame.width - 6, frame.y + 30, 24, colors.coral, colors.coralSoft, String(year));
-  drawPostmarkWaves(page, frame.x + frame.width + 20, frame.y + 34, 58, colors.coral);
-  drawDoodleSparkle(page, WIDTH - EDGE - 6, frame.y + 42, 5, colors.yellow);
+  const planeX = column.x + w * 0.72;
+  const planeY = pathBottom + 4;
+  page.drawSvgPath("M 0,6 L 22,0 L 7,12 Z", { x: planeX, y: planeY + 14, color: colors.white, borderColor: colors.ink, borderWidth: 1.1 });
+  page.drawSvgPath("M 7,12 L 22,0 L 10,18 Z", { x: planeX, y: planeY + 14, color: colors.coralSoft, borderColor: colors.ink, borderWidth: 1.1 });
+  drawDoodleCloud(page, { x: column.x + w * 0.58, y: pathBottom + h * 0.55, width: 40, height: 18 }, colors.white);
+  drawDoodleHeart(page, column.x + w * 0.16, pathBottom + h * 0.2, 6, colors.coral);
+  drawDoodleSparkle(page, column.x + w * 0.88, pathBottom + h * 0.82, 5, colors.yellow);
+  drawDoodleStar(page, column.x + w * 0.1, pathBottom + h * 0.72, 5, colors.yellow);
   page.drawText("TRIPQUEST KIDS", { x: column.x, y: EDGE + 2, size: 7.5, font: fonts.bold, color: theme.accent });
 }
 

@@ -1,10 +1,10 @@
-import { PDFDocument, clip, endPath, popGraphicsState, pushGraphicsState, rectangle, type PDFImage, type PDFPage } from "pdf-lib";
+import { PDFDocument, clip, endPath, popGraphicsState, pushGraphicsState, rectangle, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
 import { familyChildDisplayName } from "../family.ts";
 import type { GeneratedBookletData } from "../generation/booklet-ai.ts";
 import { artContentBounds, type ArtBounds } from "./art-bounds.ts";
 import type { ColoringImageResolver, FamilyPackContext, FontResolver } from "./context.ts";
 import { bookletPdfFilename, embedIllustration, loadBookletFonts } from "./document.ts";
-import { drawDoodleSparkle, drawDoodleStar, drawRoundedRect } from "./illustrations.ts";
+import { drawDoodleSparkle, drawDoodleStar, drawHandLine, drawRoundedRect, drawStampCircle } from "./illustrations.ts";
 import { drawPill, drawText, fitTextSize, pdfText, type Fonts } from "./layout.ts";
 import { drawPostcardScene } from "./pages/front.ts";
 import { normalizedBooklet } from "./plan.ts";
@@ -22,6 +22,9 @@ const MM = 72 / 25.4;
 const WIDTH = 148 * MM;
 const HEIGHT = 105 * MM;
 const EDGE = 8 * MM;
+// Cards are trimmed by the print shop, so colour that runs to the edge
+// goes 3mm past it (the file's trim box is the A6 card).
+const BLEED = 3 * MM;
 
 export type NextKitOffer = { code: string; offer: string; site: string };
 
@@ -61,68 +64,141 @@ function drawCoverPicture(page: PDFPage, art: { image: PDFImage; bounds: ArtBoun
   page.pushOperators(popGraphicsState());
 }
 
+// A postage-stamp frame: a white card whose edges are bitten by small
+// half-circles in the background colour, like perforations.
+function drawPerforatedFrame(page: PDFPage, box: { x: number; y: number; width: number; height: number }, background: RGB) {
+  page.drawRectangle({ x: box.x + 2.5, y: box.y - 2.5, width: box.width, height: box.height, color: colors.ink, opacity: 0.12 });
+  page.drawRectangle({ ...box, color: colors.white });
+  const radius = 3.2;
+  const step = 10;
+  for (let x = box.x + step / 2; x < box.x + box.width; x += step) {
+    page.drawCircle({ x, y: box.y, size: radius, color: background });
+    page.drawCircle({ x, y: box.y + box.height, size: radius, color: background });
+  }
+  for (let y = box.y + step / 2; y < box.y + box.height; y += step) {
+    page.drawCircle({ x: box.x, y, size: radius, color: background });
+    page.drawCircle({ x: box.x + box.width, y, size: radius, color: background });
+  }
+}
+
+// Wavy postmark cancellation lines.
+function drawPostmarkWaves(page: PDFPage, x: number, y: number, width: number, color: RGB) {
+  const segments = 6;
+  const step = width / segments;
+  const wave = `M 0,0 Q ${step / 2},-3 ${step},0${Array.from({ length: segments - 1 }, (_, index) => ` T ${step * (index + 2)},0`).join("")}`;
+  for (let row = 0; row < 3; row += 1) {
+    page.drawSvgPath(wave, { x, y: y - row * 6, borderColor: color, borderWidth: 1, borderOpacity: 0.75 });
+  }
+}
+
 function drawPostcardFront(card: Card, booklet: GeneratedBookletData, art: { image: PDFImage; bounds: ArtBounds } | undefined) {
   const { page, fonts, theme } = card;
-  const destination = pdfText(booklet.destination);
-  const textWidth = WIDTH * 0.36;
-  const greeting = drawText(page, "Greetings from", fonts, { x: EDGE, top: HEIGHT - EDGE - 4, width: textWidth }, {
-    size: 13, font: fonts.display, color: theme.accent, maxLines: 1,
+  const background = theme.accentSoft;
+  page.drawRectangle({ x: -BLEED, y: -BLEED, width: WIDTH + BLEED * 2, height: HEIGHT + BLEED * 2, color: background });
+
+  // The picture, in a perforated postage-stamp frame on the left.
+  const frame = { x: EDGE + 2, y: EDGE + 2, width: WIDTH * 0.52, height: HEIGHT - EDGE * 2 - 4 };
+  drawPerforatedFrame(page, frame, background);
+  const inset = 11;
+  drawCoverPicture(page, art, { x: frame.x + inset, y: frame.y + inset, width: frame.width - inset * 2, height: frame.height - inset * 2 }, theme, `postcard-${booklet.destination}`);
+
+  // "Greetings from" and the destination in big shadowed letters.
+  const column = { x: frame.x + frame.width + 18, width: WIDTH - EDGE - (frame.x + frame.width + 18) };
+  const greeting = drawText(page, "Greetings from", fonts, { x: column.x, top: HEIGHT - EDGE - 4, width: column.width }, {
+    size: fitTextSize("Greetings from", fonts.display, column.width, 16, 11, 1), font: fonts.display, color: theme.accent, maxLines: 1,
   });
-  // As large as fits with every word whole on its line ("Singapore", not
-  // "Singapor-e"), up to three lines.
-  const longestWord = destination.split(/\s+/).reduce((longest, word) => (word.length > longest.length ? word : longest), "");
-  const wordFit = textWidth / Math.max(1, fonts.display.widthOfTextAtSize(longestWord, 1));
-  const size = Math.max(12, Math.min(30, wordFit * 0.98, fitTextSize(destination, fonts.display, textWidth, 30, 12, 3)));
-  const title = drawText(page, destination, fonts, { x: EDGE, top: greeting.bottom - 2, width: textWidth }, {
-    size, font: fonts.display, color: colors.ink, maxLines: 3, lineHeight: size * 1.05,
+  const destination = pdfText(booklet.destination).toLocaleUpperCase();
+  const words = destination.split(/\s+/);
+  const longest = words.reduce((widest, word) => Math.max(widest, fonts.display.widthOfTextAtSize(word, 1)), 1);
+  const size = Math.max(14, Math.min(40, (column.width - 3) / longest, 110 / Math.max(1, words.length)));
+  let baseline = greeting.bottom - size * 0.92;
+  // Sticker lettering: ink letters over a coral offset shadow.
+  for (const word of words) {
+    page.drawText(word, { x: column.x + 2.2, y: baseline - 2.2, size, font: fonts.display, color: colors.coral });
+    page.drawText(word, { x: column.x, y: baseline, size, font: fonts.display, color: colors.ink });
+    baseline -= size * 1.02;
+  }
+
+  // A dotted flight path ending in a little paper plane, and a postmark
+  // overlapping the frame's corner.
+  const pathTop = baseline + size * 0.55;
+  page.drawSvgPath(`M 0,0 C ${column.width * 0.35},-26 ${column.width * 0.55},12 ${column.width * 0.82},-14`, {
+    x: column.x, y: pathTop - 8, borderColor: theme.accent, borderWidth: 1.2, borderDashArray: [2, 3],
   });
-  drawDoodleStar(page, EDGE + 8, title.bottom - 14, 6, colors.yellow);
-  drawDoodleSparkle(page, EDGE + 26, title.bottom - 24, 5, theme.accent);
-  page.drawText("TRIPQUEST KIDS", { x: EDGE, y: EDGE, size: 7.5, font: fonts.bold, color: colors.muted });
-  const pictureBox = { x: EDGE + textWidth + 10, y: EDGE, width: WIDTH - EDGE * 2 - textWidth - 10, height: HEIGHT - EDGE * 2 };
-  drawRoundedRect(page, { x: pictureBox.x - 4, y: pictureBox.y - 4, width: pictureBox.width + 8, height: pictureBox.height + 8 }, 10, {
-    color: colors.white, borderColor: colors.line, borderWidth: 1,
-  });
-  drawCoverPicture(page, art, pictureBox, theme, `postcard-${booklet.destination}`);
+  const planeX = column.x + column.width * 0.82;
+  const planeY = pathTop - 22;
+  // A paper plane: two triangles folded along a centre crease.
+  page.drawSvgPath("M 0,6 L 18,0 L 6,10 Z", { x: planeX, y: planeY + 16, color: colors.white, borderColor: colors.ink, borderWidth: 1 });
+  page.drawSvgPath("M 6,10 L 18,0 L 8,15 Z", { x: planeX, y: planeY + 16, color: theme.accentSoft, borderColor: colors.ink, borderWidth: 1 });
+  // "Say it like a local": the booklet's own local word, on a luggage tag.
+  const word = pdfText(booklet.profile.word || "");
+  if (word) {
+    const tagTop = pathTop - 40;
+    const textHeight = drawText(null, word, fonts, { x: 0, top: 0, width: column.width - 20 }, { size: 9.5, font: fonts.bold, maxLines: 3 }).height;
+    const tag = { x: column.x, y: tagTop - (7.5 * 2 + 10 + textHeight + 10), width: column.width, height: 7.5 * 2 + 10 + textHeight + 10 };
+    if (tag.y > frame.y + 62) {
+      drawRoundedRect(page, tag, 9, { color: colors.white, borderColor: theme.accent, borderWidth: 1 });
+      page.drawCircle({ x: tag.x + tag.width - 11, y: tag.y + tag.height - 11, size: 3, color: background, borderColor: theme.accent, borderWidth: 0.8 });
+      const pill = drawPill(page, fonts, "Say it like a local", { x: tag.x + 9, top: tag.y + tag.height - 8, color: theme.accent, fill: theme.accentSoft, size: 7.5 });
+      drawText(page, word, fonts, { x: tag.x + 10, top: pill.y - 6, width: tag.width - 20 }, { size: 9.5, font: fonts.bold, color: colors.ink, maxLines: 3 });
+    }
+  }
+  const year = new Date(booklet.generatedAt).getFullYear();
+  drawStampCircle(page, fonts, frame.x + frame.width - 6, frame.y + 30, 24, colors.coral, colors.coralSoft, String(year));
+  drawPostmarkWaves(page, frame.x + frame.width + 20, frame.y + 34, 58, colors.coral);
+  drawDoodleSparkle(page, WIDTH - EDGE - 6, frame.y + 42, 5, colors.yellow);
+  page.drawText("TRIPQUEST KIDS", { x: column.x, y: EDGE + 2, size: 7.5, font: fonts.bold, color: theme.accent });
 }
 
 function drawPostcardBack(card: Card, booklet: GeneratedBookletData, explorer: string) {
   const { page, fonts, theme } = card;
+  // An airmail border: alternating coral and indigo dashes round the edge.
+  const border = { x: 5 * MM, y: 5 * MM, width: WIDTH - 10 * MM, height: HEIGHT - 10 * MM };
+  page.drawRectangle({ ...border, borderColor: colors.coral, borderWidth: 5, borderDashArray: [9, 9] });
+  page.drawRectangle({ ...border, borderColor: colors.teal, borderWidth: 5, borderDashArray: [9, 9], borderDashPhase: 9 });
+
+  const top = HEIGHT - 11 * MM;
+  const label = "P O S T   C A R D";
+  page.drawText(label, { x: (WIDTH - fonts.bold.widthOfTextAtSize(label, 9)) / 2, y: top - 4, size: 9, font: fonts.bold, color: colors.muted });
   const middle = WIDTH / 2;
-  page.drawLine({ start: { x: middle, y: EDGE + 4 }, end: { x: middle, y: HEIGHT - EDGE - 4 }, thickness: 0.8, color: colors.line });
+  drawHandLine(page, middle, top - 14, middle, 12 * MM, colors.line, 1, "postcard-divider");
 
-  // Message side: a greeting, ruled lines to write on, and who it is from.
-  const left = { x: EDGE, width: middle - EDGE - 12 };
-  const dear = drawText(page, "Dear", fonts, { x: left.x, top: HEIGHT - EDGE - 2, width: 40 }, { size: 12, font: fonts.display, color: theme.accent, maxLines: 1 });
-  const lineGap = 8 * MM;
-  let y = dear.baselines[0];
-  drawRuledLine(page, left.x + 34, left.x + left.width, y);
-  for (let row = 0; row < 6; row += 1) {
-    y -= lineGap;
-    if (y < EDGE + 22) break;
-    drawRuledLine(page, left.x, left.x + left.width, y);
+  // Message side: prompts that help a child fill it in.
+  const left = { x: 11 * MM, end: middle - 10 };
+  const prompts = ["Dear", "Today I saw", "", "My favourite part was", "", "Love,"];
+  let y = top - 26;
+  // The lines share the height down to the signature line.
+  const pitch = (y - 17 * MM) / (prompts.length - 1);
+  for (const prompt of prompts) {
+    const promptWidth = prompt ? fonts.display.widthOfTextAtSize(prompt, 10.5) + 6 : 0;
+    if (prompt) page.drawText(prompt, { x: left.x, y, size: 10.5, font: fonts.display, color: theme.accent });
+    drawRuledLine(page, left.x + promptWidth, left.end, y);
+    y -= pitch;
   }
-  drawText(page, `From ${explorer}, official ${pdfText(booklet.destination)} Explorer`, fonts, { x: left.x, top: EDGE + 14, width: left.width }, {
-    size: 7.5, font: fonts.bold, color: colors.muted, maxLines: 2,
-  });
+  drawText(page, `${explorer === "me" ? "An" : explorer + ", an"} official ${pdfText(booklet.destination)} Explorer`, fonts, {
+    x: left.x, top: y + pitch - 10, width: left.end - left.x,
+  }, { size: 7.5, font: fonts.bold, color: colors.muted, maxLines: 1 });
 
-  // Address side: a stamp box and four address lines.
-  const stamp = { width: 22 * MM, height: 26 * MM };
-  const stampBox = { x: WIDTH - EDGE - stamp.width, y: HEIGHT - EDGE - stamp.height, ...stamp };
-  page.drawRectangle({ ...stampBox, borderColor: colors.line, borderWidth: 0.9, borderDashArray: [3, 2.5] });
-  const stampLabel = "Stamp";
-  page.drawText(stampLabel, {
-    x: stampBox.x + (stamp.width - fonts.bold.widthOfTextAtSize(stampLabel, 8)) / 2,
-    y: stampBox.y + stamp.height / 2 - 3,
-    size: 8,
-    font: fonts.bold,
-    color: colors.muted,
+  // Address side: a perforated stamp box with postmark waves, then the
+  // address lines.
+  const stamp = { width: 21 * MM, height: 25 * MM };
+  const stampBox = { x: WIDTH - 11 * MM - stamp.width, y: top - 10 - stamp.height, ...stamp };
+  page.drawRectangle({ ...stampBox, borderColor: colors.muted, borderWidth: 0.8, borderDashArray: [2, 2] });
+  const stampText = ["Place", "stamp", "here"];
+  stampText.forEach((line, index) => {
+    page.drawText(line, {
+      x: stampBox.x + (stamp.width - fonts.bold.widthOfTextAtSize(line, 7.5)) / 2,
+      y: stampBox.y + stamp.height / 2 + 8 - index * 9,
+      size: 7.5,
+      font: fonts.bold,
+      color: colors.muted,
+    });
   });
-  const right = { x: middle + 12, end: WIDTH - EDGE };
-  for (let row = 0; row < 4; row += 1) {
-    drawRuledLine(page, right.x, right.end, EDGE + 14 + row * lineGap);
-  }
-  drawPill(page, fonts, "To", { x: right.x, top: EDGE + 14 + 4 * lineGap + 14, color: theme.accent, fill: theme.accentSoft, size: 7.5 });
+  drawPostmarkWaves(page, middle + 14, stampBox.y + stamp.height - 10, (stampBox.x - middle - 14) * 0.62, colors.line);
+  const right = { x: middle + 14, end: WIDTH - 11 * MM };
+  const addressPitch = 9 * MM;
+  page.drawText("To", { x: right.x, y: 13 * MM + addressPitch * 3 + 14, size: 10.5, font: fonts.display, color: theme.accent });
+  for (let row = 0; row < 4; row += 1) drawRuledLine(page, right.x, right.end, 13 * MM + row * addressPitch);
 }
 
 function drawNextKitFront(card: Card, offer: NextKitOffer, booklet: GeneratedBookletData) {
@@ -208,6 +284,11 @@ export async function createEnvelopeInsertsPdf(
   if (offer) {
     drawNextKitFront(addCard(document, fonts, theme), offer, booklet);
     drawNextKitBack(addCard(document, fonts, theme));
+  }
+  for (const page of document.getPages()) {
+    page.setMediaBox(-BLEED, -BLEED, WIDTH + BLEED * 2, HEIGHT + BLEED * 2);
+    page.setBleedBox(-BLEED, -BLEED, WIDTH + BLEED * 2, HEIGHT + BLEED * 2);
+    page.setTrimBox(0, 0, WIDTH, HEIGHT);
   }
   return document.save();
 }

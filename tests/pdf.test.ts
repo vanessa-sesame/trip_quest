@@ -516,7 +516,9 @@ test("envelope inserts: an A6 postcard, plus the next-adventure card only when a
   const plain = await PDFDocument.load(await createEnvelopeInsertsPdf(booklet, undefined, undefined, undefined, null));
   assert.equal(plain.getPageCount(), 2, "postcard front and back");
   for (const page of plain.getPages()) {
-    assert.ok(Math.abs(page.getWidth() - 148 * mm) < 0.5 && Math.abs(page.getHeight() - 105 * mm) < 0.5, "A6 landscape");
+    const trim = page.getTrimBox();
+    assert.ok(Math.abs(trim.width - 148 * mm) < 0.5 && Math.abs(trim.height - 105 * mm) < 0.5, "trimmed to A6 landscape");
+    assert.ok(Math.abs(page.getWidth() - 154 * mm) < 0.5, "with 3mm bleed for the print shop");
   }
   const withOffer = await PDFDocument.load(await createEnvelopeInsertsPdf(booklet, undefined, undefined, undefined, { code: "NEXTQUEST", offer: "S$3 off", site: "tripquestkids.com" }));
   assert.equal(withOffer.getPageCount(), 4, "plus the next-adventure card, front and back");

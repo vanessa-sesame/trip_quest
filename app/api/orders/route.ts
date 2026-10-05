@@ -90,8 +90,9 @@ export async function GET(request: Request) {
       }, staticAssetResolver(request, runtime));
       return pdfResponse(slip, `tripquest-packing-slip-${purchase.purchaseId.slice(0, 8)}.pdf`, "generated");
     }
-    const kind = file === "stickers" || file === "parent-guide" ? file : "booklet";
-    return preparePdf(request, runtime, input, purchase, "", kind, url.searchParams.get("print") === "1" && kind !== "stickers");
+    const kind = file === "stickers" || file === "parent-guide" || file === "envelope" ? file : "booklet";
+    const print = url.searchParams.get("print") === "1" && (kind === "booklet" || kind === "parent-guide");
+    return preparePdf(request, runtime, input, purchase, "", kind, print);
   } catch (error) {
     return errorResponse(error);
   }

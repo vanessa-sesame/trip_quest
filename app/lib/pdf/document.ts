@@ -92,7 +92,7 @@ export async function loadBookletFonts(document: PDFDocument, resolveFontBytes: 
 
 // Illustrations come from either image provider, which return different
 // formats, so sniff instead of assuming PNG.
-function embedIllustration(document: PDFDocument, bytes: Uint8Array) {
+export function embedIllustration(document: PDFDocument, bytes: Uint8Array) {
   return sniffImageContentType(bytes) === "image/jpeg" ? document.embedJpg(bytes) : document.embedPng(bytes);
 }
 

@@ -148,6 +148,8 @@ export async function createCheckoutSession(
   const product = input.product ?? "kit";
   const form = new URLSearchParams();
   form.set("mode", "payment");
+  // Lets a family use the code from their last kit's next-adventure card.
+  form.set("allow_promotion_codes", "true");
   form.set("line_items[0][quantity]", "1");
   const priceId = runtime.STRIPE_KIT_PRICE_ID?.trim();
   if (priceId) {

@@ -508,3 +508,16 @@ test("the web preview can release a pdf.js document through its loading task", a
   await document.loadingTask.destroy();
   assert.equal(task.destroyed, true);
 });
+
+test("envelope inserts: an A6 postcard, plus the next-adventure card only when a code is set", async () => {
+  const { createEnvelopeInsertsPdf } = await import("../app/lib/pdf/envelope.ts");
+  const booklet = sampleGeneratedBooklet();
+  const mm = 72 / 25.4;
+  const plain = await PDFDocument.load(await createEnvelopeInsertsPdf(booklet, undefined, undefined, undefined, null));
+  assert.equal(plain.getPageCount(), 2, "postcard front and back");
+  for (const page of plain.getPages()) {
+    assert.ok(Math.abs(page.getWidth() - 148 * mm) < 0.5 && Math.abs(page.getHeight() - 105 * mm) < 0.5, "A6 landscape");
+  }
+  const withOffer = await PDFDocument.load(await createEnvelopeInsertsPdf(booklet, undefined, undefined, undefined, { code: "NEXTQUEST", offer: "S$3 off", site: "tripquestkids.com" }));
+  assert.equal(withOffer.getPageCount(), 4, "plus the next-adventure card, front and back");
+});

@@ -26,7 +26,7 @@ import { CONTENT_BOTTOM, CONTENT_TOP, CONTENT_WIDTH, MARGIN, PAGE_WIDTH, colors,
 
 // The cover's picture when there is no AI or curated art: a sunny postcard
 // scene with the destination's own motif, never an empty or technical mark.
-function drawPostcardScene(page: PDFPage, box: Box, theme: DestinationTheme, seed: string) {
+export function drawPostcardScene(page: PDFPage, box: Box, theme: DestinationTheme, seed: string) {
   drawRoundedRect(page, box, 18, { color: theme.accentSoft });
   page.drawCircle({ x: box.x + box.width - 44, y: box.y + box.height - 40, size: 20, color: colors.yellowSoft, borderColor: colors.yellow, borderWidth: 2 });
   drawDoodleCloud(page, { x: box.x + 24, y: box.y + box.height - 62, width: 70, height: 34 }, colors.white);

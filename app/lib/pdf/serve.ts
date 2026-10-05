@@ -10,6 +10,7 @@ import {
   parentGuidePdfFilename,
   type FamilyPackContext,
 } from "./booklet-pdf.ts";
+import { createEnvelopeInsertsPdf, envelopeInsertsPdfFilename, type NextKitOffer } from "./envelope.ts";
 import {
   familyChildDisplayName,
   familyPackFor,
@@ -42,14 +43,27 @@ export type RuntimeEnvironment = PaymentRuntime & {
   CLAUDE_MODEL?: string;
   TRIPQUEST_OWNER_EMAIL?: string;
   TRIPQUEST_OWNER_PASSCODE?: string;
+  // The "next adventure" card in each kit's mystery envelope: a Stripe
+  // promotion code and the line that describes it ("S$3 off ..."). No
+  // code, no card, so a kit never carries a code Stripe would refuse.
+  TRIPQUEST_NEXT_KIT_CODE?: string;
+  TRIPQUEST_NEXT_KIT_OFFER?: string;
+  TRIPQUEST_PUBLIC_URL?: string;
 };
+
+function nextKitOffer(runtime: RuntimeEnvironment): NextKitOffer | null {
+  const code = runtime.TRIPQUEST_NEXT_KIT_CODE?.trim();
+  if (!code) return null;
+  const site = (runtime.TRIPQUEST_PUBLIC_URL?.trim() || "https://tripquestkids.com").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return { code, offer: runtime.TRIPQUEST_NEXT_KIT_OFFER?.trim() || "A little thank-you off your next kit.", site };
+}
 
 const pdfJobs = new Map<string, Promise<Uint8Array>>();
 
 // "booklet" is the child-facing printable booklet, the only file anyone
 // downloads. The sticker sheets and parent answer guide belong to the mailed
 // explorer kit: only the owner renders them (orders, library) to print.
-export type PdfKind = "booklet" | "stickers" | "parent-guide";
+export type PdfKind = "booklet" | "stickers" | "parent-guide" | "envelope";
 
 export function pdfKindFrom(value: unknown): PdfKind {
   return value === "stickers" || value === "parent-guide" ? value : "booklet";
@@ -273,6 +287,17 @@ export async function renderEditionPdf(
       { alignmentPage: true },
     );
     return pdfResponse(stickers, stickerSheetsPdfFilename(personalizedBooklet), "stickers", editionFingerprint);
+  }
+  if (kind === "envelope") {
+    if (!isOwnerRequest(request, runtime)) return Response.json({ error: "Only the TripQuest owner prints envelope inserts." }, { status: 403 });
+    const inserts = await createEnvelopeInsertsPdf(
+      personalizedBooklet,
+      familyPackFor(input.family, input.events, input.days),
+      resolveStaticAsset,
+      resolveStaticAsset,
+      nextKitOffer(runtime),
+    );
+    return pdfResponse(inserts, envelopeInsertsPdfFilename(personalizedBooklet), "envelope", editionFingerprint);
   }
   if (kind === "parent-guide") {
     if (!purchase && !isOwnerRequest(request, runtime)) {

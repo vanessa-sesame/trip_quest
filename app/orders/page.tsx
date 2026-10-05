@@ -166,6 +166,7 @@ export default function OrdersPage() {
                 <a className="secondary-button" href={`${file("booklet")}&print=1`} download title="A5 with 3mm bleed, for the print shop"><Download size={16} /> Booklet (print shop)</a>
                 <a className="secondary-button" href={`${file("parent-guide")}&print=1`} download title="A5 with 3mm bleed, for the print shop"><Download size={16} /> Parent guide (print shop)</a>
                 <a className="secondary-button" href={file("stickers")} download><Download size={16} /> Stickers</a>
+                <a className="secondary-button" href={file("envelope")} download title="A6 postcard and next-adventure card, printed double-sided"><Download size={16} /> Envelope inserts</a>
                 <a className="secondary-button" href={file("booklet")} download title="Exact A5 pages, as the customer sees them"><Download size={16} /> Booklet (A5)</a>
                 <a className="secondary-button" href={file("slip")} download><Download size={16} /> Packing slip</a>
                 {order.fulfilmentStatus === "new" ? (
